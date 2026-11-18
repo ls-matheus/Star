@@ -1,0 +1,13 @@
+name: Star source integrity
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate source structure
+        run: python3 tools/ci/check-star-source.py

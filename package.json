@@ -24,6 +24,7 @@
 		"dev:tunnel:configure": "cargo run -p star-dev -- tunnel configure",
 		"dev:tunnel:env": "cargo run -p star-dev -- tunnel print-env",
 		"dev:tunnel:run": "cargo run -p star-dev -- tunnel run",
+		"check:source": "python3 tools/ci/check-star-source.py",
 		"docs:build": "pnpm --filter star_docs build",
 		"docs:dev": "pnpm --filter star_docs dev",
 		"docs:typecheck": "pnpm --filter star_docs typecheck",

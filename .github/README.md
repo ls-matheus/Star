@@ -1,3 +1,3 @@
 # Star project settings
 
-The upstream Fluxer GitHub Actions pipelines, security contacts and release publishing workflows were **not copied** because they depend on upstream credentials, infrastructure and brand identity. Add workflows only after Star has its own repositories and validated CI configuration. This folder is intentionally minimal until then.
+This repository includes a minimal, independent source-integrity workflow. Upstream Fluxer release/publishing workflows and contact policies were **not copied** because they depend on upstream credentials, branding, and infrastructure. Add deployment pipelines and security contacts only once Star owns those services.
