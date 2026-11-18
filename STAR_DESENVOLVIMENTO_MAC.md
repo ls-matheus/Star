@@ -33,6 +33,17 @@ Este projeto e um fork do Fluxer, ainda em preparacao. Use a pasta **Documentos/
 
 **Identidade:** enderecos `star.example` sao placeholders. Nao configurar dominio real por adivinhacao. Direitos de uso de marca e ativos do Fluxer precisam ser respeitados. O repositorio preserva AGPL e atribui o projeto original. Nao enviar codigo sem verificar regras AGPL.
 
+## Visualizacao no Android por ADB
+
+Depois de ativar a depuracao sem fio e autorizar o Mac no Android:
+
+1. Execute `adb connect IP_DO_TELEFONE:PORTA_DE_CONEXAO` no Mac (use a porta de conexao, nao a porta de pareamento).
+2. Inicie o servidor web do Star (o modo de desenvolvimento do frontend expoe a porta 3000).
+3. Execute `tools/dev/android-preview.sh` para encaminhar a porta 3000 e abrir o navegador no celular.
+4. Quando o proxy completo da plataforma estiver ativo na porta 8088, execute `STAR_ANDROID_PORT=8088 tools/dev/android-preview.sh`.
+
+O tunel ADB reverse so existe enquanto o Android permanecer conectado/autorizado. Esse recurso nao publica o Star na internet. O script **nao** abre o navegador se o servidor ainda estiver desligado.
+
 ## Backup e recuperacao
 
 Backup anterior as mudancas: `~/Documents/Star-backup-2026-11-18-preparacao.tar.gz`. O projeto agora possui Git local e commits. A configuracao pessoal de desenvolvimento foi excluida do Git. Nao sobrescreva ou publique `config/env/development.env`.
