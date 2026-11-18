@@ -1,0 +1,3 @@
+networks:
+  star:
+    enable_ipv6: true

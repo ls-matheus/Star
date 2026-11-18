@@ -1,0 +1,919 @@
+name: star
+
+x-star-settings: ${STAR_SETTINGS_LOADED:?rexctl manages this instance. Run rexctl commands here, or run rexctl eject to use docker compose}
+
+x-star-postgres-env: &star-postgres-env
+  STAR_DATABASE_BACKEND: postgres
+  STAR_POSTGRES_HOST: ${STAR_POSTGRES_HOST:-postgres}
+  STAR_POSTGRES_PORT: ${STAR_POSTGRES_PORT:-}
+  STAR_POSTGRES_DATABASE: ${STAR_POSTGRES_DATABASE:-}
+  STAR_POSTGRES_USERNAME: ${STAR_POSTGRES_USERNAME:-}
+  STAR_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+  STAR_POSTGRES_URL: ${STAR_POSTGRES_URL:-}
+  STAR_POSTGRES_SSL: ${STAR_POSTGRES_SSL:-}
+  STAR_POSTGRES_SSL_CA: ${STAR_POSTGRES_SSL_CA:-}
+  STAR_POSTGRES_PREPARED_STATEMENTS: ${STAR_POSTGRES_PREPARED_STATEMENTS:-}
+  STAR_POSTGRES_KV_TABLE: ${STAR_POSTGRES_KV_TABLE:-}
+
+x-star-env: &star-env
+  <<: *star-postgres-env
+  STAR_ENV: production
+  LOG_LEVEL: ${LOG_LEVEL:-}
+  RUST_LOG: ${RUST_LOG:-}
+  HTTP_PROXY: ${HTTP_PROXY:-}
+  HTTPS_PROXY: ${HTTPS_PROXY:-}
+  NO_PROXY: localhost,127.0.0.1,::1,edge,postgres,valkey,nats,meilisearch,seaweedfs,livekit,api,worker,gateway,media-proxy,push,static-proxy,app-proxy,snowflakes,users,gifs,messages,unfurl,admin${NO_PROXY:+,${NO_PROXY:-}}
+  http_proxy: ${HTTP_PROXY:-}
+  https_proxy: ${HTTPS_PROXY:-}
+  no_proxy: localhost,127.0.0.1,::1,edge,postgres,valkey,nats,meilisearch,seaweedfs,livekit,api,worker,gateway,media-proxy,push,static-proxy,app-proxy,snowflakes,users,gifs,messages,unfurl,admin${NO_PROXY:+,${NO_PROXY:-}}
+  STAR_SELF_HOSTED: "true"
+  STAR_BASE_DOMAIN: ${STAR_DOMAIN:-}
+  STAR_PUBLIC_SCHEME: ${STAR_PUBLIC_SCHEME:-https}
+  STAR_PUBLIC_PORT: ${STAR_PUBLIC_PORT:-443}
+  STAR_PUBLIC_ORIGIN: ${STAR_PUBLIC_ORIGIN:-}
+  STAR_TRUST_CLIENT_IP_HEADER: "${STAR_TRUST_CLIENT_IP_HEADER:-true}"
+  STAR_CLIENT_IP_HEADER_NAME: ${STAR_CLIENT_IP_HEADER_NAME:-}
+  STAR_API_HEADERS_TIMEOUT_MS: ${STAR_API_HEADERS_TIMEOUT_MS:-}
+  STAR_API_REQUEST_TIMEOUT_MS: ${STAR_API_REQUEST_TIMEOUT_MS:-}
+  STAR_API_MAX_INFLIGHT_REQUESTS: ${STAR_API_MAX_INFLIGHT_REQUESTS:-}
+  STAR_API_MAX_CONCURRENT_FORM_UPLOADS: ${STAR_API_MAX_CONCURRENT_FORM_UPLOADS:-}
+  STAR_API_IP_BAN_EXEMPT_IPS: ${STAR_API_IP_BAN_EXEMPT_IPS:-}
+  STAR_IP_BAN_REFRESH_INTERVAL_MS: ${STAR_IP_BAN_REFRESH_INTERVAL_MS:-}
+  STAR_APP_ORIGIN_ALIASES: ${STAR_APP_ORIGIN_ALIASES:-}
+  STAR_BREACHED_PASSWORD_CHECK_ENABLED: ${STAR_BREACHED_PASSWORD_CHECK_ENABLED:-}
+  STAR_BLOCKLIST_FEEDS_ENABLED: ${STAR_BLOCKLIST_FEEDS_ENABLED:-}
+  STAR_GEOIP_DB_PATH: ${STAR_GEOIP_DB_PATH:-}
+  STAR_AGE_POLICY_ENABLED: ${STAR_AGE_POLICY_ENABLED:-}
+  STAR_AGE_POLICY_RESTRICTED_REGIONS: ${STAR_AGE_POLICY_RESTRICTED_REGIONS:-}
+
+  STAR_API_ENDPOINT: ${STAR_API_ENDPOINT:-}
+  STAR_API_CLIENT_ENDPOINT: ${STAR_API_CLIENT_ENDPOINT:-}
+  STAR_API_DISCOVERY_PUBLIC_ENDPOINT: ${STAR_API_DISCOVERY_PUBLIC_ENDPOINT:-}
+  STAR_APP_ENDPOINT: ${STAR_APP_ENDPOINT:-${STAR_PUBLIC_ORIGIN:-${STAR_PUBLIC_SCHEME:-https}://${STAR_DOMAIN:-}}}
+  STAR_GATEWAY_ENDPOINT: ${STAR_GATEWAY_ENDPOINT:-}
+  STAR_MEDIA_ENDPOINT: ${STAR_MEDIA_ENDPOINT:-${STAR_PUBLIC_ORIGIN:-${STAR_PUBLIC_SCHEME:-https}://${STAR_DOMAIN:-}}/media}
+  STAR_MEDIA_PROXY_PUBLIC_ENDPOINT: ${STAR_MEDIA_PROXY_PUBLIC_ENDPOINT:-${STAR_MEDIA_ENDPOINT:-${STAR_PUBLIC_ORIGIN:-${STAR_PUBLIC_SCHEME:-https}://${STAR_DOMAIN:-}}/media}}
+  STAR_STATIC_CDN_ENDPOINT: ${STAR_STATIC_CDN_ENDPOINT:-}
+  STAR_ADMIN_ENDPOINT: ${STAR_ADMIN_ENDPOINT:-${STAR_PUBLIC_ORIGIN:-${STAR_PUBLIC_SCHEME:-https}://${STAR_DOMAIN:-}}${STAR_ADMIN_BASE_PATH:-/admin}}
+  STAR_MARKETING_ENDPOINT: ${STAR_MARKETING_ENDPOINT:-${STAR_PUBLIC_ORIGIN:-${STAR_PUBLIC_SCHEME:-https}://${STAR_DOMAIN:-}}}
+  STAR_INVITE_ENDPOINT: ${STAR_INVITE_ENDPOINT:-}
+  STAR_GIFT_ENDPOINT: ${STAR_GIFT_ENDPOINT:-}
+  STAR_STATIC_CDN_DOMAIN: ${STAR_STATIC_CDN_DOMAIN:-}
+  STAR_INVITE_DOMAIN: ${STAR_INVITE_DOMAIN:-}
+  STAR_GIFT_DOMAIN: ${STAR_GIFT_DOMAIN:-}
+
+  STAR_KV_URL: ${STAR_KV_URL:-redis://valkey:6379/0}
+  STAR_KV_MODE: ${STAR_KV_MODE:-}
+  STAR_KV_POSTGRES_MAX_CONNECTIONS: ${STAR_KV_POSTGRES_MAX_CONNECTIONS:-}
+  STAR_KV_POSTGRES_MAX_BYTES: ${STAR_KV_POSTGRES_MAX_BYTES:-}
+  STAR_NATS_URL: ${STAR_NATS_URL:-nats://nats:4222}
+  STAR_NATS_JETSTREAM_URL: ${STAR_NATS_JETSTREAM_URL:-${STAR_NATS_URL:-nats://nats:4222}}
+  STAR_NATS_AUTH_TOKEN: ${STAR_NATS_AUTH_TOKEN:-}
+  STAR_SVC_NATS_URL: ${STAR_SVC_NATS_URL:-${STAR_NATS_URL:-nats://nats:4222}}
+  STAR_SVC_SHARD_COUNT: "1"
+  STAR_SVC_MAX_CONCURRENT_REQUESTS: ${STAR_SVC_MAX_CONCURRENT_REQUESTS:-}
+  STAR_SVC_CACHE_MAX_ENTRIES: ${STAR_SVC_CACHE_MAX_ENTRIES:-}
+  STAR_SVC_CACHE_TTL_MS: ${STAR_SVC_CACHE_TTL_MS:-}
+  STAR_GIF_SERVICE_NATS_CLIENT_NAME: ${STAR_GIF_SERVICE_NATS_CLIENT_NAME:-}
+  STAR_GIF_SERVICE_TIMEOUT_MS: ${STAR_GIF_SERVICE_TIMEOUT_MS:-}
+  STAR_GIF_SERVICE_REGISTER_SHARE_TIMEOUT_MS: ${STAR_GIF_SERVICE_REGISTER_SHARE_TIMEOUT_MS:-}
+  STAR_USERS_SERVICE_NATS_CLIENT_NAME: ${STAR_USERS_SERVICE_NATS_CLIENT_NAME:-}
+  STAR_USERS_SERVICE_TIMEOUT_MS: ${STAR_USERS_SERVICE_TIMEOUT_MS:-}
+  STAR_USERS_SERVICE_INFLIGHT_MAX_ENTRIES: ${STAR_USERS_SERVICE_INFLIGHT_MAX_ENTRIES:-}
+  STAR_SNOWFLAKE_SERVICE_NATS_CLIENT_NAME: ${STAR_SNOWFLAKE_SERVICE_NATS_CLIENT_NAME:-}
+  STAR_SNOWFLAKE_SERVICE_BATCH_SIZE: ${STAR_SNOWFLAKE_SERVICE_BATCH_SIZE:-}
+  STAR_SNOWFLAKE_SERVICE_LOW_WATERMARK: ${STAR_SNOWFLAKE_SERVICE_LOW_WATERMARK:-}
+  STAR_SNOWFLAKE_SERVICE_MAX_BUFFER_AGE_MS: ${STAR_SNOWFLAKE_SERVICE_MAX_BUFFER_AGE_MS:-}
+  STAR_SNOWFLAKE_SERVICE_REQUEST_TIMEOUT_MS: ${STAR_SNOWFLAKE_SERVICE_REQUEST_TIMEOUT_MS:-}
+
+  STAR_SEARCH_ENGINE: ${STAR_SEARCH_ENGINE:-meilisearch}
+  STAR_SEARCH_URL: ${STAR_SEARCH_URL:-http://meilisearch:7700}
+  STAR_SEARCH_API_KEY: ${MEILI_MASTER_KEY:-}
+  STAR_SEARCH_USERNAME: ${STAR_SEARCH_USERNAME:-}
+  STAR_SEARCH_PASSWORD: ${STAR_SEARCH_PASSWORD:-}
+  STAR_SEARCH_TLS_REJECT_UNAUTHORIZED: ${STAR_SEARCH_TLS_REJECT_UNAUTHORIZED:-}
+
+  STAR_S3_ENDPOINT: ${STAR_S3_ENDPOINT:-http://seaweedfs:8333}
+  STAR_S3_PUBLIC_ENDPOINT: ${STAR_S3_PUBLIC_ENDPOINT:-${STAR_S3_ENDPOINT:-http://seaweedfs:8333}}
+  STAR_S3_REGION: ${STAR_S3_REGION:-us-east-1}
+  STAR_S3_ACCESS_KEY_ID: ${STAR_S3_ACCESS_KEY:-}
+  STAR_S3_SECRET_ACCESS_KEY: ${STAR_S3_SECRET_KEY:-}
+  STAR_S3_FORCE_PATH_STYLE: "${STAR_S3_FORCE_PATH_STYLE:-true}"
+  STAR_S3_BUCKET_CDN: ${STAR_S3_BUCKET_CDN:-star}
+  STAR_S3_BUCKET_UPLOADS: ${STAR_S3_BUCKET_UPLOADS:-star-uploads}
+  STAR_S3_BUCKET_REPORTS: ${STAR_S3_BUCKET_REPORTS:-star-reports}
+  STAR_S3_BUCKET_HARVESTS: ${STAR_S3_BUCKET_HARVESTS:-star-harvests}
+  STAR_API_PRESIGNED_HARVEST_DOWNLOADS_ENABLED: "${STAR_API_PRESIGNED_HARVEST_DOWNLOADS_ENABLED:-false}"
+  STAR_API_STORAGE_CHANGE_FEED_ENABLED: ${STAR_API_STORAGE_CHANGE_FEED_ENABLED:-}
+  STAR_API_STORAGE_CHANGE_FEED_STREAM: ${STAR_API_STORAGE_CHANGE_FEED_STREAM:-}
+  STAR_API_STORAGE_CHANGE_FEED_SKIP_BUCKETS: ${STAR_API_STORAGE_CHANGE_FEED_SKIP_BUCKETS:-}
+  STAR_CACHE_PURGE_ADAPTER: ${STAR_CACHE_PURGE_ADAPTER:-}
+  STAR_CACHE_PURGE_HTTP_ENDPOINT: ${STAR_CACHE_PURGE_HTTP_ENDPOINT:-}
+  STAR_CACHE_PURGE_HTTP_TOKEN: ${STAR_CACHE_PURGE_HTTP_TOKEN:-}
+  STAR_CACHE_PURGE_HTTP_TIMEOUT_MS: ${STAR_CACHE_PURGE_HTTP_TIMEOUT_MS:-}
+  STAR_CACHE_PURGE_CONTROLLER_ENDPOINT: ${STAR_CACHE_PURGE_CONTROLLER_ENDPOINT:-}
+  STAR_CACHE_PURGE_CONTROLLER_TOKEN: ${STAR_CACHE_PURGE_CONTROLLER_TOKEN:-}
+  STAR_CACHE_PURGE_CONTROLLER_TIMEOUT_MS: ${STAR_CACHE_PURGE_CONTROLLER_TIMEOUT_MS:-}
+
+  STAR_LIVEKIT_ENABLED: "${STAR_LIVEKIT_ENABLED:-true}"
+  STAR_LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+  STAR_LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+  STAR_LIVEKIT_INTERNAL_URL: ${STAR_LIVEKIT_INTERNAL_URL:-http://livekit:7880}
+  STAR_LIVEKIT_BUNDLED: "${STAR_LIVEKIT_BUNDLED:-true}"
+  STAR_LIVEKIT_DEFAULT_REGION: '${STAR_LIVEKIT_DEFAULT_REGION:-{"id":"default","name":"Default","emoji":"🌍","latitude":0,"longitude":0}}'
+  STAR_LIVEKIT_URL: ${STAR_LIVEKIT_URL:-${STAR_PUBLIC_ORIGIN:-${STAR_PUBLIC_SCHEME:-https}://${STAR_DOMAIN:-}:${STAR_PUBLIC_PORT:-443}}/livekit}
+  STAR_VOICE_P2P_STUN_URLS: ${STAR_VOICE_P2P_STUN_URLS:-}
+  STAR_LIVEKIT_TURN_SERVERS: ${STAR_LIVEKIT_TURN_SERVERS:-[]}
+  STAR_VOICE_JOIN_ALLOW_PRIVATE_ENDPOINTS: ${STAR_VOICE_JOIN_ALLOW_PRIVATE_ENDPOINTS:-}
+  STAR_VOICE_HEALTH_INTERVAL_MS: ${STAR_VOICE_HEALTH_INTERVAL_MS:-}
+  STAR_VOICE_PARTICIPANT_SWEEP_ENABLED: ${STAR_VOICE_PARTICIPANT_SWEEP_ENABLED:-}
+  STAR_VOICE_PARTICIPANT_SWEEP_DRY_RUN: ${STAR_VOICE_PARTICIPANT_SWEEP_DRY_RUN:-}
+
+  STAR_KLIPY_API_KEY: ${STAR_KLIPY_API_KEY:-}
+  STAR_YOUTUBE_API_KEY: ${STAR_YOUTUBE_API_KEY:-}
+  STAR_API_UNFURL_IGNORED_HOSTS: ${STAR_API_UNFURL_IGNORED_HOSTS:-}
+
+  STAR_EMAIL_ENABLED: ${STAR_EMAIL_ENABLED:-}
+  STAR_EMAIL_PROVIDER: ${STAR_EMAIL_PROVIDER:-}
+  STAR_EMAIL_DELIVERY: ${STAR_EMAIL_DELIVERY:-}
+  STAR_EMAIL_FROM_EMAIL: ${STAR_EMAIL_FROM_EMAIL:-noreply@${STAR_DOMAIN:-}}
+  STAR_EMAIL_FROM_NAME: ${STAR_EMAIL_FROM_NAME:-}
+  STAR_EMAIL_REPLY_TO_EMAIL: ${STAR_EMAIL_REPLY_TO_EMAIL:-}
+  STAR_EMAIL_APP_BASE_URL: ${STAR_EMAIL_APP_BASE_URL:-}
+  STAR_EMAIL_WEBHOOK_SECRET: ${STAR_EMAIL_WEBHOOK_SECRET:-}
+  STAR_EMAIL_SMTP_HOST: ${STAR_EMAIL_SMTP_HOST:-}
+  STAR_EMAIL_SMTP_PORT: ${STAR_EMAIL_SMTP_PORT:-}
+  STAR_EMAIL_SMTP_USERNAME: ${STAR_EMAIL_SMTP_USERNAME:-}
+  STAR_EMAIL_SMTP_PASSWORD: ${STAR_EMAIL_SMTP_PASSWORD:-}
+  STAR_EMAIL_SMTP_TLS_MODE: ${STAR_EMAIL_SMTP_TLS_MODE:-}
+  STAR_EMAIL_SMTP_SECURE: ${STAR_EMAIL_SMTP_SECURE:-}
+  STAR_EMAIL_FALLBACK_DOMAINS: ${STAR_EMAIL_FALLBACK_DOMAINS:-}
+  STAR_EMAIL_FALLBACK_SMTP_HOST: ${STAR_EMAIL_FALLBACK_SMTP_HOST:-}
+  STAR_EMAIL_FALLBACK_SMTP_PORT: ${STAR_EMAIL_FALLBACK_SMTP_PORT:-}
+  STAR_EMAIL_FALLBACK_SMTP_USERNAME: ${STAR_EMAIL_FALLBACK_SMTP_USERNAME:-}
+  STAR_EMAIL_FALLBACK_SMTP_PASSWORD: ${STAR_EMAIL_FALLBACK_SMTP_PASSWORD:-}
+  STAR_EMAIL_FALLBACK_SMTP_TLS_MODE: ${STAR_EMAIL_FALLBACK_SMTP_TLS_MODE:-}
+  STAR_EMAIL_FALLBACK_SMTP_HEADERS: ${STAR_EMAIL_FALLBACK_SMTP_HEADERS:-}
+
+  STAR_STRIPE_ENABLED: ${STAR_STRIPE_ENABLED:-}
+  STAR_STRIPE_SECRET_KEY: ${STAR_STRIPE_SECRET_KEY:-}
+  STAR_STRIPE_WEBHOOK_SECRET: ${STAR_STRIPE_WEBHOOK_SECRET:-}
+  STAR_STRIPE_PRICES: ${STAR_STRIPE_PRICES:-}
+  STAR_STRIPE_LEGACY_PRICES: ${STAR_STRIPE_LEGACY_PRICES:-}
+  STAR_API_DONATION_PROXY_KEY: ${STAR_API_DONATION_PROXY_KEY:-}
+  STAR_API_TRUSTED_CALLERS: ${STAR_API_TRUSTED_CALLERS:-}
+  STAR_VISIONARIES_GUILD_ID: ${STAR_VISIONARIES_GUILD_ID:-}
+  STAR_VISIONARIES_GUILD_VISIONARY_ROLE_ID: ${STAR_VISIONARIES_GUILD_VISIONARY_ROLE_ID:-}
+
+  STAR_CLAMAV_ENABLED: ${STAR_CLAMAV_ENABLED:-}
+  STAR_CLAMAV_HOST: ${STAR_CLAMAV_HOST:-}
+  STAR_CLAMAV_PORT: ${STAR_CLAMAV_PORT:-}
+  STAR_CLAMAV_FAIL_OPEN: ${STAR_CLAMAV_FAIL_OPEN:-}
+
+  STAR_APP_PRODUCT_NAME: ${STAR_APP_PRODUCT_NAME:-}
+  STAR_APP_ICON_URL: ${STAR_APP_ICON_URL:-}
+  STAR_APP_SYMBOL_URL: ${STAR_APP_SYMBOL_URL:-}
+  STAR_APP_LOGO_URL: ${STAR_APP_LOGO_URL:-}
+  STAR_APP_WORDMARK_URL: ${STAR_APP_WORDMARK_URL:-}
+  STAR_APP_FAVICON_URL: ${STAR_APP_FAVICON_URL:-}
+  STAR_APP_FAVICON_DARK_URL: ${STAR_APP_FAVICON_DARK_URL:-}
+  STAR_APP_SIGN_IN_BACKDROP_URL: ${STAR_APP_SIGN_IN_BACKDROP_URL:-}
+  STAR_APP_THEME_COLOR: ${STAR_APP_THEME_COLOR:-}
+  STAR_APP_STATUS_PAGE_URL: ${STAR_APP_STATUS_PAGE_URL:-}
+  STAR_APP_STATUS_PAGE_INCIDENT_HISTORY_URL: ${STAR_APP_STATUS_PAGE_INCIDENT_HISTORY_URL:-}
+  STAR_INSTANCE_SETUP_CONFIGURED: ${STAR_INSTANCE_SETUP_CONFIGURED:-}
+  STAR_ACCOUNT_IDENTITY: ${STAR_ACCOUNT_IDENTITY:-}
+  STAR_TAG_STYLE: ${STAR_TAG_STYLE:-}
+  STAR_AUTO_JOIN_INVITE_CODE: ${STAR_AUTO_JOIN_INVITE_CODE:-}
+  STAR_DISCOVERY_ENABLED: ${STAR_DISCOVERY_ENABLED:-}
+  STAR_DISCOVERY_MIN_MEMBER_COUNT: ${STAR_DISCOVERY_MIN_MEMBER_COUNT:-}
+  STAR_DELETION_GRACE_PERIOD_HOURS: ${STAR_DELETION_GRACE_PERIOD_HOURS:-}
+  STAR_REPORT_RETENTION_DAYS: ${STAR_REPORT_RETENTION_DAYS:-}
+  STAR_REPORT_RETENTION_DRY_RUN: ${STAR_REPORT_RETENTION_DRY_RUN:-}
+  STAR_API_WORKER_LANE_CONCURRENCY_OVERRIDES: ${STAR_API_WORKER_LANE_CONCURRENCY_OVERRIDES:-}
+
+  STAR_AUTH_BLUESKY_ENABLED: ${STAR_AUTH_BLUESKY_ENABLED:-}
+  STAR_AUTH_BLUESKY_CLIENT_NAME: ${STAR_AUTH_BLUESKY_CLIENT_NAME:-}
+  STAR_AUTH_BLUESKY_CLIENT_URI: ${STAR_AUTH_BLUESKY_CLIENT_URI:-}
+  STAR_AUTH_BLUESKY_LOGO_URI: ${STAR_AUTH_BLUESKY_LOGO_URI:-}
+  STAR_AUTH_BLUESKY_TOS_URI: ${STAR_AUTH_BLUESKY_TOS_URI:-}
+  STAR_AUTH_BLUESKY_POLICY_URI: ${STAR_AUTH_BLUESKY_POLICY_URI:-}
+  STAR_AUTH_BLUESKY_KEYS: ${STAR_AUTH_BLUESKY_KEYS:-}
+
+  STAR_PUSH_APNS_ENABLED: ${STAR_PUSH_APNS_ENABLED:-}
+  STAR_PUSH_APNS_TEAM_ID: ${STAR_PUSH_APNS_TEAM_ID:-}
+  STAR_PUSH_APNS_KEY_ID: ${STAR_PUSH_APNS_KEY_ID:-}
+  STAR_PUSH_APNS_PRIVATE_KEY: ${STAR_PUSH_APNS_PRIVATE_KEY:-}
+  STAR_PUSH_APNS_PRIVATE_KEY_PATH: ${STAR_PUSH_APNS_PRIVATE_KEY_PATH:-}
+  STAR_PUSH_APNS_APPS: ${STAR_PUSH_APNS_APPS:-}
+
+  STAR_SUDO_MODE_SECRET: ${STAR_SUDO_MODE_SECRET:-}
+  STAR_CONNECTION_INITIATION_SECRET: ${STAR_CONNECTION_INITIATION_SECRET:-}
+  STAR_PROFILE_PSEUDONYM_SECRET: ${STAR_PROFILE_PSEUDONYM_SECRET:-}
+  STAR_SSO_ALLOW_PRIVATE_ADDRESSES: ${STAR_SSO_ALLOW_PRIVATE_ADDRESSES:-}
+  STAR_VAPID_PUBLIC_KEY: ${STAR_VAPID_PUBLIC_KEY:-}
+  STAR_VAPID_PRIVATE_KEY: ${STAR_VAPID_PRIVATE_KEY:-}
+  STAR_VAPID_EMAIL: ${STAR_VAPID_EMAIL:-admin@${STAR_DOMAIN:-}}
+  STAR_PASSKEY_RP_ID: ${STAR_PASSKEY_RP_ID:-${STAR_DOMAIN:-}}
+  STAR_PASSKEY_RP_NAME: ${STAR_PASSKEY_RP_NAME:-}
+  STAR_PASSKEY_ADDITIONAL_ALLOWED_ORIGINS: ${STAR_PASSKEY_ADDITIONAL_ALLOWED_ORIGINS:-${STAR_PUBLIC_ORIGIN:-${STAR_PUBLIC_SCHEME:-https}://${STAR_DOMAIN:-}}}
+  STAR_GATEWAY_RPC_AUTH_TOKEN: ${STAR_GATEWAY_RPC_AUTH_TOKEN:-}
+  STAR_MEDIA_PROXY_SECRET_KEY: ${STAR_MEDIA_PROXY_SECRET_KEY:-}
+  STAR_MEDIA_PROXY_UPLOAD_RELAY_SECRET_BASE64: ${STAR_MEDIA_PROXY_UPLOAD_RELAY_SECRET_BASE64:-}
+  STAR_ADMIN_SECRET_KEY_BASE: ${STAR_ADMIN_SECRET_KEY_BASE:-}
+  STAR_ADMIN_OAUTH_CLIENT_SECRET: ${STAR_ADMIN_OAUTH_CLIENT_SECRET:-}
+  STAR_ADMIN_SSO_ISSUER: ${STAR_ADMIN_SSO_ISSUER:-}
+  STAR_ADMIN_SSO_CLIENT_ID: ${STAR_ADMIN_SSO_CLIENT_ID:-}
+
+  STAR_INTERNAL_API_ENDPOINT: http://api:8080
+  STAR_INTERNAL_MEDIA_PROXY_ENDPOINT: http://media-proxy:8080
+  STAR_MEDIA_PROXY_UPLOAD_RELAY_ENDPOINT: ${STAR_MEDIA_PROXY_UPLOAD_RELAY_ENDPOINT:-${STAR_PUBLIC_ORIGIN:-${STAR_PUBLIC_SCHEME:-https}://${STAR_DOMAIN:-}}/media}
+  STAR_MEDIA_PROXY_UPLOAD_RELAY_MAX_BODY_BYTES: ${STAR_MEDIA_PROXY_UPLOAD_RELAY_MAX_BODY_BYTES:-}
+  STAR_MEDIA_PROXY_UPLOAD_RELAY_TOKEN_TTL_SECS: ${STAR_MEDIA_PROXY_UPLOAD_RELAY_TOKEN_TTL_SECS:-}
+  STAR_MEDIA_PROXY_UPLOAD_RELAY_KEEP_DIRECT_COUNTRIES: ${STAR_MEDIA_PROXY_UPLOAD_RELAY_KEEP_DIRECT_COUNTRIES:-}
+
+x-star-rust-env: &star-rust-env
+  <<: *star-env
+  TOKIO_WORKER_THREADS: ${STAR_TOKIO_WORKER_THREADS:-2}
+  MALLOC_ARENA_MAX: ${STAR_MALLOC_ARENA_MAX:-2}
+
+x-star-logging: &star-logging
+  driver: json-file
+  options:
+    max-size: ${STAR_LOG_MAX_SIZE:-10m}
+    max-file: "${STAR_LOG_MAX_FILE:-3}"
+
+x-star-service: &star-service
+  restart: ${STAR_RESTART_POLICY:-unless-stopped}
+  networks: [star]
+  logging: *star-logging
+
+x-star-healthcheck: &star-healthcheck
+  interval: ${STAR_HEALTHCHECK_INTERVAL:-10s}
+  timeout: ${STAR_HEALTHCHECK_TIMEOUT:-5s}
+  retries: ${STAR_HEALTHCHECK_RETRIES:-10}
+  start_period: ${STAR_HEALTHCHECK_START_PERIOD:-60s}
+  start_interval: ${STAR_HEALTHCHECK_START_INTERVAL:-1s}
+
+x-star-app-healthcheck: &star-app-healthcheck
+  interval: ${STAR_HEALTHCHECK_INTERVAL:-10s}
+  timeout: ${STAR_HEALTHCHECK_TIMEOUT:-5s}
+  retries: ${STAR_APP_HEALTHCHECK_RETRIES:-30}
+  start_period: ${STAR_APP_HEALTHCHECK_START_PERIOD:-90s}
+  start_interval: ${STAR_HEALTHCHECK_START_INTERVAL:-1s}
+
+x-star-svc-healthcheck: &star-svc-healthcheck
+  <<: *star-app-healthcheck
+  start_period: ${STAR_SVC_HEALTHCHECK_START_PERIOD:-60s}
+  test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8090 && printf \"GET /_health HTTP/1.0\\r\\n\\r\\n\" >&3 && head -n 1 <&3 | grep -q \" 200 \"'"]
+
+services:
+  edge:
+    <<: *star-service
+    image: ${STAR_CADDY_IMAGE:-caddy:2.11-alpine}
+    deploy:
+      resources:
+        limits:
+          memory: ${STAR_CADDY_MEMORY_LIMIT:-384mb}
+    ports:
+      - "${STAR_EDGE_LISTEN_ADDRESS:+[${STAR_EDGE_LISTEN_ADDRESS}]:}${STAR_HTTP_PORT:-80}:80"
+      - "${STAR_EDGE_LISTEN_ADDRESS:+[${STAR_EDGE_LISTEN_ADDRESS}]:}${STAR_HTTPS_PORT:-443}:443"
+      - "${STAR_EDGE_LISTEN_ADDRESS:+[${STAR_EDGE_LISTEN_ADDRESS}]:}${STAR_HTTPS_PORT:-443}:443/udp"
+    environment:
+      STAR_EDGE_SITE_ADDRESS: ${STAR_EDGE_SITE_ADDRESS:-${STAR_CADDY_SITE_ADDRESS:-${STAR_PUBLIC_SCHEME:-https}://${STAR_DOMAIN:-}}}
+      STAR_EDGE_TRUSTED_PROXIES: ${STAR_EDGE_TRUSTED_PROXIES:-127.0.0.1/32}
+      STAR_EDGE_ENCODE: ${STAR_EDGE_ENCODE:-zstd gzip}
+      STAR_EDGE_PROTOCOLS: ${STAR_EDGE_PROTOCOLS:-h1 h2 h3}
+      STAR_EDGE_GLOBAL_OPTIONS: ${STAR_EDGE_GLOBAL_OPTIONS:-}
+      STAR_EDGE_TLS_DIRECTIVE: ${STAR_EDGE_TLS:+tls ${STAR_EDGE_TLS:-}}
+      STAR_ADMIN_BASE_PATH: ${STAR_ADMIN_BASE_PATH:-/admin}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./certs:/certs:ro
+      - ./caddy.d:/etc/caddy/conf.d:ro
+      - edge-data:/data
+      - edge-config:/config
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      <<: *star-healthcheck
+    depends_on:
+      api: {condition: service_healthy}
+      gateway: {condition: service_healthy}
+
+  postgres:
+    <<: *star-service
+    image: ${STAR_POSTGRES_IMAGE:-postgres:16-alpine}
+    deploy:
+      resources:
+        limits:
+          memory: ${STAR_POSTGRES_MEMORY_LIMIT:-5gb}
+        reservations:
+          memory: ${STAR_POSTGRES_MEMORY_RESERVATION:-3gb}
+    command: >
+      postgres
+      -c max_connections=${STAR_POSTGRES_SERVER_MAX_CONNECTIONS:-150}
+      -c shared_buffers=${STAR_POSTGRES_SHARED_BUFFERS:-512MB}
+      -c effective_cache_size=${STAR_POSTGRES_EFFECTIVE_CACHE_SIZE:-2GB}
+      -c work_mem=${STAR_POSTGRES_WORK_MEM:-8MB}
+      -c maintenance_work_mem=${STAR_POSTGRES_MAINTENANCE_WORK_MEM:-256MB}
+      -c autovacuum_work_mem=${STAR_POSTGRES_AUTOVACUUM_WORK_MEM:-128MB}
+      -c random_page_cost=${STAR_POSTGRES_RANDOM_PAGE_COST:-1.1}
+      -c effective_io_concurrency=${STAR_POSTGRES_EFFECTIVE_IO_CONCURRENCY:-200}
+      -c default_statistics_target=${STAR_POSTGRES_DEFAULT_STATISTICS_TARGET:-200}
+      -c jit=${STAR_POSTGRES_JIT:-off}
+      -c min_wal_size=${STAR_POSTGRES_MIN_WAL_SIZE:-80MB}
+      -c max_wal_size=${STAR_POSTGRES_MAX_WAL_SIZE:-2GB}
+      -c checkpoint_completion_target=${STAR_POSTGRES_CHECKPOINT_COMPLETION_TARGET:-0.9}
+      -c wal_buffers=${STAR_POSTGRES_WAL_BUFFERS:-16MB}
+      -c wal_compression=${STAR_POSTGRES_WAL_COMPRESSION:-zstd}
+      -c bgwriter_delay=${STAR_POSTGRES_BGWRITER_DELAY:-50ms}
+      -c bgwriter_lru_maxpages=${STAR_POSTGRES_BGWRITER_LRU_MAXPAGES:-1000}
+      -c autovacuum_vacuum_scale_factor=${STAR_POSTGRES_AUTOVACUUM_VACUUM_SCALE_FACTOR:-0.05}
+      -c autovacuum_analyze_scale_factor=${STAR_POSTGRES_AUTOVACUUM_ANALYZE_SCALE_FACTOR:-0.02}
+      -c autovacuum_vacuum_cost_limit=${STAR_POSTGRES_AUTOVACUUM_VACUUM_COST_LIMIT:-2000}
+      -c autovacuum_max_workers=${STAR_POSTGRES_AUTOVACUUM_MAX_WORKERS:-3}
+      -c max_parallel_workers_per_gather=${STAR_POSTGRES_MAX_PARALLEL_WORKERS_PER_GATHER:-2}
+      -c max_parallel_workers=${STAR_POSTGRES_MAX_PARALLEL_WORKERS:-8}
+      -c track_io_timing=${STAR_POSTGRES_TRACK_IO_TIMING:-on}
+      -c shared_preload_libraries=${STAR_POSTGRES_SHARED_PRELOAD_LIBRARIES:-pg_stat_statements}
+    shm_size: ${STAR_POSTGRES_SHM_SIZE:-1gb}
+    environment:
+      POSTGRES_DB: ${STAR_POSTGRES_DATABASE:-star}
+      POSTGRES_USER: ${STAR_POSTGRES_USERNAME:-star}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      <<: *star-healthcheck
+
+  valkey:
+    <<: *star-service
+    image: ${STAR_VALKEY_IMAGE:-valkey/valkey:9.1-alpine}
+    deploy:
+      resources:
+        limits:
+          memory: ${STAR_VALKEY_MEMORY_LIMIT:-256mb}
+    command: ["valkey-server", "--appendonly", "yes", "--appendfsync", "${STAR_VALKEY_APPENDFSYNC:-everysec}", "--dir", "/data",
+              "--save", "${STAR_VALKEY_SAVE:-}",
+              "--maxmemory", "${STAR_VALKEY_MAXMEMORY:-192mb}",
+              "--maxmemory-policy", "${STAR_VALKEY_MAXMEMORY_POLICY:-noeviction}"]
+    volumes:
+      - valkey-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      <<: *star-healthcheck
+
+  nats:
+    <<: *star-service
+    image: ${STAR_NATS_IMAGE:-nats:2.14-alpine}
+    deploy:
+      resources:
+        limits:
+          memory: ${STAR_NATS_MEMORY_LIMIT:-256mb}
+    environment:
+      GOMEMLIMIT: ${STAR_NATS_GOMEMLIMIT:-200MiB}
+      STAR_NATS_MAX_MEMORY_STORE: ${STAR_NATS_MAX_MEMORY_STORE:-64MB}
+      STAR_NATS_MAX_FILE_STORE: ${STAR_NATS_MAX_FILE_STORE:-10GB}
+    command:
+      - sh
+      - -c
+      - >
+        printf 'http_port: 8222\njetstream {\n  store_dir: /data\n  max_memory_store: %s\n  max_file_store: %s\n}\n'
+        "$$STAR_NATS_MAX_MEMORY_STORE" "$$STAR_NATS_MAX_FILE_STORE" > /tmp/nats.conf
+        && exec nats-server -c /tmp/nats.conf
+    volumes:
+      - nats-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8222/healthz"]
+      <<: *star-healthcheck
+
+  meilisearch:
+    <<: *star-service
+    image: ${STAR_MEILISEARCH_IMAGE:-getmeili/meilisearch:v1.53}
+    deploy:
+      resources:
+        limits:
+          memory: ${STAR_MEILISEARCH_MEMORY_LIMIT:-1536mb}
+    environment:
+      MEILI_ENV: ${STAR_MEILISEARCH_ENV:-production}
+      MEILI_NO_ANALYTICS: "${STAR_MEILISEARCH_NO_ANALYTICS:-true}"
+      MEILI_UPGRADE_DB: "true"
+      MEILI_MAX_INDEXING_MEMORY: ${STAR_MEILISEARCH_MAX_INDEXING_MEMORY:-256mb}
+      MEILI_MAX_INDEXING_THREADS: ${STAR_MEILISEARCH_MAX_INDEXING_THREADS:-2}
+      MEILI_LOG_LEVEL: ${STAR_MEILISEARCH_LOG_LEVEL:-WARN}
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-}
+    volumes:
+      - meilisearch-data:/meili_data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:7700/health"]
+      <<: *star-healthcheck
+
+  seaweedfs:
+    <<: *star-service
+    image: ${STAR_SEAWEEDFS_IMAGE:-chrislusf/seaweedfs:4.52}
+    deploy:
+      resources:
+        limits:
+          memory: ${STAR_SEAWEEDFS_MEMORY_LIMIT:-2gb}
+    environment:
+      GOMEMLIMIT: ${STAR_SEAWEEDFS_GOMEMLIMIT:-1536MiB}
+      WEED_MASTER_VOLUME_GROWTH_COPY_1: ${STAR_SEAWEEDFS_VOLUME_GROWTH:-1}
+      WEED_FILER_OPTIONS_MAX_FILE_NAME_LENGTH: "1024"
+    command: ["server", "-s3", "-s3.iam=false", "-dir=/data", "-master.telemetry=${STAR_SEAWEEDFS_TELEMETRY:-false}", "-master.volumeSizeLimitMB=${STAR_SEAWEEDFS_VOLUME_SIZE_LIMIT_MB:-1024}", "-master.garbageThreshold=${STAR_SEAWEEDFS_GARBAGE_THRESHOLD:-0.1}", "-volume.max=${STAR_SEAWEEDFS_VOLUME_MAX:-10000}", "-s3.concurrentFileUploadLimit=${STAR_SEAWEEDFS_S3_CONCURRENT_UPLOADS:-5}"]
+    volumes:
+      - seaweedfs-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8333/healthz"]
+      <<: *star-healthcheck
+      retries: ${STAR_SEAWEEDFS_HEALTHCHECK_RETRIES:-20}
+      start_period: ${STAR_SEAWEEDFS_HEALTHCHECK_START_PERIOD:-60s}
+
+  seaweedfs-init:
+    image: ${STAR_SEAWEEDFS_IMAGE:-chrislusf/seaweedfs:4.52}
+    deploy:
+      resources:
+        limits:
+          memory: ${STAR_SEAWEEDFS_INIT_MEMORY_LIMIT:-128mb}
+    networks: [star]
+    logging: *star-logging
+    depends_on:
+      seaweedfs: {condition: service_healthy, restart: true}
+    restart: "no"
+    environment:
+      STAR_S3_ACCESS_KEY: ${STAR_S3_ACCESS_KEY:-}
+      STAR_S3_SECRET_KEY: ${STAR_S3_SECRET_KEY:-}
+      STAR_S3_BUCKET_CDN: ${STAR_S3_BUCKET_CDN:-star}
+      STAR_S3_BUCKET_UPLOADS: ${STAR_S3_BUCKET_UPLOADS:-star-uploads}
+      STAR_S3_BUCKET_REPORTS: ${STAR_S3_BUCKET_REPORTS:-star-reports}
+      STAR_S3_BUCKET_HARVESTS: ${STAR_S3_BUCKET_HARVESTS:-star-harvests}
+      STAR_SEAWEEDFS_INIT_ATTEMPTS: ${STAR_SEAWEEDFS_INIT_ATTEMPTS:-60}
+      STAR_SEAWEEDFS_UPLOADS_TTL: ${STAR_SEAWEEDFS_UPLOADS_TTL:-1d}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >
+        buckets="$$STAR_S3_BUCKET_CDN $$STAR_S3_BUCKET_UPLOADS $$STAR_S3_BUCKET_REPORTS $$STAR_S3_BUCKET_HARVESTS";
+        missing="$$buckets";
+        for attempt in $$(seq 1 $$STAR_SEAWEEDFS_INIT_ATTEMPTS); do
+          if ! nc -z seaweedfs 9333 2>/dev/null; then
+            sleep 2;
+            continue;
+          fi;
+          listed=$$(echo "s3.bucket.list" | timeout 10 weed shell -master=seaweedfs:9333 2>&1);
+          missing="";
+          failure="";
+          for b in $$buckets; do
+            echo "$$listed" | grep -q "^[[:space:]]*$$b[[:space:]]" || missing="$${missing:+$$missing }$$b";
+          done;
+          if [ -z "$$missing" ]; then
+            if [ "$$STAR_SEAWEEDFS_UPLOADS_TTL" = off ]; then
+              ttl_rule="fs.configure -locationPrefix=/buckets/$$STAR_S3_BUCKET_UPLOADS/ -delete -apply";
+            else
+              ttl_rule="fs.configure -locationPrefix=/buckets/$$STAR_S3_BUCKET_UPLOADS/ -ttl=$$STAR_SEAWEEDFS_UPLOADS_TTL -apply";
+            fi;
+            failure="could not configure the S3 identity";
+            if echo "s3.configure -user=star -access_key=$$STAR_S3_ACCESS_KEY -secret_key=$$STAR_S3_SECRET_KEY -actions=Admin,Read,Write,List,Tagging -apply" | timeout 10 weed shell -master=seaweedfs:9333 >/dev/null 2>&1; then
+              failure="could not set the expiry of $$STAR_S3_BUCKET_UPLOADS";
+              if echo "$$ttl_rule" | timeout 10 weed shell -master=seaweedfs:9333 >/dev/null 2>&1; then
+                echo "buckets ready";
+                exit 0;
+              fi;
+            fi;
+            sleep 2;
+            continue;
+          fi;
+          for b in $$missing; do
+            echo "s3.bucket.create -name $$b" | timeout 10 weed shell -master=seaweedfs:9333 >/dev/null 2>&1;
+          done;
+          sleep 2;
+        done;
+        if [ -n "$$failure" ]; then
+          echo "seaweedfs-init $$failure" >&2;
+        else
+          echo "seaweedfs-init could not verify buckets: $$missing" >&2;
+        fi;
+        exit 1;
+
+  livekit:
+    <<: *star-service
+    image: ${STAR_LIVEKIT_IMAGE:-livekit/livekit-server:v1.12.0}
+    deploy:
+      resources:
+        limits:
+          memory: ${STAR_LIVEKIT_MEMORY_LIMIT:-512mb}
+    environment:
+      GOMEMLIMIT: ${STAR_LIVEKIT_GOMEMLIMIT:-435MiB}
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:-}: ${LIVEKIT_API_SECRET:-}"
+      LIVEKIT_CONFIG: |
+        port: 7880
+        log_level: ${STAR_LIVEKIT_LOG_LEVEL:-info}
+        rtc:
+          tcp_port: ${STAR_LIVEKIT_TCP_PORT:-7881}
+          udp_port: ${STAR_LIVEKIT_UDP_PORT:-7882}
+          use_external_ip: ${STAR_LIVEKIT_USE_EXTERNAL_IP:-true}
+          node_ip: "${STAR_LIVEKIT_NODE_IP:-}"
+          stun_servers:
+            - ${STAR_LIVEKIT_STUN_PRIMARY:-stun.l.google.com:19302}
+            - ${STAR_LIVEKIT_STUN_SECONDARY:-stun1.l.google.com:19302}
+          turn_servers: ${STAR_LIVEKIT_TURN_SERVERS:-[]}
+        webhook:
+          api_key: ${LIVEKIT_API_KEY:-}
+          urls:
+            - http://api:8080/webhooks/livekit
+    ports:
+      - "${STAR_LIVEKIT_TCP_PORT:-7881}:${STAR_LIVEKIT_TCP_PORT:-7881}"
+      - "${STAR_LIVEKIT_UDP_PORT:-7882}:${STAR_LIVEKIT_UDP_PORT:-7882}/udp"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:7880/"]
+      <<: *star-healthcheck
+
+  api:
+    <<: *star-service
+    image: ${STAR_REGISTRY:-ghcr.io/${STAR_REGISTRY_OWNER:-starapp}}/star-api:${STAR_IMAGE_TAG:-v1}
+    deploy:
+      resources:
+        limits:
+          memory: ${STAR_API_MEMORY_LIMIT:-2560mb}
+        reservations:
+          memory: ${STAR_API_MEMORY_RESERVATION:-1gb}
+    environment:
+      <<: *star-env
+      STAR_API_PORT: "8080"
+      STAR_SETUP_TOKEN: ${STAR_SETUP_TOKEN:-}
+      NODE_OPTIONS: --max-old-space-size${STAR_API_NODE_HEAP_MB:+=}${STAR_API_NODE_HEAP_MB:--percentage=60}${STAR_API_NODE_OPTIONS:+ ${STAR_API_NODE_OPTIONS:-}}
+      NODE_EXTRA_CA_CERTS: ${STAR_NODE_EXTRA_CA_CERTS:-/etc/ssl/certs/ca-certificates.crt}
+      STAR_POSTGRES_MAX_CONNECTIONS: "${STAR_API_POSTGRES_MAX_CONNECTIONS:-25}"
+      STAR_API_PRESIGNED_ATTACHMENT_UPLOADS_ENABLED: "${STAR_API_PRESIGNED_ATTACHMENT_UPLOADS_ENABLED:-true}"
+      STAR_API_EMBEDDED_WORKER: "${STAR_API_EMBEDDED_WORKER:-false}"
+      STAR_MEDIA_PROXY_ATTACHMENT_URL_SECRETS_BASE64: ${STAR_MEDIA_PROXY_ATTACHMENT_URL_SECRETS_BASE64:-}
+    volumes:
+      - ./ca:/etc/star/ca:ro
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf \"GET /_health HTTP/1.0\\r\\nHost: 127.0.0.1\\r\\n\\r\\n\" >&3 && head -n 1 <&3 | grep -q \" 200 \"'"]
+      <<: *star-app-healthcheck
+    depends_on:
+      postgres: {condition: service_healthy}
+      valkey: {condition: service_healthy}
+      nats: {condition: service_healthy}
+      meilisearch: {condition: service_healthy}
+      seaweedfs-init: {condition: service_completed_successfully}
+      gifs: {condition: service_healthy}
+      snowflakes: {condition: service_healthy}
+      messages: {condition: service_healthy}
+      users: {condition: service_healthy}
+
+  worker:
+    <<: *star-service
+    image: ${STAR_REGISTRY:-ghcr.io/${STAR_REGISTRY_OWNER:-starapp}}/star-api:${STAR_IMAGE_TAG:-v1}
+    deploy:
+      replicas: ${STAR_WORKER_REPLICAS:-1}
+      resources:
+        limits:
+          memory: ${STAR_WORKER_MEMORY_LIMIT:-2560mb}
+        reservations:
+          memory: ${STAR_WORKER_MEMORY_RESERVATION:-1gb}
+    command: ["node", "dist/WorkerEntrypoint.js"]
+    environment:
+      <<: *star-env
+      NODE_OPTIONS: --max-old-space-size${STAR_WORKER_NODE_HEAP_MB:+=}${STAR_WORKER_NODE_HEAP_MB:--percentage=55}${STAR_WORKER_NODE_OPTIONS:+ ${STAR_WORKER_NODE_OPTIONS:-}}
+      NODE_EXTRA_CA_CERTS: ${STAR_NODE_EXTRA_CA_CERTS:-/etc/ssl/certs/ca-certificates.crt}
+      STAR_API_WORKER_MODE: all_lanes
+      STAR_API_WORKER_ENABLE_CRON_SCHEDULER: "true"
+      STAR_POSTGRES_MAX_CONNECTIONS: "${STAR_WORKER_POSTGRES_MAX_CONNECTIONS:-25}"
+      STAR_WORKER_POSTGRES_SYNCHRONOUS_COMMIT: "${STAR_WORKER_POSTGRES_SYNCHRONOUS_COMMIT:-}"
+      STAR_MEDIA_PROXY_ATTACHMENT_URL_SECRETS_BASE64: ${STAR_MEDIA_PROXY_ATTACHMENT_URL_SECRETS_BASE64:-}
+    volumes:
+      - ./ca:/etc/star/ca:ro
+    healthcheck:
+      test: ["CMD-SHELL", "find /tmp/star-worker-heartbeat -newermt '-30 seconds' | grep -q ."]
+      <<: *star-app-healthcheck
+      retries: ${STAR_WORKER_HEALTHCHECK_RETRIES:-3}
+    depends_on:
+      postgres: {condition: service_healthy}
+      valkey: {condition: service_healthy}
+      nats: {condition: service_healthy}
+      seaweedfs-init: {condition: service_completed_successfully}
+      snowflakes: {condition: service_healthy}
+      messages: {condition: service_healthy}
+      users: {condition: service_healthy}
+
+  gateway:
+    <<: *star-service
+    image: ${STAR_REGISTRY:-ghcr.io/${STAR_REGISTRY_OWNER:-starapp}}/star-gateway:${STAR_IMAGE_TAG:-v1}
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    deploy:
+      resources:
+        limits:
+          memory: ${STAR_GATEWAY_MEMORY_LIMIT:-1gb}
+        reservations:
+          memory: ${STAR_GATEWAY_MEMORY_RESERVATION:-384mb}
+    environment:
+      <<: *star-env
+      STAR_GATEWAY_PORT: "8080"
+      STAR_GATEWAY_MEDIA_PROXY_ENDPOINT: ${STAR_GATEWAY_MEDIA_PROXY_ENDPOINT:-${STAR_MEDIA_ENDPOINT:-${STAR_PUBLIC_ORIGIN:-${STAR_PUBLIC_SCHEME:-https}://${STAR_DOMAIN:-}}/media}}
+      STAR_GATEWAY_STATIC_CDN_ENDPOINT: ${STAR_GATEWAY_STATIC_CDN_ENDPOINT:-${STAR_STATIC_CDN_ENDPOINT:-${STAR_PUBLIC_ORIGIN:-${STAR_PUBLIC_SCHEME:-https}://${STAR_DOMAIN:-}}}}
+      STAR_GATEWAY_LOGGER_LEVEL: ${STAR_GATEWAY_LOGGER_LEVEL:-}
+      LOGGER_LEVEL: ${LOGGER_LEVEL:-}
+      STAR_GATEWAY_PUSH_ENABLED: ${STAR_GATEWAY_PUSH_ENABLED:-}
+      STAR_GATEWAY_PUSH_ENROLLED_CLEAR_NOTIFICATIONS_ENABLED: ${STAR_GATEWAY_PUSH_ENROLLED_CLEAR_NOTIFICATIONS_ENABLED:-}
+      STAR_GATEWAY_PUSH_OUTBOX_REQUEST_TIMEOUT_MS: ${STAR_GATEWAY_PUSH_OUTBOX_REQUEST_TIMEOUT_MS:-}
+      STAR_GATEWAY_PRESENCE_PUSH_BUFFER_MAX_ENTRIES: ${STAR_GATEWAY_PRESENCE_PUSH_BUFFER_MAX_ENTRIES:-}
+      STAR_GATEWAY_PRESENCE_PUSH_BUFFER_MAX_BYTES: ${STAR_GATEWAY_PRESENCE_PUSH_BUFFER_MAX_BYTES:-}
+      STAR_GATEWAY_HTTP_RPC_MAX_CONCURRENCY: ${STAR_GATEWAY_HTTP_RPC_MAX_CONCURRENCY:-}
+      STAR_GATEWAY_NATS_RPC_MAX_HANDLERS: ${STAR_GATEWAY_NATS_RPC_MAX_HANDLERS:-}
+      STAR_GATEWAY_ZSTD_WINDOW_LOG: ${STAR_GATEWAY_ZSTD_WINDOW_LOG:-}
+      STAR_GATEWAY_HTTP_FAILURE_THRESHOLD: ${STAR_GATEWAY_HTTP_FAILURE_THRESHOLD:-}
+      STAR_GATEWAY_HTTP_RECOVERY_TIMEOUT_MS: ${STAR_GATEWAY_HTTP_RECOVERY_TIMEOUT_MS:-}
+      STAR_GATEWAY_GUILD_VISITOR_SESSIONS_MAX: ${STAR_GATEWAY_GUILD_VISITOR_SESSIONS_MAX:-}
+      STAR_GATEWAY_GUILD_VISITOR_SESSIONS_FLOOR: ${STAR_GATEWAY_GUILD_VISITOR_SESSIONS_FLOOR:-}
+      STAR_GATEWAY_GUILD_VISITOR_SESSIONS_PER_MEMBER: ${STAR_GATEWAY_GUILD_VISITOR_SESSIONS_PER_MEMBER:-}
+      STAR_GATEWAY_GUILD_VISITOR_SESSIONS_PER_USER: ${STAR_GATEWAY_GUILD_VISITOR_SESSIONS_PER_USER:-}
+      STAR_GATEWAY_GUILD_VISITOR_SESSIONS_PER_IP: ${STAR_GATEWAY_GUILD_VISITOR_SESSIONS_PER_IP:-}
+      STAR_ERLANG_COOKIE: ${STAR_ERLANG_COOKIE:-}
+      STAR_ERLANG_SCHEDULERS: ${STAR_ERLANG_SCHEDULERS:-}
+      STAR_ERLANG_SCHEDULERS_MIN: ${STAR_ERLANG_SCHEDULERS_MIN:-}
+      STAR_ERLANG_SCHEDULERS_MAX: ${STAR_ERLANG_SCHEDULERS_MAX:-}
+      STAR_ERLANG_DIRTY_CPU_SCHEDULERS: ${STAR_ERLANG_DIRTY_CPU_SCHEDULERS:-}
+      STAR_ERLANG_DIRTY_IO_SCHEDULERS: ${STAR_ERLANG_DIRTY_IO_SCHEDULERS:-}
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf \"GET /_health/ready HTTP/1.0\\r\\nHost: 127.0.0.1\\r\\n\\r\\n\" >&3 && head -n 1 <&3 | grep -q \" 200 \"'"]
+      <<: *star-app-healthcheck
+    depends_on:
+      nats: {condition: service_healthy}
+      valkey: {condition: service_healthy}
+
+  media-proxy:
+    <<: *star-service
+    image: ${STAR_REGISTRY:-ghcr.io/${STAR_REGISTRY_OWNER:-starapp}}/star-media-proxy:${STAR_IMAGE_TAG:-v1}
+    deploy:
+      resources:
+        limits:
+          memory: ${STAR_MEDIA_PROXY_MEMORY_LIMIT:-1gb}
+    environment:
+      <<: *star-env
+      STAR_MEDIA_PROXY_PORT: "8080"
+      TOKIO_WORKER_THREADS: ${STAR_MEDIA_PROXY_TOKIO_WORKER_THREADS:-4}
+      STAR_MEDIA_PROXY_MODE: upload
+      STAR_MEDIA_PROXY_STORAGE_BACKEND: s3
+      STAR_MEDIA_PROXY_CORS_MODE: ${STAR_MEDIA_PROXY_CORS_MODE:-}
+      STAR_MEDIA_PROXY_CORS_ALLOWED_ORIGINS: ${STAR_MEDIA_PROXY_CORS_ALLOWED_ORIGINS:-${STAR_PUBLIC_ORIGIN:-${STAR_PUBLIC_SCHEME:-https}://${STAR_DOMAIN:-}:${STAR_PUBLIC_PORT:-443}}}
+      STAR_MEDIA_PROXY_ATTACHMENT_SIGNATURE_MODE: ${STAR_MEDIA_PROXY_ATTACHMENT_SIGNATURE_MODE:-}
+      STAR_MEDIA_PROXY_ATTACHMENT_URL_SECRETS_BASE64: ${STAR_MEDIA_PROXY_ATTACHMENT_URL_SECRETS_BASE64:-}
+      STAR_MEDIA_PROXY_READ_ONLY: ${STAR_MEDIA_PROXY_READ_ONLY:-}
+      STAR_MEDIA_PROXY_NSFW_THRESHOLD: ${STAR_MEDIA_PROXY_NSFW_THRESHOLD:-}
+      STAR_NSFW_SERVICE_ENDPOINT: ${STAR_NSFW_SERVICE_ENDPOINT:-}
+      STAR_MEDIA_PROXY_MAX_NATIVE_TRANSFORMS: ${STAR_MEDIA_PROXY_MAX_NATIVE_TRANSFORMS:-}
+      STAR_MEDIA_PROXY_WORKER_QUEUE_CAPACITY: ${STAR_MEDIA_PROXY_WORKER_QUEUE_CAPACITY:-}
+      STAR_MEDIA_PROXY_MAX_ENCODE_DURATION_MS: ${STAR_MEDIA_PROXY_MAX_ENCODE_DURATION_MS:-}
+      STAR_MEDIA_PROXY_MAX_ENCODE_FRAMES: ${STAR_MEDIA_PROXY_MAX_ENCODE_FRAMES:-}
+      STAR_MEDIA_PROXY_TRANSFORM_TIMEOUT_MS: ${STAR_MEDIA_PROXY_TRANSFORM_TIMEOUT_MS:-}
+      STAR_MEDIA_PROXY_TRANSFORM_CACHE_BYTES: ${STAR_MEDIA_PROXY_TRANSFORM_CACHE_BYTES:-}
+      STAR_MEDIA_PROXY_TRANSFORM_CACHE_MAX_ENTRY_BYTES: ${STAR_MEDIA_PROXY_TRANSFORM_CACHE_MAX_ENTRY_BYTES:-}
+      STAR_MEDIA_PROXY_TRANSFORM_CACHE_TTL_MS: ${STAR_MEDIA_PROXY_TRANSFORM_CACHE_TTL_MS:-}
+      STAR_MEDIA_PROXY_SOCKET_IO_TIMEOUT_MS: ${STAR_MEDIA_PROXY_SOCKET_IO_TIMEOUT_MS:-}
+      STAR_MEDIA_PROXY_SHUTDOWN_GRACE_MS: ${STAR_MEDIA_PROXY_SHUTDOWN_GRACE_MS:-}
+      STAR_MEDIA_PROXY_UPLOAD_RELAY_S3_TIMEOUT_MS: ${STAR_MEDIA_PROXY_UPLOAD_RELAY_S3_TIMEOUT_MS:-}
+      STAR_MEDIA_PROXY_UPLOAD_RELAY_BUFFERED_RETRY_BYTES: ${STAR_MEDIA_PROXY_UPLOAD_RELAY_BUFFERED_RETRY_BYTES:-}
+      STAR_MEDIA_PROXY_UPLOAD_RELAY_BUFFERED_RETRY_TOTAL_BYTES: ${STAR_MEDIA_PROXY_UPLOAD_RELAY_BUFFERED_RETRY_TOTAL_BYTES:-}
+      STAR_MEDIA_PROXY_UPLOAD_RELAY_SPOOL_DIR: ${STAR_MEDIA_PROXY_UPLOAD_RELAY_SPOOL_DIR:-}
+      STAR_MEDIA_PROXY_UPLOAD_RELAY_SPOOL_CHUNK_BYTES: ${STAR_MEDIA_PROXY_UPLOAD_RELAY_SPOOL_CHUNK_BYTES:-}
+      STAR_MEDIA_PROXY_UPLOAD_RELAY_SPOOL_MAX_TOTAL_BYTES: ${STAR_MEDIA_PROXY_UPLOAD_RELAY_SPOOL_MAX_TOTAL_BYTES:-2147483648}
+      STAR_S3_SESSION_TOKEN: ${STAR_S3_SESSION_TOKEN:-}
+      STAR_S3_READ_ENDPOINT: ${STAR_S3_READ_ENDPOINT:-}
+      STAR_S3_READ_BUCKET: ${STAR_S3_READ_BUCKET:-}
+      STAR_S3_READ_BUCKET_STYLE: ${STAR_S3_READ_BUCKET_STYLE:-}
+      STAR_S3_READ_SIGNED: "${STAR_S3_READ_SIGNED:-true}"
+    volumes:
+      - media-proxy-tmp:/tmp
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/star-media-proxy", "healthcheck"]
+      <<: *star-healthcheck
+      interval: ${STAR_MEDIA_PROXY_HEALTHCHECK_INTERVAL:-30s}
+    depends_on:
+      seaweedfs-init: {condition: service_completed_successfully}
+      nats: {condition: service_healthy}
+
+  push:
+    <<: *star-service
+    image: ${STAR_REGISTRY:-ghcr.io/${STAR_REGISTRY_OWNER:-starapp}}/star-push:${STAR_IMAGE_TAG:-v1}
+    deploy:
+      resources:
+        limits:
+          memory: ${STAR_PUSH_MEMORY_LIMIT:-256mb}
+    environment:
+      <<: *star-rust-env
+      STAR_PUSH_SERVICE_QUEUE_CAPACITY: ${STAR_PUSH_SERVICE_QUEUE_CAPACITY:-}
+      STAR_PUSH_SERVICE_SEND_CONCURRENCY: ${STAR_PUSH_SERVICE_SEND_CONCURRENCY:-}
+      STAR_PUSH_SERVICE_APNS_BASE_URL: ${STAR_PUSH_SERVICE_APNS_BASE_URL:-}
+      STAR_PUSH_SERVICE_FCM_BASE_URL: ${STAR_PUSH_SERVICE_FCM_BASE_URL:-}
+      STAR_PUSH_SERVICE_MANAGED_RELAY_HOSTS: ${STAR_PUSH_SERVICE_MANAGED_RELAY_HOSTS:-}
+      STAR_PUSH_SERVICE_OWN_RELAY_HOSTS: ${STAR_PUSH_SERVICE_OWN_RELAY_HOSTS:-}
+      STAR_PUSH_SERVICE_PRIVATE_HOSTS: ${STAR_PUSH_SERVICE_PRIVATE_HOSTS:-}
+      STAR_PUSH_SERVICE_RELAY_CONSENT_ACCEPTED: ${STAR_PUSH_SERVICE_RELAY_CONSENT_ACCEPTED:-}
+      STAR_PUSH_APNS_DEFAULT_ENVIRONMENT: ${STAR_PUSH_APNS_DEFAULT_ENVIRONMENT:-}
+      STAR_PUSH_FCM_ENABLED: ${STAR_PUSH_FCM_ENABLED:-}
+      STAR_PUSH_FCM_PROJECT_ID: ${STAR_PUSH_FCM_PROJECT_ID:-}
+      STAR_PUSH_FCM_CLIENT_EMAIL: ${STAR_PUSH_FCM_CLIENT_EMAIL:-}
+      STAR_PUSH_FCM_PRIVATE_KEY: ${STAR_PUSH_FCM_PRIVATE_KEY:-}
+      STAR_PUSH_FCM_PRIVATE_KEY_PATH: ${STAR_PUSH_FCM_PRIVATE_KEY_PATH:-}
+      STAR_PUSH_FCM_SERVICE_ACCOUNT_JSON_PATH: ${STAR_PUSH_FCM_SERVICE_ACCOUNT_JSON_PATH:-}
+      STAR_PUSH_FCM_TOKEN_URI: ${STAR_PUSH_FCM_TOKEN_URI:-}
+      STAR_PUSH_FCM_APPS: ${STAR_PUSH_FCM_APPS:-}
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/star-push", "healthcheck"]
+      <<: *star-app-healthcheck
+      start_period: ${STAR_SVC_HEALTHCHECK_START_PERIOD:-60s}
+    depends_on:
+      nats: {condition: service_healthy}
+      api: {condition: service_healthy}
+
+  static-proxy:
+    <<: *star-service
+    image: ${STAR_REGISTRY:-ghcr.io/${STAR_REGISTRY_OWNER:-starapp}}/star-static:${STAR_IMAGE_TAG:-v1}
+    deploy:
+      resources:
+        limits:
+          memory: ${STAR_STATIC_PROXY_MEMORY_LIMIT:-256mb}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/avatars/0.png"]
+      <<: *star-healthcheck
+
+  app-proxy:
+    <<: *star-service
+    image: ${STAR_REGISTRY:-ghcr.io/${STAR_REGISTRY_OWNER:-starapp}}/star-app-proxy-self-hosted:${STAR_IMAGE_TAG:-v1}
+    deploy:
+      resources:
+        limits:
+          memory: ${STAR_APP_PROXY_MEMORY_LIMIT:-256mb}
+    environment:
+      RUST_LOG: ${RUST_LOG:-}
+      TOKIO_WORKER_THREADS: ${STAR_TOKIO_WORKER_THREADS:-2}
+      STAR_APP_PROXY_PORT: "8080"
+      STAR_S3_PUBLIC_ENDPOINT: ${STAR_S3_PUBLIC_ENDPOINT:-}
+      STAR_S3_BUCKET_UPLOADS: ${STAR_S3_BUCKET_UPLOADS:-star-uploads}
+      STAR_STATIC_CDN_ENDPOINT: ${STAR_STATIC_CDN_ENDPOINT:-}
+      STAR_MEDIA_ENDPOINT: ${STAR_MEDIA_ENDPOINT:-}
+      STAR_APP_PRODUCT_NAME: ${STAR_APP_PRODUCT_NAME:-}
+      STAR_APP_ICON_URL: ${STAR_APP_ICON_URL:-}
+      STAR_APP_SYMBOL_URL: ${STAR_APP_SYMBOL_URL:-}
+      STAR_APP_LOGO_URL: ${STAR_APP_LOGO_URL:-}
+      STAR_APP_WORDMARK_URL: ${STAR_APP_WORDMARK_URL:-}
+      STAR_APP_FAVICON_URL: ${STAR_APP_FAVICON_URL:-}
+      STAR_APP_FAVICON_DARK_URL: ${STAR_APP_FAVICON_DARK_URL:-}
+      STAR_APP_SIGN_IN_BACKDROP_URL: ${STAR_APP_SIGN_IN_BACKDROP_URL:-}
+      STAR_APP_THEME_COLOR: ${STAR_APP_THEME_COLOR:-}
+      STAR_APP_STATUS_PAGE_URL: ${STAR_APP_STATUS_PAGE_URL:-}
+      DISCOVERY_UPSTREAM_URL: http://edge:8088/.well-known/star
+      DISCOVERY_REFRESH_INTERVAL_MS: ${DISCOVERY_REFRESH_INTERVAL_MS:-5000}
+      STAR_APP_PROXY_INDEX_UPSTREAM_URL: ${STAR_APP_PROXY_INDEX_UPSTREAM_URL:-}
+      STAR_APP_PROXY_SAME_ORIGIN_HOSTS: ${STAR_APP_PROXY_SAME_ORIGIN_HOSTS:-}
+      STAR_APP_PROXY_MANIFEST_SCOPE_EXTENSIONS: ${STAR_APP_PROXY_MANIFEST_SCOPE_EXTENSIONS:-}
+      STAR_LIVEKIT_URL: ${STAR_LIVEKIT_URL:-}
+      STAR_CSP_EXTRA_DEFAULT_SRC: ${STAR_CSP_EXTRA_DEFAULT_SRC:-}
+      STAR_CSP_EXTRA_CONNECT_SRC: ${STAR_CSP_EXTRA_CONNECT_SRC:-}
+      STAR_CSP_EXTRA_IMG_SRC: ${STAR_CSP_EXTRA_IMG_SRC:-}
+      STAR_CSP_EXTRA_MEDIA_SRC: ${STAR_CSP_EXTRA_MEDIA_SRC:-}
+      STAR_CSP_EXTRA_FONT_SRC: ${STAR_CSP_EXTRA_FONT_SRC:-}
+      STAR_CSP_EXTRA_SCRIPT_SRC: ${STAR_CSP_EXTRA_SCRIPT_SRC:-}
+      STAR_CSP_EXTRA_STYLE_SRC: ${STAR_CSP_EXTRA_STYLE_SRC:-}
+      STAR_CSP_EXTRA_FRAME_SRC: ${STAR_CSP_EXTRA_FRAME_SRC:-}
+      STAR_CSP_EXTRA_WORKER_SRC: ${STAR_CSP_EXTRA_WORKER_SRC:-}
+      STAR_CSP_EXTRA_MANIFEST_SRC: ${STAR_CSP_EXTRA_MANIFEST_SRC:-}
+      STAR_CSP_REPORT_URI: ${STAR_CSP_REPORT_URI:-}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8080/_ready"]
+      <<: *star-healthcheck
+      interval: ${STAR_APP_PROXY_HEALTHCHECK_INTERVAL:-30s}
+    depends_on:
+      api: {condition: service_healthy}
+      edge: {condition: service_healthy}
+
+  snowflakes:
+    <<: *star-service
+    stop_grace_period: 30s
+    image: ${STAR_REGISTRY:-ghcr.io/${STAR_REGISTRY_OWNER:-starapp}}/star-snowflakes:${STAR_IMAGE_TAG:-v1}
+    deploy:
+      resources:
+        limits:
+          memory: ${STAR_SNOWFLAKES_MEMORY_LIMIT:-256mb}
+    environment:
+      <<: *star-rust-env
+      STAR_SVC_NAME: snowflakes
+      STAR_SVC_MODE: combined
+      STAR_SNOWFLAKES_WORKER_GUARD: "true"
+    healthcheck: *star-svc-healthcheck
+    depends_on:
+      nats: {condition: service_healthy}
+
+  users:
+    <<: *star-service
+    stop_grace_period: 30s
+    image: ${STAR_REGISTRY:-ghcr.io/${STAR_REGISTRY_OWNER:-starapp}}/star-users:${STAR_IMAGE_TAG:-v1}
+    deploy:
+      resources:
+        limits:
+          memory: ${STAR_USERS_MEMORY_LIMIT:-256mb}
+    environment:
+      <<: *star-rust-env
+      STAR_SVC_NAME: users
+      STAR_SVC_MODE: combined
+      STAR_POSTGRES_MAX_CONNECTIONS: "${STAR_USERS_POSTGRES_MAX_CONNECTIONS:-20}"
+    healthcheck: *star-svc-healthcheck
+    depends_on:
+      nats: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+
+  gifs:
+    <<: *star-service
+    stop_grace_period: 30s
+    image: ${STAR_REGISTRY:-ghcr.io/${STAR_REGISTRY_OWNER:-starapp}}/star-gifs:${STAR_IMAGE_TAG:-v1}
+    deploy:
+      resources:
+        limits:
+          memory: ${STAR_GIFS_MEMORY_LIMIT:-256mb}
+    environment:
+      <<: *star-rust-env
+      STAR_SVC_NAME: gifs
+      STAR_SVC_MODE: combined
+      STAR_GIFS_SHARD_CACHE_MAX_BYTES: ${STAR_GIFS_SHARD_CACHE_MAX_BYTES:-134217728}
+    healthcheck: *star-svc-healthcheck
+    depends_on:
+      nats: {condition: service_healthy}
+
+  messages:
+    <<: *star-service
+    stop_grace_period: 30s
+    image: ${STAR_REGISTRY:-ghcr.io/${STAR_REGISTRY_OWNER:-starapp}}/star-messages:${STAR_IMAGE_TAG:-v1}
+    deploy:
+      resources:
+        limits:
+          memory: ${STAR_MESSAGES_MEMORY_LIMIT:-256mb}
+    environment:
+      <<: *star-rust-env
+      STAR_SVC_NAME: messages
+      STAR_SVC_MODE: combined
+      STAR_POSTGRES_MAX_CONNECTIONS: "${STAR_MESSAGES_POSTGRES_MAX_CONNECTIONS:-20}"
+    healthcheck: *star-svc-healthcheck
+    depends_on:
+      nats: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+
+  unfurl:
+    <<: *star-service
+    stop_grace_period: 30s
+    image: ${STAR_REGISTRY:-ghcr.io/${STAR_REGISTRY_OWNER:-starapp}}/star-unfurl:${STAR_IMAGE_TAG:-v1}
+    deploy:
+      resources:
+        limits:
+          memory: ${STAR_UNFURL_MEMORY_LIMIT:-256mb}
+    environment:
+      <<: *star-rust-env
+      STAR_SVC_NAME: unfurl
+      STAR_SVC_MODE: combined
+      STAR_MEDIA_PROXY_ENDPOINT: http://media-proxy:8080
+      STAR_ACTIVITYPUB_SIGNING_KEY_BASE64: ${STAR_ACTIVITYPUB_SIGNING_KEY_BASE64:-}
+    healthcheck: *star-svc-healthcheck
+    depends_on:
+      nats: {condition: service_healthy}
+
+  admin:
+    <<: *star-service
+    image: ${STAR_REGISTRY:-ghcr.io/${STAR_REGISTRY_OWNER:-starapp}}/star-admin:${STAR_IMAGE_TAG:-v1}
+    deploy:
+      resources:
+        limits:
+          memory: ${STAR_ADMIN_MEMORY_LIMIT:-256mb}
+    environment:
+      <<: *star-rust-env
+      STAR_ADMIN_PORT: "8080"
+      STAR_ADMIN_BASE_PATH: ${STAR_ADMIN_BASE_PATH:-/admin}
+      STAR_API_ENDPOINT: http://api:8080
+      STAR_API_PUBLIC_ENDPOINT: ${STAR_API_ENDPOINT:-}
+      STAR_STATIC_CDN_ENDPOINT: ${STAR_STATIC_CDN_ENDPOINT:-${STAR_PUBLIC_ORIGIN:-${STAR_PUBLIC_SCHEME:-https}://${STAR_DOMAIN:-}}}
+      STAR_ADMIN_SSO_CLIENT_SECRET: ${STAR_ADMIN_SSO_CLIENT_SECRET:-}
+      STAR_ADMIN_SSO_DISPLAY_NAME: ${STAR_ADMIN_SSO_DISPLAY_NAME:-}
+      STAR_ADMIN_SSO_ONLY: ${STAR_ADMIN_SSO_ONLY:-}
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf \"GET /_health HTTP/1.0\\r\\n\\r\\n\" >&3 && head -n 1 <&3 | grep -q \" 200 \"'"]
+      <<: *star-app-healthcheck
+      start_period: ${STAR_SVC_HEALTHCHECK_START_PERIOD:-60s}
+    depends_on:
+      api: {condition: service_healthy}
+
+networks:
+  star:
+    driver: bridge
+
+volumes:
+  edge-data:
+  edge-config:
+  postgres-data:
+  valkey-data:
+  nats-data:
+  meilisearch-data:
+  seaweedfs-data:
+  media-proxy-tmp:

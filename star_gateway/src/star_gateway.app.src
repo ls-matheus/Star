@@ -1,0 +1,23 @@
+% SPDX-License-Identifier: AGPL-3.0-or-later
+{application, star_gateway, [
+    {description, "Star Gateway"},
+    {vsn, "0.0.0"},
+    {registered, []},
+    {mod, {star_gateway_app, []}},
+    {applications, [
+        kernel,
+        stdlib,
+        crypto,
+        public_key,
+        ssl,
+        inets,
+        ranch,
+        cowboy,
+        ezstd,
+        enats
+    ]},
+    {env, []},
+    {modules, []},
+    {licenses, ["AGPL-3.0-or-later"]},
+    {links, []}
+]}.

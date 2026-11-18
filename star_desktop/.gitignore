@@ -1,0 +1,9 @@
+/.velopack/
+/dist-electron/
+
+/native/**/*.node
+/native/webauthn/*.so*
+/native/win-game-capture/star-game-hook.*.dll
+/native/win-game-capture/star-inject-helper.*.exe
+/native/win-game-capture/star-vulkan-layer.*.dll
+/native/win-game-capture/star-vulkan-layer.*.json
