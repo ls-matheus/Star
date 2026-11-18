@@ -12,7 +12,7 @@ for path in [
     ".gitignore", ".dockerignore", ".editorconfig", ".gitattributes",
     ".ignore", ".envrc", ".devcontainer/devcontainer.json",
     ".devcontainer/docker-compose.yml", "LICENSE", "README.md",
-    "Cargo.toml", "Cargo.lock", "pnpm-workspace.yaml", "pnpm-lock.yaml",
+    "Cargo.toml", "Cargo.lock", "pnpm-workspace.yaml", "pnpm-lock.yaml", "config/env/development.example.env",
     "star_app/src", "star_api/src", "star_desktop", "star_gateway",
     "star_static/LICENSE",
 ]:
