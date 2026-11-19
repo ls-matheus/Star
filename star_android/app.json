@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "Star",
+    "slug": "star-android",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "android": {
+      "package": "io.github.lsmatheus.star",
+      "versionCode": 1,
+      "allowBackup": false,
+      "permissions": ["android.permission.INTERNET"],
+      "blockedPermissions": ["android.permission.RECORD_AUDIO", "android.permission.SYSTEM_ALERT_WINDOW", "android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE"],
+      "edgeToEdgeEnabled": true
+    },
+    "plugins": ["expo-secure-store", "./plugins/withStarAndroid.js"],
+    "updates": {"enabled": false}
+  }
+}
