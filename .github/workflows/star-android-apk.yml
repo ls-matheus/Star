@@ -1,0 +1,78 @@
+name: Star Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: star-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Build native ARM64 APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: star_android
+    env:
+      CI: '1'
+      EXPO_NO_TELEMETRY: '1'
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: star_android/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install locked native dependencies
+        run: npm ci --no-audit --no-fund --workspaces=false
+      - name: Check source, types and protocol tests
+        run: |
+          python3 ../tools/ci/check-star-source.py
+          npm run typecheck
+          npm test
+          npx expo install --check
+      - name: Generate native Android project
+        run: npm run prebuild
+      - name: Compile standalone ARM64 release-mode APK
+        working-directory: star_android/android
+        run: ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --max-workers=2
+      - name: Verify package, native ABI and embedded JS
+        run: |
+          mkdir -p artifacts
+          cp android/app/build/outputs/apk/release/app-release.apk artifacts/Star-Android-arm64.apk
+          python3 scripts/verify-apk.py artifacts/Star-Android-arm64.apk
+          BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          "$BUILD_TOOLS/aapt" dump badging artifacts/Star-Android-arm64.apk > artifacts/apk-metadata.txt
+          grep "package: name='io.github.lsmatheus.star'" artifacts/apk-metadata.txt
+          grep "application-label:'Star'" artifacts/apk-metadata.txt
+          "$BUILD_TOOLS/apksigner" verify --verbose artifacts/Star-Android-arm64.apk
+          cd artifacts
+          sha256sum Star-Android-arm64.apk > SHA256SUMS.txt
+      - name: Upload downloadable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Star-Android-arm64-${{ github.run_number }}
+          path: star_android/artifacts/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish build scope
+        run: |
+          echo '### Star Android ARM64' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Standalone React Native APK with embedded Hermes bundle. Download the artifact above.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Preview only: release mode with the Expo template development signing key, not a Play Store production signature.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Tests cover mocked Star REST/gateway contracts; this job does not prove a live backend login or device E2E.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'See star_android/README.md for supported features and migration gaps.' >> "$GITHUB_STEP_SUMMARY"
