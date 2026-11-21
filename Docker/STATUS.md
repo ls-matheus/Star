@@ -22,5 +22,6 @@
 - A validacao remota pelo GitHub Actions e o resultado dos instaladores dependem das execucoes reais.
 - Android e um APK debug experimental, nao assinado para lojas.
 - DMG/EXE sao instaladores de teste, sem assinatura/notarizacao comercial.
-- Diferencas entre os Cargo.lock do monorepo Web e Server continuam pendentes.
+- Os Cargo.lock de Web e Server eram identicos na auditoria do commit a4be8a8;
+  sincronizacao futura entre as duas copias ainda nao e automatizada.
 - Builds nao substituem testes ponta a ponta, seguranca e plano para VM em producao.

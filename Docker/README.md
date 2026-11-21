@@ -18,19 +18,22 @@ O projeto Star mantem uma copia completa do monorepositorio em Web e Server.
 O Dockerfile monolitico do Server ja compila a interface web a partir da sua copia.
 Por isso `web-assets` e uma imagem adicional para validacao/distribuicao de assets,
 e nao e conectada ao monolito automaticamente. **Diferenças de codigo entre Web e
-Server nao sao sincronizadas pelo Docker.** Antes de producao sera necessario
-escolher uma fonte de verdade e corrigir divergencias (incluindo `Cargo.lock`).
+Server nao sao sincronizadas pelo Docker.** Na auditoria de novembro de 2026,
+ambos os `Cargo.lock` tinham o mesmo hash; somente quatro caminhos diferiam.
+Antes de producao e necessario definir uma fonte de verdade e um processo
+revisado de sincronizacao dessas copias.
 
-## Comecar no Mac
+## Comecar localmente
 
-O Mac verificado era macOS 13.7.8 / Intel, sem Docker Engine ou Compose instalado.
-Instale um Docker Engine **compativel com macOS 13** (novas versoes de Docker Desktop
-podem nao dar suporte), inicie-o e volte aqui. Requisitos sugeridos para tentar
-compilar este monorepo pesado: 16 GB RAM e espaco livre adicional bem acima de 20 GB.
-Esses numeros sao estimativas, nao medidas de um build final.
+Instale um Docker Engine e o plugin Compose compativeis com seu sistema operacional.
+Para builds maiores, reserve memoria e espaco livre apropriados. A recomendacao
+anterior de 16 GB de RAM e mais de 20 GB de disco era apenas uma estimativa,
+nao um requisito medido ou uma garantia de compilacao.
 
 ```bash
-cd "$HOME/Documents/Star - Web Mobile Server - Codigo-Fonte/Docker"
+git clone https://github.com/ls-matheus/Star.git
+cd Star/Docker
+cp .env.example .env
 ./star.sh doctor
 ./star.sh up
 ```
@@ -102,7 +105,7 @@ AGPL e licencas de arte/terceiros.
 
 ## GitHub Actions: um unico workflow, artefatos na Release
 
-O unico workflow ativo e **Star | Build & Release**:
+O unico workflow ativo e **Star | Build and release**:
 https://github.com/ls-matheus/Star/actions/workflows/docker-publish.yml
 
 - Push na branch main: executa os jobs de Apps quando mudam arquivos Web,
@@ -132,7 +135,7 @@ tags associadas ao commit e seus digests SHA-256.
 
 ### Compilacao incremental (a partir de v0.0.8)
 
-O workflow unico **Star | Build & Release** tem um planejador de cache por
+O workflow unico **Star | Build and release** tem um planejador de cache por
 componente. O arquivo **star-incremental-base.json**, na Release de JSONs
 e metadados, guarda as impressoes digitais Git (hashes) e as referencias
 imutaveis GHCR dos ultimos builds aprovados. A primeira base ja foi criada

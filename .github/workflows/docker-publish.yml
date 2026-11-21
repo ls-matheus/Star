@@ -1,6 +1,6 @@
 # The ONE Star workflow: independent image builds plus APK/DMG/EXE.
 # Server is an opt-in/changed-files job, never a dependency of app builds.
-name: Star | Build & Release
+name: Star | Build and release
 run-name: "Star / ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'automatic' }} / #${{ github.run_number }}"
 
 on:
@@ -97,8 +97,8 @@ jobs:
           set -euo pipefail
           bash -n Docker/star.sh Docker/INICIAR-STAR.command Docker/scripts/build-android.sh
           bash -n Docker/scripts/publish-docker-release.sh Docker/scripts/prepare-releases.sh
-          python3 -m py_compile Docker/scripts/star-incremental.py
-          python3 -m unittest discover -s Docker/tests -p 'test_incremental.py' -v
+          python3 -m py_compile Docker/scripts/star-incremental.py Docker/scripts/publish-image-manifest.py
+          python3 -m unittest discover -s Docker/tests -p 'test_*.py' -v
           grep -q 'AS desktop-renderer' 'Star web/star_app_proxy/Dockerfile'
           test -f 'Star mobile/pubspec.yaml'
           test -f 'Star Server/packaging/monolith/Dockerfile'
@@ -188,47 +188,14 @@ jobs:
           cache-to: type=gha,scope=web-assets,mode=max
           provenance: true
 
-      - name: Attach this image to the release immediately
-        shell: bash
+      - name: Release / publish verified OCI manifest
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           COMPONENT: web-assets
           IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
-        run: |
-          set -euo pipefail
-          [[ "$IMAGE_DIGEST" =~ ^sha256:[[:xdigit:]]{64}$ ]] || {
-            echo "Invalid or missing image digest" >&2
-            exit 1
-          }
-          tag="star-meta-${GITHUB_SHA:0:8}"
-          name="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/star-${COMPONENT}"
-          versioned_tag="sha-${GITHUB_SHA:0:7}"
-          filename="star-${COMPONENT}-${GITHUB_SHA:0:8}.json"
-
-          jq -n \
-            --arg component "$COMPONENT" \
-            --arg commit "$GITHUB_SHA" \
-            --arg name "$name" \
-            --arg tag "$versioned_tag" \
-            --arg digest "$IMAGE_DIGEST" \
-            --arg published "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            '{
-              schema_version: 1,
-              component: $component,
-              source_commit: $commit,
-              platform: "linux/amd64",
-              published_at: $published,
-              registry: "ghcr.io",
-              image: $name,
-              tag: ($name + ":" + $tag),
-              digest: $digest,
-              immutable_image: ($name + "@" + $digest),
-              pull_command: ("docker pull " + $name + "@" + $digest)
-            }' > "$filename"
-          gh release upload "$tag" "$filename" --clobber
-
-          printf "### Imagem GHCR publicada\n\n- Componente: `%s`\n- Digest: `%s`\n- JSON: Release `star-meta-%s`\n" "$COMPONENT" "$IMAGE_DIGEST" "${GITHUB_SHA:0:8}" >> "$GITHUB_STEP_SUMMARY"
+        shell: bash
+        run: python3 Docker/scripts/publish-image-manifest.py
 
   desktop-image:
     name: GHCR / desktop renderer
@@ -284,50 +251,17 @@ jobs:
           cache-to: type=gha,scope=desktop-renderer,mode=max
           provenance: true
 
-      - name: Attach this image to the release immediately
-        shell: bash
+      - name: Release / publish verified OCI manifest
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           COMPONENT: desktop-renderer
           IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
-        run: |
-          set -euo pipefail
-          [[ "$IMAGE_DIGEST" =~ ^sha256:[[:xdigit:]]{64}$ ]] || {
-            echo "Invalid or missing image digest" >&2
-            exit 1
-          }
-          tag="star-meta-${GITHUB_SHA:0:8}"
-          name="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/star-${COMPONENT}"
-          versioned_tag="sha-${GITHUB_SHA:0:7}"
-          filename="star-${COMPONENT}-${GITHUB_SHA:0:8}.json"
+        shell: bash
+        run: python3 Docker/scripts/publish-image-manifest.py
 
-          jq -n \
-            --arg component "$COMPONENT" \
-            --arg commit "$GITHUB_SHA" \
-            --arg name "$name" \
-            --arg tag "$versioned_tag" \
-            --arg digest "$IMAGE_DIGEST" \
-            --arg published "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            '{
-              schema_version: 1,
-              component: $component,
-              source_commit: $commit,
-              platform: "linux/amd64",
-              published_at: $published,
-              registry: "ghcr.io",
-              image: $name,
-              tag: ($name + ":" + $tag),
-              digest: $digest,
-              immutable_image: ($name + "@" + $digest),
-              pull_command: ("docker pull " + $name + "@" + $digest)
-            }' > "$filename"
-          gh release upload "$tag" "$filename" --clobber
-
-          printf "### Imagem GHCR publicada\n\n- Componente: `%s`\n- Digest: `%s`\n- JSON: Release `star-meta-%s`\n" "$COMPONENT" "$IMAGE_DIGEST" "${GITHUB_SHA:0:8}" >> "$GITHUB_STEP_SUMMARY"
-
-      # Native DMG/EXE runners cannot run Linux containers. Extract the
-      # immutable renderer image on Linux and transport *its contents* to them.
+      # Native DMG/EXE jobs cannot run Linux containers. Transfer the renderer
+      # from its immutable OCI image to the native packaging runners.
       - name: Extract desktop renderer from published OCI image
         shell: bash
         env:
@@ -346,7 +280,7 @@ jobs:
           tar -czf "$RUNNER_TEMP/desktop-renderer.tar.gz" -C "$RUNNER_TEMP/desktop-renderer" .
 
       - name: Export compiled renderer for macOS and Windows jobs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: star-desktop-renderer
           path: ${{ runner.temp }}/desktop-renderer.tar.gz
@@ -391,7 +325,7 @@ jobs:
           test -d "$RUNNER_TEMP/desktop-renderer/assets"
           tar -czf "$RUNNER_TEMP/desktop-renderer.tar.gz" -C "$RUNNER_TEMP/desktop-renderer" .
       - name: Make cached renderer available to native packaging
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: star-desktop-renderer
           path: ${{ runner.temp }}/desktop-renderer.tar.gz
@@ -453,47 +387,14 @@ jobs:
           cache-to: type=gha,scope=mobile-builder,mode=max
           provenance: true
 
-      - name: Attach this image to the release immediately
-        shell: bash
+      - name: Release / publish verified OCI manifest
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           COMPONENT: mobile-builder
           IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
-        run: |
-          set -euo pipefail
-          [[ "$IMAGE_DIGEST" =~ ^sha256:[[:xdigit:]]{64}$ ]] || {
-            echo "Invalid or missing image digest" >&2
-            exit 1
-          }
-          tag="star-meta-${GITHUB_SHA:0:8}"
-          name="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/star-${COMPONENT}"
-          versioned_tag="sha-${GITHUB_SHA:0:7}"
-          filename="star-${COMPONENT}-${GITHUB_SHA:0:8}.json"
-
-          jq -n \
-            --arg component "$COMPONENT" \
-            --arg commit "$GITHUB_SHA" \
-            --arg name "$name" \
-            --arg tag "$versioned_tag" \
-            --arg digest "$IMAGE_DIGEST" \
-            --arg published "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            '{
-              schema_version: 1,
-              component: $component,
-              source_commit: $commit,
-              platform: "linux/amd64",
-              published_at: $published,
-              registry: "ghcr.io",
-              image: $name,
-              tag: ($name + ":" + $tag),
-              digest: $digest,
-              immutable_image: ($name + "@" + $digest),
-              pull_command: ("docker pull " + $name + "@" + $digest)
-            }' > "$filename"
-          gh release upload "$tag" "$filename" --clobber
-
-          printf "### Imagem GHCR publicada\n\n- Componente: `%s`\n- Digest: `%s`\n- JSON: Release `star-meta-%s`\n" "$COMPONENT" "$IMAGE_DIGEST" "${GITHUB_SHA:0:8}" >> "$GITHUB_STEP_SUMMARY"
+        shell: bash
+        run: python3 Docker/scripts/publish-image-manifest.py
 
   server-image:
     name: GHCR / server
@@ -552,47 +453,14 @@ jobs:
           cache-to: type=gha,scope=server,mode=max
           provenance: true
 
-      - name: Attach this image to the release immediately
-        shell: bash
+      - name: Release / publish verified OCI manifest
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           COMPONENT: server
           IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
-        run: |
-          set -euo pipefail
-          [[ "$IMAGE_DIGEST" =~ ^sha256:[[:xdigit:]]{64}$ ]] || {
-            echo "Invalid or missing image digest" >&2
-            exit 1
-          }
-          tag="star-meta-${GITHUB_SHA:0:8}"
-          name="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/star-${COMPONENT}"
-          versioned_tag="sha-${GITHUB_SHA:0:7}"
-          filename="star-${COMPONENT}-${GITHUB_SHA:0:8}.json"
-
-          jq -n \
-            --arg component "$COMPONENT" \
-            --arg commit "$GITHUB_SHA" \
-            --arg name "$name" \
-            --arg tag "$versioned_tag" \
-            --arg digest "$IMAGE_DIGEST" \
-            --arg published "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            '{
-              schema_version: 1,
-              component: $component,
-              source_commit: $commit,
-              platform: "linux/amd64",
-              published_at: $published,
-              registry: "ghcr.io",
-              image: $name,
-              tag: ($name + ":" + $tag),
-              digest: $digest,
-              immutable_image: ($name + "@" + $digest),
-              pull_command: ("docker pull " + $name + "@" + $digest)
-            }' > "$filename"
-          gh release upload "$tag" "$filename" --clobber
-
-          printf "### Imagem GHCR publicada\n\n- Componente: `%s`\n- Digest: `%s`\n- JSON: Release `star-meta-%s`\n" "$COMPONENT" "$IMAGE_DIGEST" "${GITHUB_SHA:0:8}" >> "$GITHUB_STEP_SUMMARY"
+        shell: bash
+        run: python3 Docker/scripts/publish-image-manifest.py
 
   apk:
     name: Package / Android APK (ARM64)
@@ -610,7 +478,7 @@ jobs:
           persist-credentials: false
 
       - name: Restore Gradle, Dart and Cargo build caches
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ runner.temp }}/star-apk-cache
           key: star-android-v1-${{ runner.os }}-${{ hashFiles('Star mobile/pubspec.lock', 'Star web/Cargo.lock') }}-${{ github.run_id }}
@@ -649,13 +517,13 @@ jobs:
       - name: Save Gradle, Dart and Cargo caches for future changes
         if: success()
         continue-on-error: true
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ runner.temp }}/star-apk-cache
           key: star-android-v1-${{ runner.os }}-${{ hashFiles('Star mobile/pubspec.lock', 'Star web/Cargo.lock') }}-${{ github.run_id }}
 
       - name: Save downloadable APK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: Star-Android-ARM64-DEBUG
           path: ${{ runner.temp }}/star-apk/*.apk
@@ -853,37 +721,39 @@ jobs:
         shell: bash
         working-directory: starweb
     steps:
-      - name: Checkout Star
-        uses: actions/checkout@v4
-      - name: Normalizar o caminho sem espacos
+      - name: Check out Star source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Normalize web workspace directory
         working-directory: .
         run: |
           set -euo pipefail
           test -f 'Star web/Cargo.toml'
           mv 'Star web' starweb
           test -f starweb/star_desktop/package.json
-      - name: pnpm 11.27.0
-        uses: pnpm/action-setup@v4
+      - name: Set up pnpm 11.27.0
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: '11.27.0'
           run_install: false
-      - name: Node.js 26 e cache pnpm
-        uses: actions/setup-node@v4
+      - name: Set up Node.js 26 and pnpm cache
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '26'
           cache: pnpm
           cache-dependency-path: starweb/pnpm-lock.yaml
-      - name: Rust 1.98.1 e WebAssembly
-        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Rust 1.98.1 with WebAssembly
+        uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
           toolchain: '1.98.1'
           targets: wasm32-unknown-unknown
-      - name: Cache Rust e WebAssembly
-        uses: Swatinem/rust-cache@v2
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: starweb -> target
           key: macos-release
-      - name: Preparar LLVM WebAssembly no macOS
+      - name: Configure LLVM for WebAssembly on macOS
         run: |
           set -euo pipefail
           brew list --versions llvm >/dev/null 2>&1 || brew install llvm
@@ -892,15 +762,15 @@ jobs:
           echo "CC_wasm32_unknown_unknown=$llvm_bin/clang" >> "$GITHUB_ENV"
           echo "AR_wasm32_unknown_unknown=$llvm_bin/llvm-ar" >> "$GITHUB_ENV"
 
-      - name: Instalar dependencias do frontend
+      - name: Install locked frontend dependencies
         run: pnpm install --frozen-lockfile --filter 'star_desktop...' --filter 'star_app...'
-      - name: Download renderer exported from published Docker image
-        uses: actions/download-artifact@v4
+      - name: Download compiled desktop renderer
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: star-desktop-renderer
           path: ${{ runner.temp }}/star-desktop-renderer
 
-      - name: Install shared renderer from OCI image
+      - name: Install verified renderer assets
         run: |
           set -euo pipefail
           mkdir -p star_desktop/dist/renderer
@@ -909,7 +779,7 @@ jobs:
           test -s star_desktop/dist/renderer/version.json
           test -d star_desktop/dist/renderer/assets
 
-      - name: Compilar frontend, WASM e Electron
+      - name: Compile frontend, WASM, and Electron
         env:
           NODE_ENV: production
           PNPM_CONFIG_SHELL_EMULATOR: 'false'
@@ -917,14 +787,14 @@ jobs:
           set -euo pipefail
           # Renderer was compiled by the published Docker image, not rebuilt.
           pnpm --filter star_desktop build --use-shared-renderer
-      - name: Empacotar DMG e ZIP Mac Intel
+      - name: Package macOS Intel DMG and ZIP
         env:
           NODE_ENV: production
         run: |
           set -euo pipefail
           pnpm --filter star_desktop exec electron-builder             --config ../../.github/workflows/star-electron-builder.cjs             --mac dmg zip --x64 --publish never
-      - name: Disponibilizar instaladores macOS
-        uses: actions/upload-artifact@v4
+      - name: Save macOS installer artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: Star-macOS-Intel-DMG-${{ github.run_number }}
           path: |
@@ -933,7 +803,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
           compression-level: 0
-      - name: Release / attach native installers and verify
+      - name: Publish and verify native installers
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -979,37 +849,39 @@ jobs:
         shell: bash
         working-directory: starweb
     steps:
-      - name: Checkout Star
-        uses: actions/checkout@v4
-      - name: Normalizar o caminho sem espacos
+      - name: Check out Star source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Normalize web workspace directory
         working-directory: .
         run: |
           set -euo pipefail
           test -f 'Star web/Cargo.toml'
           mv 'Star web' starweb
           test -f starweb/star_desktop/package.json
-      - name: pnpm 11.27.0
-        uses: pnpm/action-setup@v4
+      - name: Set up pnpm 11.27.0
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: '11.27.0'
           run_install: false
-      - name: Node.js 26 e cache pnpm
-        uses: actions/setup-node@v4
+      - name: Set up Node.js 26 and pnpm cache
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '26'
           cache: pnpm
           cache-dependency-path: starweb/pnpm-lock.yaml
-      - name: Rust 1.98.1 e WebAssembly
-        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Rust 1.98.1 with WebAssembly
+        uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
           toolchain: '1.98.1'
           targets: wasm32-unknown-unknown
-      - name: Cache Rust e WebAssembly
-        uses: Swatinem/rust-cache@v2
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: starweb -> target
           key: windows-release
-      - name: Preparar LLVM WebAssembly no Windows
+      - name: Configure LLVM for WebAssembly on Windows
         run: |
           set -euo pipefail
           if [ ! -x '/c/Program Files/LLVM/bin/clang.exe' ]; then
@@ -1020,15 +892,15 @@ jobs:
           echo "CC_wasm32_unknown_unknown=$llvm_dir\clang.exe" >> "$GITHUB_ENV"
           echo "AR_wasm32_unknown_unknown=$llvm_dir\llvm-ar.exe" >> "$GITHUB_ENV"
 
-      - name: Instalar dependencias do frontend
+      - name: Install locked frontend dependencies
         run: pnpm install --frozen-lockfile --filter 'star_desktop...' --filter 'star_app...'
-      - name: Download renderer exported from published Docker image
-        uses: actions/download-artifact@v4
+      - name: Download compiled desktop renderer
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: star-desktop-renderer
           path: ${{ runner.temp }}/star-desktop-renderer
 
-      - name: Install shared renderer from OCI image
+      - name: Install verified renderer assets
         run: |
           set -euo pipefail
           mkdir -p star_desktop/dist/renderer
@@ -1041,7 +913,7 @@ jobs:
           test -s star_desktop/dist/renderer/version.json
           test -d star_desktop/dist/renderer/assets
 
-      - name: Compilar frontend, WASM e Electron
+      - name: Compile frontend, WASM, and Electron
         env:
           NODE_ENV: production
           PNPM_CONFIG_SHELL_EMULATOR: 'true'
@@ -1049,22 +921,22 @@ jobs:
           set -euo pipefail
           # Renderer was compiled by the published Docker image, not rebuilt.
           pnpm --filter star_desktop build --use-shared-renderer
-      - name: Empacotar EXE Windows
+      - name: Package Windows x64 executable
         env:
           NODE_ENV: production
           PNPM_CONFIG_SHELL_EMULATOR: 'true'
         run: |
           set -euo pipefail
           pnpm --filter star_desktop exec electron-builder             --config ../../.github/workflows/star-electron-builder.cjs             --win nsis portable --x64 --publish never
-      - name: Disponibilizar EXE Windows
-        uses: actions/upload-artifact@v4
+      - name: Save Windows executable artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: Star-Windows-EXE-${{ github.run_number }}
           path: starweb/star_desktop/dist-electron/*.exe
           if-no-files-found: error
           retention-days: 30
           compression-level: 0
-      - name: Release / attach native installers and verify
+      - name: Publish and verify native installers
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
