@@ -1,6 +1,7 @@
 # The ONE Star workflow: independent image builds plus APK/DMG/EXE.
 # Server is an opt-in/changed-files job, never a dependency of app builds.
-name: Star - Docker Images and Apps
+name: Star | Build & Release
+run-name: "Star / ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'automatic' }} / #${{ github.run_number }}"
 
 on:
   push:
@@ -39,7 +40,7 @@ permissions:
 
 jobs:
   detect:
-    name: Determine independent build targets
+    name: CI / select build scope
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
@@ -87,10 +88,10 @@ jobs:
           fi
           echo "apps=$apps" >> "$GITHUB_OUTPUT"
           echo "server=$server" >> "$GITHUB_OUTPUT"
-          echo "Build apps=$apps, server=$server" >> "$GITHUB_STEP_SUMMARY"
+          printf "## Escopo da execucao\n\n- Apps: %s\n- Server: %s\n" "$apps" "$server" >> "$GITHUB_STEP_SUMMARY"
 
   validate:
-    name: Validate Docker and packaging inputs
+    name: CI / validate source and packaging
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -104,7 +105,7 @@ jobs:
         run: |
           set -euo pipefail
           bash -n Docker/star.sh Docker/INICIAR-STAR.command Docker/scripts/build-android.sh
-          bash -n Docker/scripts/publish-docker-release.sh
+          bash -n Docker/scripts/publish-docker-release.sh Docker/scripts/prepare-releases.sh
           grep -q 'AS desktop-renderer' 'Star web/star_app_proxy/Dockerfile'
           test -f 'Star mobile/pubspec.yaml'
           test -f 'Star Server/packaging/monolith/Dockerfile'
@@ -119,7 +120,7 @@ jobs:
           echo 'Configuration and syntax verified.'
 
   prepare-release:
-    name: Create GitHub Release before independent builds
+    name: Release / create artifacts and metadata
     if: github.event_name != 'pull_request' && inputs.target != 'backfill'
     needs: [validate, detect]
     runs-on: ubuntu-24.04
@@ -127,21 +128,16 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Create or reuse the same SHA-specific release
+      - name: Prepare artifact and metadata Releases
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         shell: bash
-        run: |
-          set -euo pipefail
-          tag="star-build-${GITHUB_SHA:0:8}"
-          if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --target "$GITHUB_SHA"               --title "Star Build ${GITHUB_SHA:0:8}" --prerelease               --notes "Arquivos APK de teste, EXE, DMG e ZIP sao enviados diretamente para esta Release assim que ficam prontos. Imagens Docker sao publicadas como tags imutaveis no GHCR e exportadas em arquivos .docker.tar.zst (ou partes numeradas), sem bloquear os instaladores. O Server so roda quando o codigo dele muda ou quando solicitado manualmente. Instaladores ainda nao possuem assinatura comercial." ||
-              gh release view "$tag" >/dev/null
+        run: bash Docker/scripts/prepare-releases.sh
           fi
 
   web-image:
-    name: Publish image web-assets
+    name: GHCR / web assets
     if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.apps == 'true' }}
     needs: [prepare-release, detect]
     runs-on: ubuntu-24.04
@@ -209,7 +205,7 @@ jobs:
             echo "Invalid or missing image digest" >&2
             exit 1
           }
-          tag="star-build-${GITHUB_SHA:0:8}"
+          tag="star-meta-${GITHUB_SHA:0:8}"
           name="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/star-${COMPONENT}"
           versioned_tag="sha-${GITHUB_SHA:0:7}"
           filename="star-${COMPONENT}-${GITHUB_SHA:0:8}.json"
@@ -236,10 +232,10 @@ jobs:
             }' > "$filename"
           gh release upload "$tag" "$filename" --clobber
 
-          echo "Published ${name}@${IMAGE_DIGEST}" >> "$GITHUB_STEP_SUMMARY"
+          printf "### Imagem GHCR publicada\n\n- Componente: `%s`\n- Digest: `%s`\n- JSON: Release `star-meta-%s`\n" "$COMPONENT" "$IMAGE_DIGEST" "${GITHUB_SHA:0:8}" >> "$GITHUB_STEP_SUMMARY"
 
   desktop-image:
-    name: Publish image desktop-renderer
+    name: GHCR / desktop renderer
     if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.apps == 'true' }}
     needs: [prepare-release, detect]
     runs-on: ubuntu-24.04
@@ -305,7 +301,7 @@ jobs:
             echo "Invalid or missing image digest" >&2
             exit 1
           }
-          tag="star-build-${GITHUB_SHA:0:8}"
+          tag="star-meta-${GITHUB_SHA:0:8}"
           name="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/star-${COMPONENT}"
           versioned_tag="sha-${GITHUB_SHA:0:7}"
           filename="star-${COMPONENT}-${GITHUB_SHA:0:8}.json"
@@ -332,7 +328,7 @@ jobs:
             }' > "$filename"
           gh release upload "$tag" "$filename" --clobber
 
-          echo "Published ${name}@${IMAGE_DIGEST}" >> "$GITHUB_STEP_SUMMARY"
+          printf "### Imagem GHCR publicada\n\n- Componente: `%s`\n- Digest: `%s`\n- JSON: Release `star-meta-%s`\n" "$COMPONENT" "$IMAGE_DIGEST" "${GITHUB_SHA:0:8}" >> "$GITHUB_STEP_SUMMARY"
 
       # Native DMG/EXE runners cannot run Linux containers. Extract the
       # immutable renderer image on Linux and transport *its contents* to them.
@@ -363,7 +359,7 @@ jobs:
           compression-level: 0
 
   mobile-image:
-    name: Publish image mobile-builder
+    name: GHCR / Android builder
     if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.apps == 'true' }}
     needs: [prepare-release, detect]
     runs-on: ubuntu-24.04
@@ -429,7 +425,7 @@ jobs:
             echo "Invalid or missing image digest" >&2
             exit 1
           }
-          tag="star-build-${GITHUB_SHA:0:8}"
+          tag="star-meta-${GITHUB_SHA:0:8}"
           name="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/star-${COMPONENT}"
           versioned_tag="sha-${GITHUB_SHA:0:7}"
           filename="star-${COMPONENT}-${GITHUB_SHA:0:8}.json"
@@ -456,10 +452,10 @@ jobs:
             }' > "$filename"
           gh release upload "$tag" "$filename" --clobber
 
-          echo "Published ${name}@${IMAGE_DIGEST}" >> "$GITHUB_STEP_SUMMARY"
+          printf "### Imagem GHCR publicada\n\n- Componente: `%s`\n- Digest: `%s`\n- JSON: Release `star-meta-%s`\n" "$COMPONENT" "$IMAGE_DIGEST" "${GITHUB_SHA:0:8}" >> "$GITHUB_STEP_SUMMARY"
 
   server-image:
-    name: Publish image server
+    name: GHCR / server
     if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.server == 'true' }}
     needs: [prepare-release, detect]
     runs-on: ubuntu-24.04
@@ -528,7 +524,7 @@ jobs:
             echo "Invalid or missing image digest" >&2
             exit 1
           }
-          tag="star-build-${GITHUB_SHA:0:8}"
+          tag="star-meta-${GITHUB_SHA:0:8}"
           name="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/star-${COMPONENT}"
           versioned_tag="sha-${GITHUB_SHA:0:7}"
           filename="star-${COMPONENT}-${GITHUB_SHA:0:8}.json"
@@ -555,10 +551,10 @@ jobs:
             }' > "$filename"
           gh release upload "$tag" "$filename" --clobber
 
-          echo "Published ${name}@${IMAGE_DIGEST}" >> "$GITHUB_STEP_SUMMARY"
+          printf "### Imagem GHCR publicada\n\n- Componente: `%s`\n- Digest: `%s`\n- JSON: Release `star-meta-%s`\n" "$COMPONENT" "$IMAGE_DIGEST" "${GITHUB_SHA:0:8}" >> "$GITHUB_STEP_SUMMARY"
 
   apk:
-    name: APK from Mobile Builder image
+    name: Package / Android APK (ARM64)
     if: github.event_name != 'pull_request'
     needs: mobile-image
     runs-on: ubuntu-24.04
@@ -617,7 +613,7 @@ jobs:
           echo "Verified debug APK in GitHub Release $tag" >> "$GITHUB_STEP_SUMMARY"
 
   archive-web-assets:
-    name: Attach Docker archive web-assets to Release
+    name: Release / Docker image - web
     if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.apps == 'true' }}
     needs: [web-image, detect]
     runs-on: ubuntu-24.04
@@ -645,7 +641,7 @@ jobs:
         run: bash Docker/scripts/publish-docker-release.sh
 
   archive-desktop-renderer:
-    name: Attach Docker archive desktop-renderer to Release
+    name: Release / Docker image - desktop
     if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.apps == 'true' }}
     needs: [desktop-image, detect]
     runs-on: ubuntu-24.04
@@ -673,7 +669,7 @@ jobs:
         run: bash Docker/scripts/publish-docker-release.sh
 
   archive-mobile-builder:
-    name: Attach Docker archive mobile-builder to Release
+    name: Release / Docker image - Android
     if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.apps == 'true' }}
     needs: [mobile-image, detect]
     runs-on: ubuntu-24.04
@@ -701,7 +697,7 @@ jobs:
         run: bash Docker/scripts/publish-docker-release.sh
 
   archive-server:
-    name: Attach Docker archive server to Release
+    name: Release / Docker image - server
     if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.server == 'true' }}
     needs: [server-image, detect]
     runs-on: ubuntu-24.04
@@ -730,7 +726,7 @@ jobs:
 
 
   archive-backfill:
-    name: Backfill existing Release Docker archive (${{ matrix.component }})
+    name: Maintenance / restore archives (${{ matrix.component }})
     if: github.event_name == 'workflow_dispatch' && inputs.target == 'backfill'
     needs: [validate, detect]
     runs-on: ubuntu-24.04
@@ -775,7 +771,7 @@ jobs:
   dmg:
     if: github.event_name != 'pull_request'
     needs: desktop-image
-    name: DMG macOS x64
+    name: Package / macOS DMG and ZIP (x64)
     runs-on: macos-15-intel
     timeout-minutes: 180
     permissions:
@@ -873,7 +869,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
           compression-level: 0
-      - name: Publicar em Releases sem README nem notas
+      - name: Release / attach native installers and verify
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -887,11 +883,10 @@ jobs:
             exit 1
           fi
           tag="star-build-${GITHUB_SHA:0:8}"
-          title="Star Build ${GITHUB_SHA:0:8}"
-          if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --target "$GITHUB_SHA" --title "$title" --notes '' --prerelease ||
-              gh release view "$tag" >/dev/null
-          fi
+          gh release view "$tag" >/dev/null || {
+            echo "Artifacts Release is missing: $tag" >&2
+            exit 1
+          }
           gh release upload "$tag" "${assets[@]}" --clobber
           published="$(gh release view "$tag" --json assets --jq '.assets[].name')"
           for asset in "${assets[@]}"; do
@@ -902,7 +897,7 @@ jobs:
   exe:
     if: github.event_name != 'pull_request'
     needs: desktop-image
-    name: EXE Windows x64
+    name: Package / Windows EXE (x64)
     runs-on: windows-2025
     timeout-minutes: 180
     permissions:
@@ -1005,7 +1000,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
           compression-level: 0
-      - name: Publicar em Releases sem README nem notas
+      - name: Release / attach native installers and verify
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1019,11 +1014,10 @@ jobs:
             exit 1
           fi
           tag="star-build-${GITHUB_SHA:0:8}"
-          title="Star Build ${GITHUB_SHA:0:8}"
-          if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --target "$GITHUB_SHA" --title "$title" --notes '' --prerelease ||
-              gh release view "$tag" >/dev/null
-          fi
+          gh release view "$tag" >/dev/null || {
+            echo "Artifacts Release is missing: $tag" >&2
+            exit 1
+          }
           gh release upload "$tag" "${assets[@]}" --clobber
           published="$(gh release view "$tag" --json assets --jq '.assets[].name')"
           for asset in "${assets[@]}"; do

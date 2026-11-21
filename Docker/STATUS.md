@@ -4,9 +4,9 @@
 - Um unico workflow ativo em .github/workflows/docker-publish.yml.
 - Jobs Web, Desktop e Mobile independentes. Server e acionado por alteracao
   nos fontes ou sob demanda, sem bloquear os instaladores.
-- Prerelease por commit criada antes dos builds.
+- Duas prereleases por commit, uma para artefatos e outra para JSONs, criadas antes dos builds.
 - Upload direto de APK, DMG, ZIP e EXE na Release com verificacao de presenca.
-- Manifestos JSON de imagens no GHCR, e imagem Docker exportada para a Release
+- Manifestos JSON e digests na Release de metadados; imagem Docker exportada para a Release de artefatos
   em .docker.tar.zst (dividida em partes de ate 1400 MiB se necessario).
 - Modo manual backfill para preencher Releases anteriores sem recompilar imagens.
 - Nao ha segredos em arquivos versionados.

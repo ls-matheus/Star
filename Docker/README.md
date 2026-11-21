@@ -102,7 +102,7 @@ AGPL e licencas de arte/terceiros.
 
 ## GitHub Actions: um unico workflow, artefatos na Release
 
-O unico workflow ativo sera **Star - Docker Images and Apps**:
+O unico workflow ativo e **Star | Build & Release**:
 https://github.com/ls-matheus/Star/actions/workflows/docker-publish.yml
 
 - Push na branch main: executa os jobs de Apps quando mudam arquivos Web,
@@ -113,16 +113,19 @@ https://github.com/ls-matheus/Star/actions/workflows/docker-publish.yml
 - **backfill**: informe o SHA de uma Release existente (8 caracteres) para
   anexar os arquivos Docker dessa compilacao sem rebuildar imagens.
 
-Para cada commit, a prerelease **star-build-SHA** e criada logo apos a
-validacao. Cada resultado vai para essa mesma Release **assim que seu proprio
-job termina**, sem aguardar os outros:
+Para cada novo commit compilado, duas prereleases com titulos descritivos
+sao criadas logo apos a validacao: **star-build-SHA** (artefatos) e
+**star-meta-SHA** (JSONs e metadados). As releases historicas foram
+reorganizadas por tipo e preservam suas tags originais, mesmo as anteriores
+a essa separacao. Cada resultado e anexado a sua propria Release
+**assim que seu job termina**, sem aguardar os outros:
 
 | Build independente | Publicacao na GitHub Release |
 | --- | --- |
-| Web | Manifesto imutavel e arquivo Docker comprimido |
-| Desktop renderer | Manifesto e imagem Docker; DMG e ZIP Mac Intel e EXE Windows |
-| Mobile builder | Manifesto e imagem Docker; APK Android ARM64 DEBUG |
-| Server (quando solicitado ou modificado) | Manifesto e imagem Docker, sem bloquear apps |
+| Web | Manifesto JSON na Release de metadados e arquivo Docker comprimido na de artefatos |
+| Desktop renderer | JSON na Release de metadados; imagem Docker, DMG, ZIP e EXE na de artefatos |
+| Mobile builder | JSON na Release de metadados; imagem Docker e APK ARM64 DEBUG na de artefatos |
+| Server (quando solicitado ou modificado) | JSON na Release de metadados; imagem Docker na de artefatos, sem bloquear apps |
 
 O GitHub Container Registry (GHCR) tambem recebe as imagens originais com
 tags associadas ao commit e seus digests SHA-256.

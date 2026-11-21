@@ -36,7 +36,15 @@ prefix="star-${COMPONENT}-${sha8}"
 out="${RUNNER_TEMP}/star-release-${COMPONENT}"
 mkdir -p "$out"
 
-gh release download "$release" --pattern "${prefix}.json" --dir "$out" --clobber
+# New builds keep JSON metadata in its own Release. Old Releases may still
+# have the manifest in the artifacts tag until migration is complete.
+metadata_release="star-meta-${sha8}"
+if gh release view "$metadata_release" >/dev/null 2>&1; then
+  source_release="$metadata_release"
+else
+  source_release="$release"
+fi
+gh release download "$source_release" --pattern "${prefix}.json" --dir "$out" --clobber
 manifest="$out/${prefix}.json"
 test -s "$manifest"
 
