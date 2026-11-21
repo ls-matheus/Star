@@ -1,0 +1,49 @@
+Star source archive — 2026-11-20
+============================================================
+Only three ZIP root folders: Star web, Star mobile, Star Server
+Upstream commits:
+  fluxer: ee34297dc3df54b01aa919233a3754c058d78a1e
+  flutter_client: bed3dce5d3e8f159566d8bddec1d5465d028c282
+  dart_sdk: 42a42723fa10ac13330fe3a36fc2a45005287542
+
+Star web:
+{
+  "scanned": 16577,
+  "text_changed": 4581,
+  "paths_renamed": 1574,
+  "binary_skipped": 2842,
+  "star_svgs_generated": 3,
+  "star_pngs_generated": 6
+}
+
+Star mobile:
+{
+  "scanned": 6666,
+  "text_changed": 3819,
+  "paths_renamed": 551,
+  "binary_skipped": 280,
+  "star_svgs_generated": 4,
+  "star_pngs_generated": 4
+}
+
+Star Server:
+{
+  "scanned": 16577,
+  "text_changed": 4581,
+  "paths_renamed": 1574,
+  "binary_skipped": 2842,
+  "star_svgs_generated": 3,
+  "star_pngs_generated": 6
+}
+
+TECHNICAL LIMITS:
+- Source fork, not a validated running product or a complete build.
+- Flutter and Dart SDK were not installed on the connected machine.
+- Binary art not covered by SVG/PNG updates may still have former styling.
+- Some externally hosted dependencies use the original GitHub address by design.
+- star.invalid is a safe placeholder, not a working domain.
+- Star web and Star Server intentionally duplicate the full monorepo for build context.
+- See LEIA-ME-STAR.md and AGPL license notices in each folder.
+
+Complementary Star branding pass: {"svg": 34, "png": 5, "webp_to_png": 0, "native_icons": 2}
+Image screenshots, third-party assets, and other native formats may still need visual review.

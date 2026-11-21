@@ -1,0 +1,55 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:star_app/core/instance/instance_legal_links.dart';
+import 'package:star_app/core/theme/star_theme_extension.dart';
+import 'package:star_app/l10n/generated/star_localizations.dart';
+import 'package:star_app/material_ui.dart';
+
+class PremiumPurchaseDisclaimer extends ConsumerWidget {
+  const PremiumPurchaseDisclaimer({
+    this.isPremium = false,
+    this.alignCenter = true,
+    this.showRefundNote = true,
+    super.key,
+  });
+
+  final bool isPremium;
+  final bool alignCenter;
+  final bool showRefundNote;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = StarLocalizations.of(context);
+    final colors = context.colors;
+    final textStyles = context.textStyles;
+    final layout = context.layout;
+    final TextStyle mutedStyle = textStyles.timestamp.copyWith(
+      fontSize: 12,
+      color: colors.textPrimaryMuted,
+      height: 1.5,
+    );
+
+    return Column(
+      crossAxisAlignment: alignCenter
+          ? CrossAxisAlignment.center
+          : CrossAxisAlignment.start,
+      children: [
+        InstanceLegalAgreementText(
+          message: isPremium
+              ? l10n.premiumDisclaimerAgreementPast
+              : l10n.premiumDisclaimerAgreement,
+          textAlign: alignCenter ? TextAlign.center : TextAlign.start,
+          baseStyle: mutedStyle,
+          linkStyle: mutedStyle.copyWith(color: colors.textLink),
+        ),
+        if (showRefundNote) ...[
+          SizedBox(height: layout.s2),
+          Text(
+            l10n.premiumDisclaimerRefund,
+            style: mutedStyle,
+            textAlign: alignCenter ? TextAlign.center : TextAlign.start,
+          ),
+        ],
+      ],
+    );
+  }
+}

@@ -1,0 +1,873 @@
+import 'dart:async';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:star_app/core/premium/current_user_entitlements_provider.dart';
+import 'package:star_app/core/providers/app/account_user_id.dart';
+import 'package:star_app/core/providers/instance/instance_runtime_config_provider.dart';
+import 'package:star_app/core/theme/star_theme_extension.dart';
+import 'package:star_app/features/settings/domain/user_settings_section.dart';
+import 'package:star_app/features/settings/presentation/widgets/plutonium/premium_pricing_card.dart';
+import 'package:star_app/features/settings/presentation/widgets/plutonium/premium_purchase_disclaimer.dart';
+import 'package:star_app/features/settings/presentation/widgets/premium/store/premium_store_board.dart';
+import 'package:star_app/features/settings/presentation/widgets/premium/store/premium_store_hero_art.dart';
+import 'package:star_app/features/settings/presentation/widgets/premium/store/premium_store_hero_band.dart';
+import 'package:star_app/features/settings/presentation/widgets/premium/store/premium_store_hero_highlights.dart';
+import 'package:star_app/features/settings/presentation/widgets/premium/store/premium_store_marketing.dart';
+import 'package:star_app/features/settings/presentation/widgets/premium/store/premium_store_style.dart';
+import 'package:star_app/features/settings/presentation/widgets/wide_settings_content_layout.dart';
+import 'package:star_app/features/settings/providers/commerce/premium_settings_state_provider.dart';
+import 'package:star_app/features/settings/providers/view_models/user_settings_view_model.dart';
+import 'package:star_app/features/settings/services/premium_checkout_service.dart';
+import 'package:star_app/features/settings/utils/commerce/open_user_billing_settings.dart';
+import 'package:star_app/features/settings/utils/commerce/premium_formatting.dart';
+import 'package:star_app/features/settings/utils/commerce/premium_subscription_manage.dart';
+import 'package:star_app/features/settings/utils/commerce/premium_subscription_status.dart';
+import 'package:star_app/features/shell/presentation/responsive_layout.dart';
+import 'package:star_app/features/shell/providers/user/current_user_private_provider.dart';
+import 'package:star_app/features/ui/bottom_sheet/star_confirm_sheet.dart';
+import 'package:star_app/features/ui/ui.dart';
+import 'package:star_app/l10n/generated/star_localizations.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:star_app/shared/icons/phosphor.dart';
+import 'package:star_dart/export.dart';
+
+class UserPlutoniumSettings extends ConsumerStatefulWidget {
+  const UserPlutoniumSettings({
+    this.scrollController,
+    this.onOpenGifts,
+    super.key,
+  });
+
+  final ScrollController? scrollController;
+  final VoidCallback? onOpenGifts;
+
+  @override
+  ConsumerState<UserPlutoniumSettings> createState() =>
+      _UserPlutoniumSettingsState();
+}
+
+class _UserPlutoniumSettingsState extends ConsumerState<UserPlutoniumSettings> {
+  bool _isGiftMode = false;
+  PremiumCheckoutPlan? _loadingPlan;
+  bool _portalLoading = false;
+  bool _cancelLoading = false;
+  bool _reactivateLoading = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final StarLocalizations l10n = StarLocalizations.of(context);
+    final AsyncValue<PremiumStateResponse?> premiumAsync = ref.watch(
+      premiumSettingsStateProvider,
+    );
+    return premiumAsync.when(
+      loading: () => const Center(child: StarLoadingSpinner()),
+      error: (_, _) => _buildContent(context, l10n, null),
+      data: (PremiumStateResponse? state) =>
+          _buildContent(context, l10n, state),
+    );
+  }
+
+  Widget _buildContent(
+    BuildContext context,
+    StarLocalizations l10n,
+    PremiumStateResponse? premiumState,
+  ) {
+    final layout = context.layout;
+    final colors = context.colors;
+    final textStyles = context.textStyles;
+    final UserSettingsViewState settings = ref.watch(
+      userSettingsViewModelProvider,
+    );
+    final UserPrivateResponse? user = ref.watch(
+      currentUserPrivateReadProvider(watchAccountUserId(ref)),
+    );
+    final bool purchaseDisabled =
+        settings.isKnownUnclaimed || !(user?.verified ?? false);
+    final String? purchaseDisabledMessage = settings.isKnownUnclaimed
+        ? l10n.premiumClaimAccountToPurchase
+        : !(user?.verified ?? false)
+        ? l10n.premiumVerifyEmailToPurchase
+        : null;
+
+    final PremiumSubscriptionStatus status = computePremiumSubscriptionStatus(
+      premiumState: premiumState,
+      effectiveIsPremium: ref
+          .watch(currentUserEntitlementsProvider(readAccountUserId(ref)))
+          .isEffectivelyPremium,
+      userPrivate: user,
+    );
+
+    final PriceIdsResponse? localizedIds = premiumState?.pricing.localized;
+    if (localizedIds == null) {
+      return const Center(child: StarLoadingSpinner());
+    }
+    final PriceIdsResponse priceIds = localizedIds;
+    final String locale = l10n.localeName;
+    final String subscriptionCurrency =
+        priceIdsCurrencyCode(priceIds.currency) ?? 'USD';
+    final String giftCurrency =
+        giftCurrencyCode(priceIds.giftCurrency) ?? subscriptionCurrency;
+
+    final String monthlyPrice = formatPremiumPriceLabel(
+      amountMinor: priceIds.monthlyAmountMinor,
+      currency: subscriptionCurrency,
+      locale: locale,
+    );
+    final String yearlyPrice = formatPremiumPriceLabel(
+      amountMinor: priceIds.yearlyAmountMinor,
+      currency: subscriptionCurrency,
+      locale: locale,
+    );
+    final String giftMonthlyPrice = formatPremiumPriceLabel(
+      amountMinor: priceIds.gift1MonthAmountMinor,
+      currency: giftCurrency,
+      locale: locale,
+    );
+    final String giftYearlyPrice = formatPremiumPriceLabel(
+      amountMinor: priceIds.gift1YearAmountMinor,
+      currency: giftCurrency,
+      locale: locale,
+    );
+    final PriceDistributionResponse? distribution = priceIds.distribution;
+    final Widget? distributionNote = distribution == null
+        ? null
+        : Text(
+            l10n.premiumDistributionPriceNote(
+              formatBasisPointsPercent(
+                basisPoints: distribution.rateBps,
+                locale: locale,
+              ),
+            ),
+            textAlign: TextAlign.center,
+            style: textStyles.bodySmall.copyWith(
+              color: colors.textPrimaryMuted,
+            ),
+          );
+    final bool showPurchaseGrid =
+        !status.shouldShowPremiumCard || status.canStartSubscription;
+    final PremiumManageAction? manage = _manageAction(status);
+    VoidCallback? openManage;
+    if (manage != null) {
+      final PremiumManageAction action = manage;
+      openManage = () => unawaited(_openManage(context, action));
+    }
+
+    final bool selfHosted = ref.watch(
+      instanceRuntimeConfigProvider.select((config) => config.selfHosted),
+    );
+    final String heroAsset = premiumStoreHeroArtAsset(selfHosted: selfHosted);
+    final PremiumStoreStyle storeStyle = PremiumStoreStyle.of(context);
+    final String? heroLead = status.shouldShowPremiumCard
+        ? null
+        : l10n.premiumPlutoniumTagline;
+
+    return ColoredBox(
+      color: storeStyle.page,
+      child: SingleChildScrollView(
+        controller: widget.scrollController,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (user?.hasUnreadGiftInventory ?? false) ...[
+              Padding(
+                padding: settingsScrollPadding(context),
+                child: _GiftInventoryBanner(
+                  count: user?.unreadGiftInventoryCount ?? 1,
+                  onViewGifts:
+                      widget.onOpenGifts ??
+                      () => openUserBillingSettings(
+                        context,
+                        UserSettingsSection.giftsAndCodes,
+                      ),
+                ),
+              ),
+              SizedBox(height: layout.s4),
+            ],
+            PremiumStoreHeroBand(
+              heroArtAsset: heroAsset,
+              title: l10n.userSettingsNavStarPlutonium,
+              lead: heroLead,
+              scrollController: widget.scrollController,
+              highlights: const PremiumStoreHeroHighlights(),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (status.shouldShowPremiumCard) ...[
+                    Text(
+                      l10n.storePlutoniumManageHeading,
+                      textAlign: TextAlign.center,
+                      style: textStyles.heading.copyWith(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w700,
+                        color: storeStyle.ink,
+                      ),
+                    ),
+                    SizedBox(height: layout.s4),
+                    PremiumStoreBoard(
+                      padding: EdgeInsets.all(layout.s4),
+                      child: _SubscriptionSummary(
+                        status: status,
+                        l10n: l10n,
+                        portalLoading: _portalLoading,
+                        cancelLoading: _cancelLoading,
+                        reactivateLoading: _reactivateLoading,
+                        onManage: openManage,
+                        onCancel: () =>
+                            unawaited(_confirmCancel(context, l10n)),
+                        onReactivate: () => unawaited(_reactivate(context)),
+                        onRedeemGift: widget.onOpenGifts,
+                      ),
+                    ),
+                  ],
+                  if (status.hasEverPurchased &&
+                      premiumState != null &&
+                      status.allowsStripeBilling) ...[
+                    SizedBox(height: layout.s6),
+                    _PurchaseHistorySection(
+                      onManagePayment: () => unawaited(
+                        _openManage(
+                          context,
+                          const PremiumManageAction.portal(),
+                        ),
+                      ),
+                      portalLoading: _portalLoading,
+                    ),
+                    if (premiumState.billing.refundEligibility.eligible) ...[
+                      SizedBox(height: layout.s4),
+                      StarButton.secondary(
+                        label: l10n.premiumSelfServeRefundButton,
+                        onPressedAsync: () => _confirmRefund(context, l10n),
+                      ),
+                    ],
+                  ],
+                  if (showPurchaseGrid) ...[
+                    if (status.shouldShowPremiumCard)
+                      SizedBox(height: layout.s6),
+                    _PurchaseModeToggle(
+                      isGiftMode: _isGiftMode,
+                      onChanged: (bool value) =>
+                          setState(() => _isGiftMode = value),
+                    ),
+                    SizedBox(height: layout.s6),
+                    _PremiumPricingGrid(
+                      children: _isGiftMode
+                          ? _giftPricingCards(
+                              l10n: l10n,
+                              priceIds: priceIds,
+                              giftMonthlyPrice: giftMonthlyPrice,
+                              giftYearlyPrice: giftYearlyPrice,
+                              purchaseDisabled: purchaseDisabled,
+                            )
+                          : _subscriptionPricingCards(
+                              l10n: l10n,
+                              priceIds: priceIds,
+                              monthlyPrice: monthlyPrice,
+                              yearlyPrice: yearlyPrice,
+                              purchaseDisabled: purchaseDisabled,
+                            ),
+                    ),
+                    if (distributionNote != null) ...[
+                      SizedBox(height: layout.s2),
+                      distributionNote,
+                    ],
+                    if (status.isGiftSubscription && !_isGiftMode) ...[
+                      SizedBox(height: layout.s2),
+                      Text(
+                        l10n.premiumGiftTimeAddedAfterSubscription,
+                        textAlign: TextAlign.center,
+                        style: textStyles.bodySmall.copyWith(
+                          color: colors.textPrimaryMuted,
+                        ),
+                      ),
+                    ],
+                    if (purchaseDisabled &&
+                        purchaseDisabledMessage != null) ...[
+                      SizedBox(height: layout.s2),
+                      Text(
+                        purchaseDisabledMessage,
+                        textAlign: TextAlign.center,
+                        style: textStyles.bodySmall.copyWith(
+                          color: colors.textPrimaryMuted,
+                        ),
+                      ),
+                    ],
+                    SizedBox(height: layout.s4),
+                    PremiumPurchaseDisclaimer(isPremium: status.isPremium),
+                  ],
+                  if (!showPurchaseGrid) ...[
+                    SizedBox(height: layout.s6),
+                    Text(
+                      l10n.premiumGiftSectionTitle,
+                      style: textStyles.heading.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: storeStyle.ink,
+                      ),
+                    ),
+                    SizedBox(height: layout.s2),
+                    Text(
+                      l10n.premiumGiftSectionDescription,
+                      style: textStyles.bodySmall.copyWith(
+                        color: storeStyle.inkMuted,
+                      ),
+                    ),
+                    SizedBox(height: layout.s4),
+                    _PremiumPricingGrid(
+                      children: _giftPricingCards(
+                        l10n: l10n,
+                        priceIds: priceIds,
+                        giftMonthlyPrice: giftMonthlyPrice,
+                        giftYearlyPrice: giftYearlyPrice,
+                        purchaseDisabled: purchaseDisabled,
+                      ),
+                    ),
+                    if (distributionNote != null) ...[
+                      SizedBox(height: layout.s2),
+                      distributionNote,
+                    ],
+                  ],
+                ],
+              ),
+            ),
+            const PremiumStoreMarketingSections(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _checkout(
+    BuildContext context,
+    PremiumCheckoutPlan plan,
+    PriceIdsResponse priceIds,
+  ) async {
+    setState(() => _loadingPlan = plan);
+    await startPremiumCheckout(
+      context: context,
+      ref: ref,
+      plan: plan,
+      priceIds: priceIds,
+      countryCode: ref
+          .read(premiumSettingsStateProvider)
+          .value
+          ?.pricing
+          .countryCode,
+    );
+    if (mounted) {
+      setState(() => _loadingPlan = null);
+    }
+  }
+
+  PremiumManageAction? _manageAction(PremiumSubscriptionStatus status) {
+    return premiumManageAction(
+      surface: PremiumManageSurface.billing,
+      provider: status.subscriptionProvider,
+      manageUrl: status.manageUrl,
+    );
+  }
+
+  Future<void> _openManage(
+    BuildContext context,
+    PremiumManageAction action,
+  ) async {
+    setState(() => _portalLoading = true);
+    await openPremiumManageAction(context, ref, action);
+    if (mounted) {
+      setState(() => _portalLoading = false);
+    }
+  }
+
+  Future<void> _reactivate(BuildContext context) async {
+    setState(() => _reactivateLoading = true);
+    await reactivatePremiumSubscription(ref);
+    if (mounted) {
+      setState(() => _reactivateLoading = false);
+    }
+  }
+
+  Future<bool?> _confirmDanger(
+    BuildContext context, {
+    required String title,
+    required String description,
+    required String confirmLabel,
+  }) {
+    if (isMobileLayout(context)) {
+      return StarConfirmSheet.show(
+        context,
+        title: title,
+        description: description,
+        confirmLabel: confirmLabel,
+        isDanger: true,
+      );
+    }
+    return StarConfirmModal.show(
+      context,
+      title: title,
+      description: description,
+      confirmLabel: confirmLabel,
+      isDanger: true,
+      onConfirm: () {},
+    );
+  }
+
+  Future<void> _confirmRefund(
+    BuildContext context,
+    StarLocalizations l10n,
+  ) async {
+    final bool? confirmed = await _confirmDanger(
+      context,
+      title: l10n.premiumRefundConfirmTitle,
+      description: l10n.premiumRefundConfirmBody,
+      confirmLabel: l10n.premiumRefundConfirm,
+    );
+    if (confirmed != true) {
+      return;
+    }
+    final bool refunded = await selfServeRefundLatest(ref);
+    if (!refunded || !mounted) {
+      return;
+    }
+    ref
+        .read(toastProvider.notifier)
+        .show(
+          StarToast(
+            message: l10n.premiumRefundIssuedToast,
+            variant: StarToastVariant.success,
+          ),
+        );
+  }
+
+  Future<void> _confirmCancel(
+    BuildContext context,
+    StarLocalizations l10n,
+  ) async {
+    final bool? confirmed = await _confirmDanger(
+      context,
+      title: l10n.premiumCancelSubscriptionTitle,
+      description: l10n.premiumCancelSubscriptionBody,
+      confirmLabel: l10n.premiumCancelSubscriptionConfirm,
+    );
+    if (confirmed != true) {
+      return;
+    }
+    setState(() => _cancelLoading = true);
+    await cancelPremiumSubscription(ref);
+    if (mounted) {
+      setState(() => _cancelLoading = false);
+    }
+  }
+
+  List<Widget> _subscriptionPricingCards({
+    required StarLocalizations l10n,
+    required PriceIdsResponse priceIds,
+    required String monthlyPrice,
+    required String yearlyPrice,
+    required bool purchaseDisabled,
+  }) {
+    return [
+      PremiumPricingCard(
+        title: l10n.premiumMonthly,
+        price: monthlyPrice,
+        period: l10n.premiumPerMonth,
+        buttonLabel: l10n.premiumUpgradeNow,
+        isLoading: _loadingPlan == PremiumCheckoutPlan.monthly,
+        disabled: purchaseDisabled,
+        onSelect: () => unawaited(
+          _checkout(context, PremiumCheckoutPlan.monthly, priceIds),
+        ),
+      ),
+      PremiumPricingCard(
+        title: l10n.premiumYearly,
+        price: yearlyPrice,
+        period: l10n.premiumPerYear,
+        badge: l10n.premiumSave17,
+        isPopular: true,
+        buttonLabel: l10n.premiumUpgradeNow,
+        isLoading: _loadingPlan == PremiumCheckoutPlan.yearly,
+        disabled: purchaseDisabled,
+        onSelect: () =>
+            unawaited(_checkout(context, PremiumCheckoutPlan.yearly, priceIds)),
+      ),
+    ];
+  }
+
+  List<Widget> _giftPricingCards({
+    required StarLocalizations l10n,
+    required PriceIdsResponse priceIds,
+    required String giftMonthlyPrice,
+    required String giftYearlyPrice,
+    required bool purchaseDisabled,
+  }) {
+    return [
+      PremiumPricingCard(
+        title: l10n.premiumOneYearGift,
+        price: giftYearlyPrice,
+        period: l10n.premiumOneTimePurchase,
+        badge: l10n.premiumSave17,
+        isPopular: true,
+        buttonLabel: l10n.premiumBuyGift,
+        isLoading: _loadingPlan == PremiumCheckoutPlan.gift1Year,
+        disabled: purchaseDisabled,
+        onSelect: () => unawaited(
+          _checkout(context, PremiumCheckoutPlan.gift1Year, priceIds),
+        ),
+      ),
+      PremiumPricingCard(
+        title: l10n.premiumOneMonthGift,
+        price: giftMonthlyPrice,
+        period: l10n.premiumOneTimePurchase,
+        buttonLabel: l10n.premiumBuyGift,
+        isLoading: _loadingPlan == PremiumCheckoutPlan.gift1Month,
+        disabled: purchaseDisabled,
+        onSelect: () => unawaited(
+          _checkout(context, PremiumCheckoutPlan.gift1Month, priceIds),
+        ),
+      ),
+    ];
+  }
+}
+
+class _PremiumPricingGrid extends StatelessWidget {
+  const _PremiumPricingGrid({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final layout = context.layout;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 768) {
+          return Column(
+            children: [
+              for (int i = 0; i < children.length; i++) ...[
+                children[i],
+                if (i < children.length - 1) SizedBox(height: layout.s6),
+              ],
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: children[0]),
+            SizedBox(width: layout.s6),
+            Expanded(child: children[1]),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _GiftInventoryBanner extends StatelessWidget {
+  const _GiftInventoryBanner({required this.count, required this.onViewGifts});
+
+  final int count;
+  final VoidCallback onViewGifts;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = StarLocalizations.of(context);
+    final colors = context.colors;
+    final layout = context.layout;
+    final String message = count <= 1
+        ? l10n.premiumGiftBannerOne
+        : l10n.premiumGiftBannerMany(count);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.backgroundSecondary,
+        borderRadius: layout.radiusLg,
+        border: Border.all(color: colors.backgroundHeaderSecondary),
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(layout.s4),
+        child: Row(
+          children: [
+            PhosphorIcon(PhosphorIconsFill.gift, color: colors.brandPrimary),
+            SizedBox(width: layout.s3),
+            Expanded(
+              child: Text(
+                message,
+                style: context.textStyles.bodySmall.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            StarButton.secondary(
+              label: l10n.premiumViewGifts,
+              fitContent: true,
+              onPressed: onViewGifts,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PurchaseModeToggle extends StatelessWidget {
+  const _PurchaseModeToggle({
+    required this.isGiftMode,
+    required this.onChanged,
+  });
+
+  final bool isGiftMode;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = StarLocalizations.of(context);
+    final layout = context.layout;
+    return Column(
+      children: [
+        Text(
+          l10n.premiumPurchaseMode,
+          style: context.textStyles.bodySmall.copyWith(
+            color: context.colors.textPrimaryMuted,
+          ),
+        ),
+        SizedBox(height: layout.s3),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _ModeChip(
+              label: l10n.premiumForMe,
+              selected: !isGiftMode,
+              onTap: () => onChanged(false),
+            ),
+            SizedBox(width: layout.s3),
+            _ModeChip(
+              label: l10n.premiumAsAGift,
+              selected: isGiftMode,
+              onTap: () => onChanged(true),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _ModeChip extends StatelessWidget {
+  const _ModeChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final layout = context.layout;
+    return Material(
+      color: selected ? colors.brandPrimary : colors.backgroundSecondary,
+      borderRadius: layout.radiusFull,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: layout.radiusFull,
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: layout.s4,
+            vertical: layout.s2,
+          ),
+          child: Text(
+            label,
+            style: context.textStyles.bodySmall.copyWith(
+              fontWeight: FontWeight.w600,
+              color: selected ? colors.textOnBrandPrimary : colors.textPrimary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SubscriptionSummary extends StatelessWidget {
+  const _SubscriptionSummary({
+    required this.status,
+    required this.l10n,
+    required this.portalLoading,
+    required this.cancelLoading,
+    required this.reactivateLoading,
+    required this.onManage,
+    required this.onCancel,
+    required this.onReactivate,
+    required this.onRedeemGift,
+  });
+
+  final PremiumSubscriptionStatus status;
+  final StarLocalizations l10n;
+  final bool portalLoading;
+  final bool cancelLoading;
+  final bool reactivateLoading;
+  final VoidCallback? onManage;
+  final VoidCallback onCancel;
+  final VoidCallback onReactivate;
+  final VoidCallback? onRedeemGift;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final layout = context.layout;
+    final String? until = status.actualPremiumUntil != null
+        ? formatPremiumShortDate(status.actualPremiumUntil!, l10n.localeName)
+        : null;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: layout.radiusXl,
+        border: Border.all(color: colors.backgroundModifierAccent),
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(layout.s4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (status.isGiftSubscription || status.isGiftGrace)
+              Text(
+                l10n.premiumGiftBadge,
+                style: context.textStyles.bodySmall.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: colors.brandPrimary,
+                ),
+              ),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    l10n.userSettingsNavStarPlutonium,
+                    style: context.textStyles.heading.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                if (status.premiumWillCancel)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colors.statusWarning.withValues(alpha: 0.14),
+                      borderRadius: layout.radiusFull,
+                    ),
+                    child: Text(
+                      l10n.premiumSubscriptionCanceling,
+                      style: context.textStyles.bodySmall.copyWith(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        height: 1.33,
+                        color: colors.statusWarning,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            if (until != null) ...[
+              SizedBox(height: layout.s2),
+              Text(
+                status.isGiftGrace
+                    ? l10n.premiumGiftGraceEnded
+                    : status.isGiftSubscription
+                    ? l10n.premiumGiftedUntil(until)
+                    : status.premiumWillCancel
+                    ? l10n.premiumCancelsOn(until)
+                    : l10n.premiumActiveUntil(until),
+                style: context.textStyles.bodySmall.copyWith(
+                  color: colors.textPrimaryMuted,
+                ),
+              ),
+            ],
+            SizedBox(height: layout.s4),
+            Wrap(
+              spacing: layout.s2,
+              runSpacing: layout.s2,
+              children: [
+                if (onManage != null && !status.shouldUseReactivateQuickAction)
+                  StarButton.secondary(
+                    label: l10n.premiumManageSubscription,
+                    isLoading: portalLoading,
+                    fitContent: true,
+                    onPressed: onManage,
+                  ),
+                if (status.shouldUseCancelQuickAction)
+                  StarButton.secondary(
+                    label: l10n.premiumCancelSubscriptionConfirm,
+                    isLoading: cancelLoading,
+                    fitContent: true,
+                    onPressed: onCancel,
+                  ),
+                if (status.shouldUseReactivateQuickAction)
+                  StarButton.primary(
+                    label: l10n.premiumReactivateSubscription,
+                    isLoading: reactivateLoading,
+                    fitContent: true,
+                    onPressed: onReactivate,
+                  ),
+                if (onRedeemGift != null)
+                  StarButton.secondary(
+                    label: l10n.premiumRedeemGiftCode,
+                    fitContent: true,
+                    onPressed: onRedeemGift,
+                  ),
+              ],
+            ),
+            SizedBox(height: layout.s4),
+            PremiumPurchaseDisclaimer(
+              isPremium: true,
+              alignCenter: false,
+              showRefundNote: status.allowsStripeBilling,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PurchaseHistorySection extends StatelessWidget {
+  const _PurchaseHistorySection({
+    required this.onManagePayment,
+    required this.portalLoading,
+  });
+
+  final VoidCallback onManagePayment;
+  final bool portalLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = StarLocalizations.of(context);
+    final layout = context.layout;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          l10n.premiumPurchaseHistoryTitle,
+          style: context.textStyles.heading.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        SizedBox(height: layout.s2),
+        Text(
+          l10n.premiumPurchaseHistoryDescription,
+          style: context.textStyles.bodySmall.copyWith(
+            color: context.colors.textPrimaryMuted,
+          ),
+        ),
+        SizedBox(height: layout.s4),
+        StarButton.secondary(
+          label: l10n.premiumManagePaymentMethods,
+          isLoading: portalLoading,
+          onPressed: onManagePayment,
+        ),
+      ],
+    );
+  }
+}

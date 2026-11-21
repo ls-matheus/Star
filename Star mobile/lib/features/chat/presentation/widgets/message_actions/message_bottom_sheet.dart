@@ -1,0 +1,869 @@
+import 'dart:async';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:star_app/core/router/route_state_providers.dart';
+import 'package:star_app/features/bookmarks/utils/saved_message_actions.dart';
+import 'package:star_app/features/chat/domain/chat_fullscreen_video_launch_context.dart';
+import 'package:star_app/features/chat/domain/message.dart';
+import 'package:star_app/features/chat/domain/message_translation.dart';
+import 'package:star_app/features/chat/presentation/modals/pin_message_confirm_modal.dart';
+import 'package:star_app/features/chat/presentation/sheets/message_debug_sheet.dart';
+import 'package:star_app/features/chat/presentation/sheets/message_reactions_sheet.dart';
+import 'package:star_app/features/chat/presentation/sheets/publish_message_sheets.dart';
+import 'package:star_app/features/chat/presentation/sheets/unpin_message_confirm_sheet.dart';
+import 'package:star_app/features/chat/presentation/widgets/message_actions/double_tap_reaction_hint.dart';
+import 'package:star_app/features/chat/presentation/widgets/message_actions/quick_reaction_loader.dart';
+import 'package:star_app/features/chat/presentation/widgets/message_actions/quick_reaction_row.dart';
+import 'package:star_app/features/chat/providers/core/chat_providers.dart';
+import 'package:star_app/features/chat/providers/core/chat_view_model.dart';
+import 'package:star_app/features/chat/providers/messages/message_translation_provider.dart';
+import 'package:star_app/features/chat/providers/messages/saved_message_provider.dart';
+import 'package:star_app/features/chat/utils/media/favorite_media_utils.dart';
+import 'package:star_app/features/chat/utils/media/media_favorite_state.dart';
+import 'package:star_app/features/chat/utils/media/save_message_media_favorite.dart';
+import 'package:star_app/features/chat/utils/messages/message_action_permissions.dart';
+import 'package:star_app/features/chat/utils/messages/message_link.dart';
+import 'package:star_app/features/chat/utils/messages/message_translate_offer.dart';
+import 'package:star_app/features/chat/utils/messages/message_web_translation.dart';
+import 'package:star_app/features/mature_content/providers/mature_content_agreements_provider.dart';
+import 'package:star_app/features/settings/providers/preferences/advanced_preferences_provider.dart';
+import 'package:star_app/features/settings/providers/preferences/appearance_preferences_provider.dart';
+import 'package:star_app/features/threads/presentation/create_thread_sheet.dart';
+import 'package:star_app/features/ui/bottom_sheet/star_bottom_sheet.dart';
+import 'package:star_app/features/ui/toast/star_toast.dart';
+import 'package:star_app/features/ui/toast/toast_provider.dart';
+import 'package:star_app/features/voice/tts/star_tts_provider.dart';
+import 'package:star_app/features/voice/tts/tts_locale_utils.dart';
+import 'package:star_app/l10n/app_locale_provider.dart';
+import 'package:star_app/l10n/generated/star_localizations.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:star_app/shared/external_links/external_link_handler.dart';
+import 'package:star_app/shared/icons/phosphor.dart';
+import 'package:star_app/shared/utils/clipboard_utils.dart';
+import 'package:star_app/shared/utils/star_haptics.dart';
+
+enum MessageAction {
+  addReaction,
+  viewReactions,
+  removeAllReactions,
+  retry,
+  edit,
+  reply,
+  forward,
+  copyText,
+  copyEmbedText,
+  pin,
+  publish,
+  bookmark,
+  markAsUnread,
+  copyMessageLink,
+  suppressEmbeds,
+  delete,
+  deleteFailed,
+  copyMessageId,
+  report,
+  debugMessage,
+  speak,
+  translate,
+  createThread,
+}
+
+Future<MessageAction?> showMessageBottomSheet(
+  BuildContext context, {
+  required Message message,
+  required bool isOwnMessage,
+  required bool isDmChannel,
+  required bool canDelete,
+  required bool canReport,
+  required bool canAddReactions,
+  required bool canPinMessage,
+  required bool canManageMessages,
+  required bool canSendMessages,
+  required bool developerMode,
+  bool canPublish = false,
+  List<QuickReactionItem>? quickItems,
+  String? quickReactionChannelId,
+  String? quickReactionGuildId,
+  ValueChanged<QuickReactionItem>? onQuickReaction,
+  MessageActionCallbacks? attachmentCallbacks,
+  bool isSendDisabled = false,
+  String? linkUrl,
+}) {
+  final MessageActionPermissions permissions = MessageActionPermissions(
+    isOwnMessage: isOwnMessage,
+    isDmChannel: isDmChannel,
+    canDelete: canDelete,
+    canReport: canReport,
+    canAddReactions: canAddReactions,
+    canPinMessage: canPinMessage,
+    canManageMessages: canManageMessages,
+    canSendMessages: canSendMessages,
+    developerMode: developerMode,
+    isSendDisabled: isSendDisabled,
+    canPublish: canPublish,
+  );
+  return StarBottomSheet.showScrollable<MessageAction>(
+    context,
+    initialChildSize: StarBottomSheet.scrollableSheetHalfSize,
+    minChildSize: 0.3,
+    builder: (sheetContext, scrollController, _) => _MessageBottomSheetBody(
+      message: message,
+      permissions: permissions,
+      quickItems: quickItems,
+      quickReactionChannelId: quickReactionChannelId,
+      quickReactionGuildId: quickReactionGuildId,
+      onQuickReaction: onQuickReaction,
+      attachmentCallbacks: attachmentCallbacks,
+      scrollController: scrollController,
+      hostContext: context,
+      linkUrl: linkUrl,
+    ),
+  );
+}
+
+void _runAfterModalSettles(BuildContext context, VoidCallback action) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!context.mounted) {
+      return;
+    }
+    action();
+  });
+}
+
+Future<void> dispatchMessageAction({
+  required WidgetRef ref,
+  required BuildContext context,
+  required Message message,
+  required MessageAction action,
+  required MessageActionCallbacks callbacks,
+  String? previewRoleGuildId,
+}) async {
+  switch (action) {
+    case MessageAction.reply:
+      callbacks.onReply?.call();
+    case MessageAction.forward:
+      await handOffStarSheet(context);
+      if (context.mounted) {
+        callbacks.onForward?.call();
+      }
+    case MessageAction.edit:
+      callbacks.onEdit?.call();
+    case MessageAction.delete:
+      _runAfterModalSettles(context, () => callbacks.onDelete?.call());
+    case MessageAction.retry:
+      callbacks.onRetry?.call();
+    case MessageAction.deleteFailed:
+      callbacks.onDeleteFailed?.call();
+    case MessageAction.copyText:
+      unawaited(
+        copyToClipboard(context: context, value: message.displayedContent),
+      );
+    case MessageAction.copyEmbedText:
+      unawaited(
+        copyToClipboard(context: context, value: message.embedsCopyableText),
+      );
+    case MessageAction.copyMessageId:
+      unawaited(copyToClipboard(context: context, value: message.id));
+    case MessageAction.copyMessageLink:
+      final String? guildId =
+          previewRoleGuildId ?? ref.read(contextualGuildIdProvider);
+      unawaited(
+        copyToClipboard(
+          context: context,
+          value: messageLink(
+            channelId: message.channelId,
+            messageId: message.id,
+            guildId: guildId,
+          ),
+        ),
+      );
+    case MessageAction.bookmark:
+      await toggleSavedMessageBookmark(
+        ref: ref,
+        l10n: StarLocalizations.of(context),
+        channelId: message.channelId,
+        messageId: message.id,
+      );
+    case MessageAction.publish:
+      unawaited(publishMessage(ref: ref, context: context, message: message));
+    case MessageAction.pin:
+      if (message.isPinned) {
+        unawaited(
+          showUnpinMessageConfirmSheet(
+            context,
+            ref,
+            channelId: message.channelId,
+            messageId: message.id,
+          ),
+        );
+      } else {
+        unawaited(
+          showPinMessageConfirmModal(
+            context,
+            ref,
+            message: message,
+            guildId: previewRoleGuildId ?? ref.read(contextualGuildIdProvider),
+          ),
+        );
+      }
+    case MessageAction.addReaction:
+      await handOffStarSheet(context);
+      if (context.mounted) {
+        callbacks.onAddReaction?.call();
+      }
+    case MessageAction.markAsUnread:
+      callbacks.onMarkAsUnread?.call();
+    case MessageAction.suppressEmbeds:
+      final repo = ref.read(messageRepositoryProvider);
+      final String channelId = message.channelId;
+      final String messageId = message.id;
+      final int nextFlags = message.suppressEmbeds
+          ? message.flags & ~messageFlagSuppressEmbeds
+          : message.flags | messageFlagSuppressEmbeds;
+      unawaited(
+        repo.setMessageFlags(
+          channelId: channelId,
+          messageId: messageId,
+          flags: nextFlags,
+        ),
+      );
+    case MessageAction.viewReactions:
+      _runAfterModalSettles(
+        context,
+        () => unawaited(showMessageReactionsSheet(context, message: message)),
+      );
+    case MessageAction.removeAllReactions:
+      callbacks.onRemoveAllReactions?.call();
+    case MessageAction.report:
+      callbacks.onReport?.call();
+    case MessageAction.debugMessage:
+      unawaited(showMessageDebugSheet(context, message: message));
+    case MessageAction.speak:
+      final StarLocalizations l10n = StarLocalizations.of(context);
+      final StarTtsService tts = ref.read(starTtsServiceProvider.notifier);
+      if (!ref.read(starTtsServiceProvider).isSpeakingMessage(message.id) &&
+          !await tts.isSupported()) {
+        ref
+            .read(toastProvider.notifier)
+            .show(
+              StarToast(
+                message: l10n.accessibilityTtsUnsupportedDescription,
+                variant: StarToastVariant.warning,
+              ),
+            );
+        return;
+      }
+      final AppearancePreferencesState appearance = ref.read(
+        appearancePreferencesProvider,
+      );
+      unawaited(
+        tts.speakMessage(
+          message: message,
+          rate: appearance.ttsRate,
+          locale: formatTtsLocaleTag(ref.read(effectiveAppLocaleProvider)),
+        ),
+      );
+    case MessageAction.translate:
+      unawaited(
+        _translateMessage(ref: ref, context: context, message: message),
+      );
+    case MessageAction.createThread:
+      unawaited(
+        showCreateThreadSheetForMessage(context, ref, message: message),
+      );
+  }
+}
+
+Future<bool> _openWebTranslationFallback({
+  required WidgetRef ref,
+  required BuildContext context,
+  required String query,
+}) async {
+  if (!isWebMessageTranslationAvailable(
+    ref.read(advancedPreferencesProvider).searchEngines,
+  )) {
+    return false;
+  }
+  if (!context.mounted) {
+    return false;
+  }
+  return await openMessageWebTranslation(
+    context: context,
+    ref: ref,
+    query: query,
+  );
+}
+
+Future<void> _translateMessage({
+  required WidgetRef ref,
+  required BuildContext context,
+  required Message message,
+}) async {
+  final String query = translatableMessageText(message.content);
+  if (query.isEmpty) {
+    return;
+  }
+  final TranslatingMessageIds translating = ref.read(
+    translatingMessageIdsProvider.notifier,
+  );
+  if (ref.read(translatingMessageIdsProvider).contains(message.id)) {
+    return;
+  }
+  final StarLocalizations l10n = StarLocalizations.of(context);
+  final bool localAvailable = await ref.read(
+    messageTranslationAvailableProvider.future,
+  );
+
+  if (!localAvailable) {
+    if (!context.mounted) {
+      return;
+    }
+    if (!await _openWebTranslationFallback(
+      ref: ref,
+      context: context,
+      query: query,
+    )) {
+      ref
+          .read(toastProvider.notifier)
+          .show(
+            StarToast(
+              message: l10n.chatMessageTranslateUnavailable,
+              variant: StarToastVariant.warning,
+            ),
+          );
+    }
+    return;
+  }
+
+  translating.add(message.id);
+  try {
+    final Message updated = await ref
+        .read(messageTranslationServiceProvider)
+        .translateMessage(
+          message: message,
+          targetLanguage: ref.read(effectiveAppLocaleProvider).languageCode,
+        );
+    ref
+        .read(chatViewModelProvider.notifier)
+        .applyMessageTranslation(
+          messageId: updated.id,
+          translation: updated.translation,
+        );
+    StarHaptics.light();
+  } on MessageTranslationCancelledException {
+    return;
+  } on MessageTranslationUnavailableException {
+    if (!context.mounted) {
+      return;
+    }
+    if (await _openWebTranslationFallback(
+      ref: ref,
+      context: context,
+      query: query,
+    )) {
+      return;
+    }
+    ref
+        .read(toastProvider.notifier)
+        .show(
+          StarToast(
+            message: l10n.chatMessageTranslateUnavailable,
+            variant: StarToastVariant.warning,
+          ),
+        );
+  } on MessageTranslationUnsupportedLanguageException {
+    if (!context.mounted) {
+      return;
+    }
+    if (await _openWebTranslationFallback(
+      ref: ref,
+      context: context,
+      query: query,
+    )) {
+      return;
+    }
+    ref
+        .read(toastProvider.notifier)
+        .show(
+          StarToast(
+            message: l10n.chatMessageTranslateFailed,
+            variant: StarToastVariant.danger,
+          ),
+        );
+  } on MessageTranslationFailedException {
+    ref
+        .read(toastProvider.notifier)
+        .show(
+          StarToast(
+            message: l10n.chatMessageTranslateFailed,
+            variant: StarToastVariant.danger,
+          ),
+        );
+  } finally {
+    translating.remove(message.id);
+  }
+}
+
+List<Widget> buildMessageActionMenuGroups({
+  required BuildContext context,
+  required WidgetRef ref,
+  required Message message,
+  required MessageActionPermissions permissions,
+  required ValueChanged<MessageAction> onAction,
+  MessageActionCallbacks? attachmentCallbacks,
+  String? attachmentIdFilter,
+  bool includeAttachmentFavoriteActions = true,
+  VoidCallback? onCloseMenu,
+}) {
+  final StarLocalizations l10n = StarLocalizations.of(context);
+
+  if (message.hasFailed) {
+    return <Widget>[
+      StarMenuGroup(
+        children: <Widget>[
+          StarBottomSheetMenuItem(
+            icon: PhosphorIconsBold.arrowClockwise,
+            label: l10n.retry,
+            onTap: () => onAction(MessageAction.retry),
+          ),
+          if (message.content.isNotEmpty)
+            StarBottomSheetMenuItem(
+              icon: PhosphorIconsFill.copy,
+              label: l10n.chatMessageCopyText,
+              onTap: () => onAction(MessageAction.copyText),
+            ),
+        ],
+      ),
+      StarMenuGroup(
+        children: <Widget>[
+          StarBottomSheetMenuItem(
+            icon: PhosphorIconsFill.trash,
+            label: l10n.chatMessageDeleteFailed,
+            isDanger: true,
+            onTap: () => onAction(MessageAction.deleteFailed),
+          ),
+        ],
+      ),
+    ];
+  }
+
+  final bool isSaved =
+      ref.watch(isMessageSavedProvider(message.id)).value ?? false;
+  final bool hasReactions = message.reactions.isNotEmpty;
+  final bool isEmbedsSuppressed = message.suppressEmbeds;
+  final bool isUserMessage = message.isUserMessage;
+  final bool supportsInteractiveActions = message.supportsInteractiveActions;
+  final bool showMediaDeleteButton = ref.watch(
+    appearancePreferencesProvider.select((s) => s.showMediaDeleteButton),
+  );
+  final bool showSuppressEmbedsButton = ref.watch(
+    appearancePreferencesProvider.select((s) => s.showSuppressEmbedsButton),
+  );
+  final bool canShowReply =
+      isUserMessage &&
+      supportsInteractiveActions &&
+      permissions.canSendMessages;
+  final bool canShowForward = isUserMessage && supportsInteractiveActions;
+  final bool canShowEdit =
+      permissions.isOwnMessage &&
+      isUserMessage &&
+      message.messageSnapshots.isEmpty;
+  final bool canShowPin = isUserMessage && permissions.canPinMessage;
+  final bool canShowPublish = permissions.canPublish;
+  final bool canShowBookmark = isUserMessage && supportsInteractiveActions;
+  final bool canShowSuppressEmbeds = canSuppressEmbedsOnMessage(
+    message: message,
+    isOwnMessage: permissions.isOwnMessage,
+    isDmChannel: permissions.isDmChannel,
+    canDelete: permissions.canDelete,
+  );
+  final bool canShowRemoveAllReactions =
+      permissions.canManageMessages && hasReactions;
+
+  final List<Widget> interactionItems = <Widget>[
+    if (canShowEdit)
+      StarBottomSheetMenuItem(
+        icon: PhosphorIconsFill.pencilSimple,
+        label: l10n.chatMessageEdit,
+        onTap: () => onAction(MessageAction.edit),
+      ),
+    if (canShowReply)
+      StarBottomSheetMenuItem(
+        icon: PhosphorIconsFill.arrowBendUpLeft,
+        label: l10n.chatMessageReply,
+        onTap: () => onAction(MessageAction.reply),
+      ),
+    if (canShowForward)
+      StarBottomSheetMenuItem(
+        icon: PhosphorIconsFill.shareFat,
+        label: l10n.chatMessageForward,
+        onTap: () => onAction(MessageAction.forward),
+      ),
+    if (hasReactions)
+      StarBottomSheetMenuItem(
+        icon: PhosphorIconsFill.users,
+        label: l10n.chatMessageViewReactions,
+        onTap: () => onAction(MessageAction.viewReactions),
+      ),
+    if (watchCanOfferMessageTranslate(ref, message))
+      StarBottomSheetMenuItem(
+        icon: PhosphorIconsBold.translate,
+        label: l10n.chatMessageTranslate,
+        onTap: () => onAction(MessageAction.translate),
+      ),
+  ];
+
+  final List<Widget> primaryItems = <Widget>[
+    if (message.content.isNotEmpty)
+      StarBottomSheetMenuItem(
+        icon: PhosphorIconsFill.copy,
+        label: l10n.chatMessageCopyText,
+        onTap: () => onAction(MessageAction.copyText),
+      ),
+    StarBottomSheetMenuItem(
+      icon: PhosphorIconsFill.envelopeOpen,
+      label: l10n.chatMessageMarkAsUnread,
+      onTap: () => onAction(MessageAction.markAsUnread),
+    ),
+    if (supportsInteractiveActions &&
+        watchCanCreateThreadFromMessage(ref, message))
+      StarBottomSheetMenuItem(
+        icon: PhosphorIconsFill.chatsCircle,
+        label: l10n.threadCreate,
+        onTap: () => onAction(MessageAction.createThread),
+      ),
+    if (canShowPin)
+      StarBottomSheetMenuItem(
+        icon: PhosphorIconsFill.pushPin,
+        label: message.isPinned ? l10n.chatMessageUnpin : l10n.chatMessagePin,
+        onTap: () => onAction(MessageAction.pin),
+      ),
+    if (canShowBookmark)
+      StarBottomSheetMenuItem(
+        icon: PhosphorIconsFill.bookmarkSimple,
+        label: isSaved
+            ? l10n.chatMessageRemoveBookmark
+            : l10n.chatMessageBookmark,
+        onTap: () => onAction(MessageAction.bookmark),
+      ),
+    if (canShowSuppressEmbeds && showSuppressEmbedsButton)
+      StarBottomSheetMenuItem(
+        icon: PhosphorIconsBold.eyeSlash,
+        label: isEmbedsSuppressed
+            ? l10n.chatMessageUnsuppressEmbeds
+            : l10n.chatMessageSuppressEmbeds,
+        onTap: () => onAction(MessageAction.suppressEmbeds),
+      ),
+    if (permissions.canDelete)
+      StarBottomSheetMenuItem(
+        icon: PhosphorIconsFill.trash,
+        label: l10n.chatMessageDelete,
+        isDanger: true,
+        onTap: () => onAction(MessageAction.delete),
+      ),
+  ];
+
+  final void Function() closeMenu =
+      onCloseMenu ?? () => Navigator.of(context).pop();
+
+  final List<Widget> attachmentItems = <Widget>[
+    for (final Attachment attachment in message.attachments)
+      if (attachmentIdFilter == null || attachment.id == attachmentIdFilter)
+        ..._buildAttachmentMenuItems(
+          context: context,
+          ref: ref,
+          l10n: l10n,
+          message: message,
+          attachment: attachment,
+          showMediaDeleteButton: showMediaDeleteButton,
+          permissions: permissions,
+          attachmentCallbacks: attachmentCallbacks,
+          closeMenu: closeMenu,
+          includeFavoriteAction: includeAttachmentFavoriteActions,
+        ),
+  ];
+
+  final bool isSpeakingMessage = ref.read(
+    starTtsServiceProvider.select(
+      (StarTtsSpeakingState state) => state.isSpeakingMessage(message.id),
+    ),
+  );
+
+  final List<Widget> bottomItems = <Widget>[
+    if (canShowPublish)
+      StarBottomSheetMenuItem(
+        icon: PhosphorIconsFill.megaphone,
+        label: message.isCrossposted
+            ? l10n.chatMessagePublished
+            : l10n.chatMessagePublish,
+        onTap: () => onAction(MessageAction.publish),
+      ),
+    if (canShowRemoveAllReactions)
+      StarBottomSheetMenuItem(
+        icon: PhosphorIconsBold.x,
+        label: l10n.chatMessageRemoveAllReactions,
+        isDanger: true,
+        onTap: () => onAction(MessageAction.removeAllReactions),
+      ),
+    StarBottomSheetMenuItem(
+      icon: PhosphorIconsBold.link,
+      label: l10n.chatMessageCopyMessageLink,
+      onTap: () => onAction(MessageAction.copyMessageLink),
+    ),
+    if (message.speakableContent.trim().isNotEmpty)
+      StarBottomSheetMenuItem(
+        icon: isSpeakingMessage
+            ? PhosphorIconsFill.stop
+            : PhosphorIconsFill.speakerHigh,
+        label: isSpeakingMessage
+            ? l10n.chatMessageStopSpeaking
+            : l10n.chatMessageSpeak,
+        onTap: () => onAction(MessageAction.speak),
+      ),
+    if (message.embedsCopyableText.isNotEmpty)
+      StarBottomSheetMenuItem(
+        icon: PhosphorIconsFill.textAlignLeft,
+        label: l10n.chatMessageCopyEmbedText,
+        onTap: () => onAction(MessageAction.copyEmbedText),
+      ),
+    StarBottomSheetMenuItem(
+      icon: PhosphorIconsBold.snowflake,
+      label: l10n.chatMessageCopyMessageId,
+      onTap: () => onAction(MessageAction.copyMessageId),
+    ),
+    if (permissions.developerMode)
+      StarBottomSheetMenuItem(
+        icon: PhosphorIconsFill.bug,
+        label: l10n.chatMessageDebug,
+        onTap: () => onAction(MessageAction.debugMessage),
+      ),
+  ];
+
+  final List<Widget> reportItems = <Widget>[
+    if (permissions.canReport)
+      StarBottomSheetMenuItem(
+        icon: PhosphorIconsFill.flag,
+        label: l10n.chatMessageReport,
+        isDanger: true,
+        onTap: () => onAction(MessageAction.report),
+      ),
+  ];
+
+  return <Widget>[
+    for (final List<Widget> items in <List<Widget>>[
+      interactionItems,
+      primaryItems,
+      bottomItems,
+      attachmentItems,
+      reportItems,
+    ])
+      if (items.isNotEmpty) StarMenuGroup(children: items),
+  ];
+}
+
+List<Widget> _buildAttachmentMenuItems({
+  required BuildContext context,
+  required WidgetRef ref,
+  required StarLocalizations l10n,
+  required Message message,
+  required Attachment attachment,
+  required bool showMediaDeleteButton,
+  required MessageActionPermissions permissions,
+  required MessageActionCallbacks? attachmentCallbacks,
+  required void Function() closeMenu,
+  required bool includeFavoriteAction,
+}) {
+  final MessageMediaFavoriteTarget? favoriteTarget =
+      includeFavoriteAction &&
+          attachment.isSavableMedia &&
+          !watchMatureMediaHidden(
+            ref,
+            channelId: message.channelId,
+            isMatureMedia: attachment.isMatureMedia,
+          )
+      ? MessageMediaFavoriteTarget.forAttachment(attachment)
+      : null;
+  final MediaFavoriteState favoriteState = watchMediaFavoriteState(
+    ref,
+    target: favoriteTarget,
+  );
+
+  return <Widget>[
+    ...buildMediaFavoriteMenuItems(
+      l10n: l10n,
+      state: favoriteState,
+      hint: attachment.filename,
+      onAction: (MediaFavoriteMenuAction action) {
+        scheduleMediaFavoriteMenuAction(
+          ref: ref,
+          context: context,
+          message: message,
+          state: favoriteState,
+          action: action,
+          beforeAction: closeMenu,
+        );
+      },
+    ),
+    if (showMediaDeleteButton &&
+        canDeleteAttachmentOnMessage(
+          message: message,
+          isOwnMessage: permissions.isOwnMessage,
+          isSendDisabled: permissions.isSendDisabled,
+        ))
+      StarBottomSheetMenuItem(
+        icon: PhosphorIconsFill.trash,
+        label: l10n.chatMessageDeleteAttachment,
+        hint: attachment.filename,
+        isDanger: true,
+        onTap: () {
+          attachmentCallbacks?.onDeleteAttachment?.call(attachment);
+          closeMenu();
+        },
+      ),
+    if (canEditAttachmentAltText(
+      message: message,
+      isOwnMessage: permissions.isOwnMessage,
+      attachment: attachment,
+      canManageMessages: permissions.canManageMessages,
+      isDmChannel: permissions.isDmChannel,
+    ))
+      StarBottomSheetMenuItem(
+        icon: PhosphorIconsFill.pencilSimple,
+        label: l10n.chatMessageEditAttachmentAltText,
+        hint: attachment.filename,
+        onTap: () {
+          closeMenu();
+          attachmentCallbacks?.onEditAttachmentAltText?.call(attachment);
+        },
+      ),
+  ];
+}
+
+class _MessageBottomSheetBody extends ConsumerWidget {
+  const _MessageBottomSheetBody({
+    required this.message,
+    required this.permissions,
+    required this.scrollController,
+    required this.hostContext,
+    this.quickItems,
+    this.quickReactionChannelId,
+    this.quickReactionGuildId,
+    this.onQuickReaction,
+    this.attachmentCallbacks,
+    this.linkUrl,
+  });
+
+  final Message message;
+  final MessageActionPermissions permissions;
+  final List<QuickReactionItem>? quickItems;
+  final String? quickReactionChannelId;
+  final String? quickReactionGuildId;
+  final ValueChanged<QuickReactionItem>? onQuickReaction;
+  final MessageActionCallbacks? attachmentCallbacks;
+  final ScrollController scrollController;
+  final BuildContext hostContext;
+  final String? linkUrl;
+
+  void _pop(BuildContext context, MessageAction action) =>
+      Navigator.of(context).pop(action);
+
+  Future<void> _openLink(BuildContext context, String url) async {
+    Navigator.of(context).pop();
+    if (!hostContext.mounted) {
+      return;
+    }
+    await handleExternalLinkTap(hostContext, url);
+  }
+
+  Future<void> _copyLink(BuildContext context, String url) async {
+    Navigator.of(context).pop();
+    if (!hostContext.mounted) {
+      return;
+    }
+    await copyToClipboard(context: hostContext, value: url);
+  }
+
+  Widget _linkGroup(BuildContext context, String url) {
+    final StarLocalizations l10n = StarLocalizations.of(context);
+    return StarMenuGroup(
+      children: [
+        StarBottomSheetMenuItem(
+          icon: PhosphorIconsFill.arrowSquareOut,
+          label: l10n.chatMessageOpenLink,
+          onTap: () => unawaited(_openLink(context, url)),
+        ),
+        StarBottomSheetMenuItem(
+          icon: PhosphorIconsBold.link,
+          label: l10n.chatMessageCopyLink,
+          onTap: () => unawaited(_copyLink(context, url)),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final String? url = linkUrl;
+    final List<Widget> groups = buildMessageActionMenuGroups(
+      context: context,
+      ref: ref,
+      message: message,
+      permissions: permissions,
+      onAction: (MessageAction action) => _pop(context, action),
+      attachmentCallbacks: attachmentCallbacks,
+    );
+    final bool showQuickReactions =
+        !message.hasFailed && !message.isSending && permissions.canAddReactions;
+
+    return SingleChildScrollView(
+      controller: scrollController,
+      padding: StarBottomSheet.scrollViewPadding(
+        context,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (showQuickReactions) ...[
+            if (quickReactionChannelId != null)
+              MessageQuickReactionRow(
+                channelId: quickReactionChannelId!,
+                guildId: quickReactionGuildId,
+                onReaction: (item) {
+                  onQuickReaction?.call(item);
+                  Navigator.of(context).pop();
+                },
+                onAddMore: () => _pop(context, MessageAction.addReaction),
+              )
+            else
+              QuickReactionRow(
+                items: quickItems ?? kQuickReactionDefaults,
+                onReaction: (item) {
+                  onQuickReaction?.call(item);
+                  Navigator.of(context).pop();
+                },
+                onAddMore: () => _pop(context, MessageAction.addReaction),
+              ),
+            DoubleTapReactionHint(channelId: message.channelId),
+          ],
+          StarBottomSheetGroupColumn(
+            children: [if (url != null) _linkGroup(context, url), ...groups],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+bool shouldCloseMediaViewerForMessageAction(MessageAction action) {
+  return switch (action) {
+    MessageAction.reply ||
+    MessageAction.forward ||
+    MessageAction.edit ||
+    MessageAction.delete ||
+    MessageAction.report ||
+    MessageAction.viewReactions ||
+    MessageAction.addReaction => true,
+    _ => false,
+  };
+}

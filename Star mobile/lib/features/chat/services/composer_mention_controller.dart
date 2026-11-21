@@ -1,0 +1,433 @@
+import 'dart:async';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:star_app/core/database/star_database.dart' as db;
+import 'package:star_app/core/providers/database_provider.dart';
+import 'package:star_app/features/channels/domain/channel.dart';
+import 'package:star_app/features/channels/providers/channel_list_view_model.dart';
+import 'package:star_app/features/chat/presentation/widgets/composer/composer_inline_mention.dart';
+import 'package:star_app/features/chat/providers/core/chat_view_model.dart';
+import 'package:star_app/features/dm/domain/dm_conversation.dart';
+import 'package:star_app/features/dm/providers/dm_view_model.dart';
+import 'package:star_app/features/guilds/providers/role_providers.dart';
+import 'package:star_app/features/ui/input/emoji_inline_token.dart';
+import 'package:star_app/features/ui/input/inline_token_text_editing_controller.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:star_app/shared/providers/guild_user_display_provider.dart';
+import 'package:star_app/shared/utils/chat_context_utils.dart';
+import 'package:star_app/shared/utils/guild_user_display.dart';
+import 'package:star_app/shared/utils/mention_display_utils.dart';
+
+String _composerMentionUserLabel(WidgetRef ref, String userId) {
+  final String channelId = ref.read(chatViewModelProvider).channelId;
+  if (channelId.isEmpty) {
+    return shortMentionWireIdFallback(userId);
+  }
+  final DmViewState dmState = ref.read(dmViewModelProvider);
+  final DmConversation? dm = findDmById(dmState.conversations, channelId);
+  if (dm != null && userId == dm.recipientId) {
+    return dm.recipientName;
+  }
+  final ChannelListState listState = ref.read(channelListViewModelProvider);
+  final Channel? ch = findChannelById(listState, channelId);
+  final String? guildId = ch?.guildId;
+  if (guildId != null && guildId.isNotEmpty) {
+    final GuildUserDisplay? display = ref
+        .read(guildUserDisplayFromDbProvider((userId, guildId)))
+        .value;
+    if (display != null) {
+      return display.displayName;
+    }
+    ref.read(guildUserDisplayProvider((userId, guildId)));
+  }
+  return shortMentionWireIdFallback(userId);
+}
+
+String _composerMentionChannelLabel(WidgetRef ref, String targetChannelId) {
+  final ChannelListState listState = ref.read(channelListViewModelProvider);
+  final Channel? ch = findChannelById(listState, targetChannelId);
+  return ch?.name ?? shortMentionWireIdFallback(targetChannelId);
+}
+
+String _composerMentionRoleLabel(
+  WidgetRef ref,
+  String roleId, {
+  required String fallback,
+}) {
+  final String? name = ref.read(roleByIdProvider(roleId)).value?.name;
+  return name ?? fallback;
+}
+
+class MentionInlineToken extends InlineToken {
+  MentionInlineToken({
+    required this.wireText,
+    required this.resolveVisibleText,
+    this.colorArgb,
+  });
+
+  @override
+  final String wireText;
+
+  final String Function() resolveVisibleText;
+
+  final int? colorArgb;
+
+  @override
+  Widget buildInline(BuildContext context, TextStyle? baseStyle) =>
+      ComposerInlineMention(
+        visibleText: resolveVisibleText(),
+        baseStyle: baseStyle,
+        foregroundArgb: colorArgb,
+      );
+}
+
+class ComposerMentionController extends InlineTokenTextEditingController {
+  ComposerMentionController({required this._ref, super.text});
+
+  final WidgetRef _ref;
+
+  @override
+  bool get highlightsMarkdown => true;
+
+  static final RegExp _wireMentions = RegExp(
+    '<@&([^>]+)>|<@!?([^>]+)>|<#([^>]+)>',
+  );
+
+  int _applyWireTextGeneration = 0;
+
+  static final RegExp _typedWireToken = RegExp(
+    r'<@[&!]?\d+>|<#\d+>|<a?:[a-zA-Z0-9_]+:\d+>',
+  );
+
+  // Longer than any wire token (a custom emoji with a 32 character name).
+  static const int _kWireTokenSearchMargin = 64;
+
+  @override
+  set value(TextEditingValue newValue) {
+    final String previousText = text;
+    super.value = newValue;
+    _chipEditedWireTokens(previousText);
+  }
+
+  /// Keyboards insert pasted text as a plain edit, which bypasses the app's
+  /// paste handler, so wire tokens they bring in are chipped here.
+  void _chipEditedWireTokens(String previousText) {
+    final String current = text;
+    if (current == previousText) {
+      return;
+    }
+    final int shortest = previousText.length < current.length
+        ? previousText.length
+        : current.length;
+    int prefix = 0;
+    while (prefix < shortest &&
+        previousText.codeUnitAt(prefix) == current.codeUnitAt(prefix)) {
+      prefix++;
+    }
+    int suffix = 0;
+    while (suffix < shortest - prefix &&
+        previousText.codeUnitAt(previousText.length - 1 - suffix) ==
+            current.codeUnitAt(current.length - 1 - suffix)) {
+      suffix++;
+    }
+    final int editEnd = current.length - suffix;
+    final int windowStart = (prefix - _kWireTokenSearchMargin).clamp(
+      0,
+      current.length,
+    );
+    final int windowEnd = (editEnd + _kWireTokenSearchMargin).clamp(
+      0,
+      current.length,
+    );
+    int? start;
+    int? end;
+    for (final RegExpMatch match in _typedWireToken.allMatches(
+      current.substring(windowStart, windowEnd),
+    )) {
+      final int matchStart = windowStart + match.start;
+      final int matchEnd = windowStart + match.end;
+      if (matchStart < editEnd && matchEnd > prefix) {
+        start ??= matchStart;
+        end = matchEnd;
+      }
+    }
+    if (start == null || end == null) {
+      return;
+    }
+    final TextRange composing = value.composing;
+    if (composing.isValid && composing.start < end && composing.end > start) {
+      return;
+    }
+    unawaited(_replaceWithChips(current, start, end));
+  }
+
+  Future<void> _replaceWithChips(
+    String expectedText,
+    int start,
+    int end,
+  ) async {
+    // The field sets the selection right after the edit, and every value
+    // update prunes tokens missing from the text, so allocate only after it.
+    await Future<void>.value();
+    if (text != expectedText) {
+      return;
+    }
+    final String fragment = await mentionWireToDisplayFragment(
+      expectedText.substring(start, end),
+      includePlainShortcodes: false,
+    );
+    if (text != expectedText) {
+      return;
+    }
+    final int delta = fragment.length - (end - start);
+    int shift(int offset) {
+      if (offset <= start) {
+        return offset;
+      }
+      return offset >= end ? offset + delta : start + fragment.length;
+    }
+
+    final TextSelection selection = value.selection;
+    final TextRange composing = value.composing;
+    value = TextEditingValue(
+      text: expectedText.replaceRange(start, end, fragment),
+      selection: selection.isValid
+          ? selection.copyWith(
+              baseOffset: shift(selection.baseOffset),
+              extentOffset: shift(selection.extentOffset),
+            )
+          : selection,
+      composing: composing.isValid
+          ? TextRange(start: shift(composing.start), end: shift(composing.end))
+          : TextRange.empty,
+    );
+  }
+
+  void _endComposingForForcedApply(bool force) {
+    if (force && value.composing.isValid) {
+      super.value = acceptedValue.copyWith(composing: TextRange.empty);
+    }
+  }
+
+  Future<void> applyWireText(String wire, {bool force = false}) async {
+    if (toWireText() == wire) {
+      return;
+    }
+    if (!force && value.composing.isValid) {
+      return;
+    }
+    if (wire.isEmpty) {
+      _applyWireTextGeneration++;
+      _endComposingForForcedApply(force);
+      replaceWireDisplay(
+        displayText: '',
+        tokens: const <String, InlineToken>{},
+        nextSentinelIndex: 0,
+      );
+      return;
+    }
+    final int generation = ++_applyWireTextGeneration;
+    final String wireBeforeAsync = toWireText();
+    final bundle = await buildWireDisplayBundle(
+      wire,
+      includePlainShortcodes: false,
+    );
+    if (generation != _applyWireTextGeneration) {
+      return;
+    }
+    if (toWireText() != wireBeforeAsync) {
+      return;
+    }
+    if (toWireText() == wire) {
+      return;
+    }
+    if (!force && value.composing.isValid) {
+      return;
+    }
+    _endComposingForForcedApply(force);
+    replaceWireDisplay(
+      displayText: bundle.display,
+      tokens: bundle.tokens,
+      nextSentinelIndex: bundle.nextSentinelIndex,
+    );
+  }
+
+  Future<
+    ({String display, Map<String, InlineToken> tokens, int nextSentinelIndex})
+  >
+  buildWireDisplayBundle(
+    String wire, {
+    bool includePlainShortcodes = true,
+  }) async {
+    final Map<String, InlineToken> tokens = <String, InlineToken>{};
+    var nextSentinelIndex = 0;
+    String allocate(InlineToken token) {
+      final int codePoint = 0xE000 + nextSentinelIndex++;
+      assert(codePoint <= 0xF8FF, 'Inline token sentinel pool exhausted.');
+      final String sentinel = String.fromCharCode(codePoint);
+      tokens[sentinel] = token;
+      return sentinel;
+    }
+
+    final String display = await _mentionWireToDisplayFragment(
+      wire,
+      allocate,
+      includePlainShortcodes: includePlainShortcodes,
+    );
+    return (
+      display: display,
+      tokens: tokens,
+      nextSentinelIndex: nextSentinelIndex,
+    );
+  }
+
+  Future<String> mentionWireToDisplayFragment(
+    String wire, {
+    bool includePlainShortcodes = true,
+  }) {
+    return _mentionWireToDisplayFragment(
+      wire,
+      allocateToken,
+      includePlainShortcodes: includePlainShortcodes,
+    );
+  }
+
+  Future<String> _mentionWireToDisplayFragment(
+    String wire,
+    String Function(InlineToken token) allocate, {
+    bool includePlainShortcodes = true,
+  }) async {
+    final List<RegExpMatch> matches = _wireMentions.allMatches(wire).toList();
+    final Map<String, db.Role?> rolesById = <String, db.Role?>{};
+    if (matches.any((RegExpMatch m) => m.group(1) != null)) {
+      final db.StarDatabase database = _ref.read(starDatabaseProvider);
+      for (final RegExpMatch m in matches) {
+        final String? roleId = m.group(1);
+        if (roleId != null && !rolesById.containsKey(roleId)) {
+          rolesById[roleId] = await database.roleDao.getRoleById(roleId);
+        }
+      }
+    }
+    final StringBuffer display = StringBuffer();
+    int start = 0;
+    for (final RegExpMatch m in matches) {
+      display.write(wire.substring(start, m.start));
+      final String? roleId = m.group(1);
+      final String? userId = m.group(2);
+      final String? channelId = m.group(3);
+      if (roleId != null) {
+        final db.Role? row = rolesById[roleId];
+        final String label = row?.name ?? shortMentionWireIdFallback(roleId);
+        final int? colorArgb = row?.color;
+        display.write(
+          allocate(
+            MentionInlineToken(
+              wireText: '<@&$roleId>',
+              resolveVisibleText: () =>
+                  '@${_composerMentionRoleLabel(_ref, roleId, fallback: label)}',
+              colorArgb: colorArgb,
+            ),
+          ),
+        );
+      } else if (userId != null) {
+        display.write(
+          allocate(
+            MentionInlineToken(
+              wireText: '<@$userId>',
+              resolveVisibleText: () =>
+                  '@${_composerMentionUserLabel(_ref, userId)}',
+            ),
+          ),
+        );
+      } else if (channelId != null) {
+        display.write(
+          allocate(
+            MentionInlineToken(
+              wireText: '<#$channelId>',
+              resolveVisibleText: () =>
+                  '#${_composerMentionChannelLabel(_ref, channelId)}',
+            ),
+          ),
+        );
+      }
+      start = m.end;
+    }
+    display.write(wire.substring(start));
+    return substituteEmojiTokens(
+      display.toString(),
+      (EmojiInlineToken token) => allocate(token),
+      includePlainShortcodes: includePlainShortcodes,
+    );
+  }
+
+  void insertUserMentionPlaceholder({
+    required int matchStart,
+    required int matchEnd,
+    required String userId,
+    String? displayName,
+  }) {
+    replaceRangeWithToken(
+      matchStart,
+      matchEnd,
+      MentionInlineToken(
+        wireText: '<@$userId>',
+        resolveVisibleText: () =>
+            '@${displayName ?? _composerMentionUserLabel(_ref, userId)}',
+      ),
+      ensureTrailingSpace: true,
+    );
+  }
+
+  void insertChannelMentionPlaceholder({
+    required int matchStart,
+    required int matchEnd,
+    required String channelId,
+    String? displayName,
+  }) {
+    replaceRangeWithToken(
+      matchStart,
+      matchEnd,
+      MentionInlineToken(
+        wireText: '<#$channelId>',
+        resolveVisibleText: () =>
+            '#${displayName ?? _composerMentionChannelLabel(_ref, channelId)}',
+      ),
+      ensureTrailingSpace: true,
+    );
+  }
+
+  void insertRoleMentionPlaceholder({
+    required int matchStart,
+    required int matchEnd,
+    required String roleId,
+    required String displayName,
+    int? colorArgb,
+  }) {
+    replaceRangeWithToken(
+      matchStart,
+      matchEnd,
+      MentionInlineToken(
+        wireText: '<@&$roleId>',
+        resolveVisibleText: () =>
+            '@${_composerMentionRoleLabel(_ref, roleId, fallback: displayName)}',
+        colorArgb: colorArgb,
+      ),
+      ensureTrailingSpace: true,
+    );
+  }
+
+  @override
+  void insertEmoji(
+    String name,
+    String surrogates, {
+    int? maxActualLength,
+    bool ensureTrailingSpace = true,
+  }) {
+    super.insertEmoji(
+      name,
+      surrogates,
+      maxActualLength: maxActualLength,
+      ensureTrailingSpace: ensureTrailingSpace,
+    );
+  }
+}

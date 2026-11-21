@@ -1,0 +1,25 @@
+import 'package:star_app/core/instance/instance_endpoint_normalizer.dart';
+import 'package:passkeys/exceptions.dart';
+
+const String kPasskeyMigrationRpId = 'star.invalid';
+
+String? preferredPasskeyRpId(String apiBaseUrl) {
+  return const InstanceEndpointNormalizer().isOfficialInstanceInput(apiBaseUrl)
+      ? kPasskeyMigrationRpId
+      : null;
+}
+
+Future<T> withPasskeyRelyingParty<T>({
+  required String apiBaseUrl,
+  required Future<T> Function(String? rpId) attempt,
+}) async {
+  final String? rpId = preferredPasskeyRpId(apiBaseUrl);
+  if (rpId == null) {
+    return await attempt(null);
+  }
+  try {
+    return await attempt(rpId);
+  } on NoCredentialsAvailableException {
+    return await attempt(null);
+  }
+}

@@ -1,0 +1,130 @@
+import 'dart:async';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:star_app/core/router/route_names.dart';
+import 'package:star_app/core/theme/star_theme_extension.dart';
+import 'package:star_app/features/chat/presentation/widgets/wallpaper/chat_wallpaper_text_theme.dart';
+import 'package:star_app/features/dm/domain/dm_conversation.dart';
+import 'package:star_app/features/dm/providers/dm_view_model.dart';
+import 'package:star_app/features/ui/tappable/star_gesture_detector.dart';
+import 'package:star_app/features/ui/voice/local_camera_orientation_sync.dart';
+import 'package:star_app/features/ui/voice/voice_channel_control_bar.dart';
+import 'package:star_app/features/ui/voice/voice_channel_participant_grid.dart';
+import 'package:star_app/features/voice/providers/voice_session_provider.dart';
+import 'package:star_app/features/voice/utils/pip/pip_visibility.dart';
+import 'package:star_app/l10n/generated/star_localizations.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:star_app/shared/icons/phosphor.dart';
+import 'package:star_app/shared/utils/chat_context_utils.dart';
+import 'package:go_router/go_router.dart';
+
+const double _kDmEmbeddedVoiceMinHeight = 160;
+const double _kDmEmbeddedVoiceMaxHeight = 520;
+const double _kDmEmbeddedVoiceDefaultHeight = 280;
+
+class DmEmbeddedVoiceCallPanel extends ConsumerStatefulWidget {
+  const DmEmbeddedVoiceCallPanel({required this.channelId, super.key});
+
+  final String channelId;
+
+  @override
+  ConsumerState<DmEmbeddedVoiceCallPanel> createState() =>
+      _DmEmbeddedVoiceCallPanelState();
+}
+
+class _DmEmbeddedVoiceCallPanelState
+    extends ConsumerState<DmEmbeddedVoiceCallPanel> {
+  late double _height = _kDmEmbeddedVoiceDefaultHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    final VoicePipVisibilityInputs voice = ref.watch(
+      voiceSessionProvider.select(voicePipVisibilityInputs),
+    );
+    if (!showsEmbeddedDmVoicePanel(channelId: widget.channelId, voice: voice)) {
+      return const SizedBox.shrink();
+    }
+    final StarLocalizations l10n = StarLocalizations.of(context);
+    final conversations = ref.watch(
+      dmViewModelProvider.select((s) => s.conversations),
+    );
+    final dm = findDmById(conversations, widget.channelId);
+    final String title =
+        (dm == null ? null : dmConversationDisplayName(l10n, dm)) ??
+        l10n.dmVoiceEmbeddedFallbackTitle;
+    return ChatSurfaceTheme(
+      builder: (BuildContext context) {
+        return Material(
+          color: context.colors.chatBackground,
+          child: SizedBox(
+            height: _height,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                StarGestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onVerticalDragUpdate: (DragUpdateDetails d) {
+                    setState(() {
+                      _height = (_height - d.delta.dy).clamp(
+                        _kDmEmbeddedVoiceMinHeight,
+                        _kDmEmbeddedVoiceMaxHeight,
+                      );
+                    });
+                  },
+                  child: Material(
+                    color: context.colors.backgroundSecondary,
+                    child: SizedBox(
+                      height: 40,
+                      child: Row(
+                        children: <Widget>[
+                          Padding(
+                            padding: const EdgeInsetsDirectional.only(start: 8),
+                            child: Icon(
+                              PhosphorIconsBold.dotsNine,
+                              size: 20,
+                              color: context.colors.textSecondary,
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              title,
+                              style: context.textStyles.channelName,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: l10n.dmVoiceCallFullScreenTooltip,
+                            onPressed: () {
+                              unawaited(
+                                context.push(
+                                  RoutePaths.dmChannelCall(widget.channelId),
+                                ),
+                              );
+                            },
+                            icon: PhosphorIcon(
+                              PhosphorIconsBold.arrowsOut,
+                              color: context.colors.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Divider(height: 1, color: context.colors.borderColor),
+                Expanded(
+                  child: LocalCameraOrientationSync(
+                    child: VoiceChannelParticipantGrid(
+                      channelId: widget.channelId,
+                    ),
+                  ),
+                ),
+                const VoiceChannelControlBar(),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}

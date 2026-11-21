@@ -1,0 +1,265 @@
+import 'package:star_app/core/database/star_database.dart' as db;
+import 'package:star_app/features/channels/data/unread_settings_resolver.dart';
+import 'package:star_app/features/chat/domain/message.dart';
+import 'package:star_app/features/chat/utils/messages/message_name_resolvers.dart';
+import 'package:star_app/features/chat/utils/messages/system_message_text.dart';
+import 'package:star_app/features/settings/domain/tts_notification_mode.dart';
+import 'package:star_app/features/voice/tts/star_tts.dart';
+import 'package:star_app/features/voice/tts/tts_should_speak.dart';
+import 'package:star_app/features/voice/tts/tts_text_formatter.dart';
+import 'package:star_app/l10n/generated/star_localizations.dart';
+import 'package:star_dart/export.dart';
+
+const int kTtsRecentMessageIdCapacity = 10;
+
+class TtsRecentMessageDeduper {
+  TtsRecentMessageDeduper({this.capacity = kTtsRecentMessageIdCapacity});
+
+  final int capacity;
+  final List<String> _order = <String>[];
+  final Set<String> _ids = <String>{};
+
+  bool contains(String messageId) => _ids.contains(messageId);
+
+  void mark(String messageId) {
+    if (_ids.contains(messageId)) {
+      return;
+    }
+    _ids.add(messageId);
+    _order.add(messageId);
+    while (_order.length > capacity) {
+      final String removed = _order.removeAt(0);
+      _ids.remove(removed);
+    }
+  }
+}
+
+class TtsIncomingMessageContext {
+  const TtsIncomingMessageContext({
+    required this.message,
+    required this.currentUserId,
+    required this.blockedUserIds,
+    required this.activeChannelId,
+    required this.enableTtsCommand,
+    required this.ttsRate,
+    required this.ttsNotificationMode,
+    required this.locale,
+    required this.l10n,
+    required this.deduper,
+  });
+
+  final Message message;
+  final String currentUserId;
+  final Set<String> blockedUserIds;
+  final String? activeChannelId;
+  final bool enableTtsCommand;
+  final double ttsRate;
+  final TtsNotificationMode ttsNotificationMode;
+  final String? locale;
+  final StarLocalizations l10n;
+  final TtsRecentMessageDeduper deduper;
+}
+
+bool passesIncomingTtsCheapGate(TtsIncomingMessageContext context) {
+  final Message message = context.message;
+  if (!shouldSpeakIncomingMessage(
+    mode: context.ttsNotificationMode,
+    enableTtsCommand: context.enableTtsCommand,
+    isExplicitTts: message.tts,
+    isSelf: message.authorId == context.currentUserId,
+    isSystemMessage: message.isSystemMessage,
+    messageChannelId: message.channelId,
+    activeChannelId: context.activeChannelId,
+  )) {
+    return false;
+  }
+  if (context.deduper.contains(message.id)) {
+    return false;
+  }
+  if (context.blockedUserIds.contains(message.authorId)) {
+    return false;
+  }
+  return true;
+}
+
+Future<bool> isIncomingTtsMuted({
+  required db.StarDatabase database,
+  required String channelId,
+}) async {
+  final DateTime now = DateTime.now();
+  final db.Channel? guildChannel = await database.channelDao.getChannelById(
+    channelId,
+  );
+  if (guildChannel != null) {
+    final UserGuildSettingsResponse? guildSettings = await _loadGuildSettings(
+      database: database,
+      guildStorageId: guildChannel.guildId,
+    );
+    return isGuildOrCategoryOrChannelMuted(
+      channel: guildChannel,
+      guildSettings: guildSettings,
+      now: now,
+    );
+  }
+  final db.DmChannel? dmChannel = await database.dmChannelDao.getDmChannelById(
+    channelId,
+  );
+  if (dmChannel == null) {
+    return true;
+  }
+  final UserGuildSettingsResponse? guildSettings = await _loadGuildSettings(
+    database: database,
+    guildStorageId: '@me',
+  );
+  return isChannelOverrideMuted(
+    guildSettings?.channelOverrides?[channelId],
+    now: now,
+  );
+}
+
+Future<String?> buildIncomingTtsText({
+  required TtsIncomingMessageContext context,
+  required db.StarDatabase database,
+}) async {
+  final Message message = context.message;
+  final StarLocalizations l10n = context.l10n;
+  final db.Channel? channel = await database.channelDao.getChannelById(
+    message.channelId,
+  );
+  final String? guildId = channel?.guildId;
+
+  if (!message.isUserMessage) {
+    final String authorName = await resolveMessageUserDisplayName(
+      database: database,
+      userId: message.authorId,
+      guildId: guildId,
+      fallbackDisplayName: message.authorName,
+    );
+    return stringifySystemMessage(
+      l10n: l10n,
+      message: message,
+      authorName: authorName,
+      currentUserId: context.currentUserId,
+    );
+  }
+
+  final String authorName = await resolveMessageUserDisplayName(
+    database: database,
+    userId: message.authorId,
+    guildId: guildId,
+    fallbackDisplayName: message.authorName,
+  );
+  final String content = message.speakableContent;
+  if (content.trim().isEmpty) {
+    final String? description = _describeNonTextContent(message, l10n);
+    if (description == null) {
+      return null;
+    }
+    return l10n.ttsAuthorDescription(authorName, description);
+  }
+
+  String? replyAuthorName;
+  if (message.replyToId != null) {
+    final db.Message? replyRow = await database.messageDao.getMessage(
+      message.messageReference?.channelId ?? message.channelId,
+      message.replyToId!,
+    );
+    if (replyRow != null) {
+      replyAuthorName = await resolveMessageUserDisplayName(
+        database: database,
+        userId: replyRow.authorId,
+        guildId: guildId,
+        fallbackDisplayName: replyRow.authorName,
+      );
+    }
+  }
+
+  final Map<String, String> userNames = await resolveMessageUserMentionNames(
+    database: database,
+    guildId: guildId,
+    content: content,
+  );
+  final Map<String, String> channelNames =
+      await resolveMessageChannelMentionNames(
+        database: database,
+        content: content,
+      );
+  final Map<String, String> roleNames = await resolveMessageRoleMentionNames(
+    database: database,
+    guildId: guildId,
+    content: content,
+  );
+
+  return formatMessageForTts(
+    content: content,
+    authorName: authorName,
+    l10n: l10n,
+    replyAuthorName: replyAuthorName,
+    resolveUser: (String userId) => userNames[userId],
+    resolveRole: (String roleId) => roleNames[roleId],
+    resolveChannel: (String channelId) => channelNames[channelId],
+  );
+}
+
+Future<void> handleIncomingTtsMessage({
+  required TtsIncomingMessageContext context,
+  required db.StarDatabase database,
+  required StarTts tts,
+}) async {
+  if (!passesIncomingTtsCheapGate(context)) {
+    return;
+  }
+  if (!await tts.isSupported()) {
+    return;
+  }
+  if (await isIncomingTtsMuted(
+    database: database,
+    channelId: context.message.channelId,
+  )) {
+    return;
+  }
+
+  final String? text = await buildIncomingTtsText(
+    context: context,
+    database: database,
+  );
+  if (text == null || text.trim().isEmpty) {
+    return;
+  }
+
+  context.deduper.mark(context.message.id);
+  await tts.speak(
+    text: text,
+    rate: context.ttsRate,
+    locale: context.locale,
+    target: StarTtsSpeakingTarget(
+      messageId: context.message.id,
+      channelId: context.message.channelId,
+    ),
+  );
+}
+
+String? _describeNonTextContent(Message message, StarLocalizations l10n) {
+  if (message.stickers.isNotEmpty) {
+    return l10n.ttsSentSticker;
+  }
+  if (message.attachments.isNotEmpty) {
+    final int count = message.attachments.length;
+    return count == 1 ? l10n.ttsSentAttachment : l10n.ttsSentAttachments(count);
+  }
+  if (message.embeds.isNotEmpty) {
+    return l10n.ttsSentEmbed;
+  }
+  return null;
+}
+
+Future<UserGuildSettingsResponse?> _loadGuildSettings({
+  required db.StarDatabase database,
+  required String guildStorageId,
+}) async {
+  final row = await database.userGuildSettingsDao.getByGuildId(guildStorageId);
+  if (row == null) {
+    return null;
+  }
+  return decodeUserGuildSettings(row.data);
+}

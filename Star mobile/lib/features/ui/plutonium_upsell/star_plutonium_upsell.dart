@@ -1,0 +1,117 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:star_app/core/premium/should_show_premium_commerce_provider.dart';
+import 'package:star_app/core/theme/star_theme_extension.dart';
+import 'package:star_app/features/settings/utils/commerce/open_user_billing_settings.dart';
+import 'package:star_app/features/settings/utils/commerce/user_settings_billing_nav.dart';
+import 'package:star_app/features/ui/icons/plutonium_product_icon.dart';
+import 'package:star_app/features/ui/ui.dart';
+import 'package:star_app/l10n/generated/star_localizations.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:star_app/shared/external_links/external_link_handler.dart';
+
+const String _kPlutoniumUrl = 'https://star.invalid/plutonium';
+
+class StarPlutoniumUpsell extends ConsumerWidget {
+  const StarPlutoniumUpsell({
+    required this.text,
+    this.buttonLabel,
+    this.buttonSize = StarButtonSize.regular,
+    this.onButtonPressed,
+    this.onDismiss,
+    this.child,
+    super.key,
+  });
+
+  final String text;
+  final String? buttonLabel;
+  final StarButtonSize buttonSize;
+  final VoidCallback? onButtonPressed;
+  final VoidCallback? onDismiss;
+  final Widget? child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!ref.watch(shouldShowPremiumCommerceProvider)) {
+      return const SizedBox.shrink();
+    }
+    final colors = context.colors;
+    final layout = context.layout;
+    final textStyles = context.textStyles;
+    final l10n = StarLocalizations.of(context);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.brandPrimary,
+        borderRadius: layout.radiusMd,
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(layout.s3),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: EdgeInsetsDirectional.only(top: 2, end: layout.s2),
+              child: PlutoniumProductIcon(
+                size: 16,
+                color: colors.textOnBrandPrimary,
+              ),
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    text,
+                    style: textStyles.bodySmall.copyWith(
+                      color: colors.textOnBrandPrimary,
+                      height: 1.4,
+                    ),
+                  ),
+                  if (child != null) ...[SizedBox(height: layout.s2), child!],
+                  SizedBox(height: layout.s2),
+                  StarButton.inverted(
+                    onPressed:
+                        onButtonPressed ?? () => _openPlutonium(context, ref),
+                    label: buttonLabel ?? l10n.getPlutonium,
+                    size: buttonSize,
+                  ),
+                  if (onDismiss != null) ...[
+                    SizedBox(height: layout.s2),
+                    StarGestureDetector(
+                      onTap: onDismiss,
+                      child: Text(
+                        l10n.emojiPlutoniumUpsellDismiss,
+                        style: textStyles.timestamp.copyWith(
+                          color: colors.textOnBrandPrimary.withValues(
+                            alpha: 0.7,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openPlutonium(BuildContext context, WidgetRef ref) {
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      if (ref.read(premiumBillingNavVisibleProvider)) {
+        unawaited(openPlutoniumCommerce(context, ref));
+      }
+      return;
+    }
+    if (userSettingsShowBillingNav(ref)) {
+      unawaited(openPlutoniumCommerce(context, ref));
+      return;
+    }
+    unawaited(handleExternalLinkTap(context, _kPlutoniumUrl));
+  }
+}

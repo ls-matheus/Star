@@ -1,0 +1,1 @@
+enum ReportRestriction { unclaimed, unverified }

@@ -1,0 +1,64 @@
+import 'dart:typed_data';
+
+import 'package:star_app/core/push/push_message.dart';
+import 'package:star_app/core/push/web_push/web_push_codec.dart';
+import 'package:star_app/core/push/web_push/web_push_crypto.dart';
+import 'package:star_app/core/push/web_push/web_push_envelope.dart';
+import 'package:star_app/core/push/web_push/web_push_key_store.dart';
+
+Future<PushMessage?> decryptWebPushForAccounts({
+  required Uint8List record,
+  required List<WebPushAccountKeys> keys,
+  required String fallbackId,
+}) async {
+  for (final WebPushAccountKeys account in keys) {
+    final String? privateKey = account.privateKey;
+    if (privateKey == null || privateKey.isEmpty) {
+      continue;
+    }
+    final Uint8List privateKeyBytes;
+    final Uint8List publicKeyBytes;
+    final Uint8List authSecretBytes;
+    try {
+      privateKeyBytes = decodeWebPushKey(privateKey);
+      publicKeyBytes = decodeWebPushKey(account.publicKey);
+      authSecretBytes = decodeWebPushKey(account.authSecret);
+    } on FormatException {
+      continue;
+    }
+    final String? plaintext = await decryptWebPushRecord(
+      record: record,
+      privateKey: privateKeyBytes,
+      publicKey: publicKeyBytes,
+      authSecret: authSecretBytes,
+    );
+    if (plaintext == null) {
+      continue;
+    }
+    final PushMessage message = mapWebPushEnvelope(
+      plaintext,
+      fallbackId: fallbackId,
+    );
+    final String? targetUserId = message.payload['target_user_id'];
+    if (targetUserId == null || targetUserId.isEmpty) {
+      message.payload['target_user_id'] = account.userId;
+    }
+    return message;
+  }
+  return null;
+}
+
+Uint8List? decodeWebPushCiphertext(String encoded) {
+  if (encoded.length > 4096) {
+    return null;
+  }
+  try {
+    return decodeWebPushKey(encoded);
+  } on FormatException {
+    return null;
+  }
+}
+
+String webPushFallbackId() {
+  return DateTime.now().microsecondsSinceEpoch.toString();
+}

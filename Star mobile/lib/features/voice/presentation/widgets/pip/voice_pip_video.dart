@@ -1,0 +1,277 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:star_app/core/database/star_database.dart' as database;
+import 'package:star_app/core/router/star_router.dart';
+import 'package:star_app/core/theme/star_theme_extension.dart';
+import 'package:star_app/features/settings/providers/preferences/voice_settings_provider.dart';
+import 'package:star_app/features/ui/voice/voice_blocked_participant_placeholder.dart';
+import 'package:star_app/features/ui/voice/voice_cached_video_track.dart';
+import 'package:star_app/features/ui/voice/voice_call_avatar.dart';
+import 'package:star_app/features/ui/voice/voice_participant_media_tile.dart';
+import 'package:star_app/features/ui/voice/voice_participant_tracks_builder.dart';
+import 'package:star_app/features/ui/voice/voice_screen_share_audio.dart';
+import 'package:star_app/features/voice/domain/voice_media_participant.dart';
+import 'package:star_app/features/voice/domain/voice_settings_state.dart';
+import 'package:star_app/features/voice/providers/voice_channel_participants_provider.dart';
+import 'package:star_app/features/voice/providers/voice_pip_providers.dart';
+import 'package:star_app/features/voice/providers/voice_session_provider.dart';
+import 'package:star_app/features/voice/providers/voice_session_state.dart';
+import 'package:star_app/features/voice/utils/grid_layout/participant_tile_id.dart';
+import 'package:star_app/features/voice/utils/media/participant_track_resolver.dart';
+import 'package:star_app/features/voice/utils/media/voice_video_claims.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:star_app/shared/providers/guild_user_display_provider.dart';
+import 'package:star_app/shared/utils/guild_user_display.dart';
+import 'package:star_dart/gateway.dart';
+import 'package:livekit_client/livekit_client.dart';
+
+class VoicePipVideo extends ConsumerWidget {
+  const VoicePipVideo({required this.tileId, this.blocked, super.key});
+
+  final String tileId;
+  final bool? blocked;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final (VoicePipSessionInputs voice, String? guildId) = ref.watch(
+      voiceSessionProvider.select(
+        (VoiceSessionState state) =>
+            (voicePipSessionInputs(state), state.guildId),
+      ),
+    );
+    final String? key = voice.participantsKey;
+    final ({String identity, VoiceParticipantTileSource source})? parsed =
+        parseVoiceParticipantTileId(tileId);
+    if (key == null || parsed == null) {
+      return const ColoredBox(color: Color(0xFF111111));
+    }
+    final List<VoiceChannelParticipantData> participants = ref.watch(
+      voiceChannelParticipantsProvider(key),
+    );
+    VoiceChannelParticipantData? match;
+    for (final VoiceChannelParticipantData participant in participants) {
+      if (voiceParticipantTileId(
+            voice: participant.voice,
+            userId: participant.userId,
+            source: parsed.source,
+          ) ==
+          tileId) {
+        match = participant;
+        break;
+      }
+    }
+    if (match == null) {
+      return const ColoredBox(color: Color(0xFF111111));
+    }
+    final String? me = ref.watch(currentUserIdProvider);
+    if (blocked ?? ref.watch(voicePipFeaturedBlockedProvider)) {
+      return const VoiceBlockedParticipantPlaceholder(
+        cornerRadius: 0,
+        showLabel: false,
+      );
+    }
+    final VoiceMediaParticipant? participant = resolveVoiceParticipant(
+      media: voice.media,
+      voice: match.voice,
+      userId: match.userId,
+      currentUserId: me,
+      localConnectionId: voice.localConnectionId,
+    );
+    final database.User? user = match.user;
+    final GuildUserDisplay? userDisplay = watchGuildScopedUserDisplay(
+      ref: ref,
+      userId: match.userId,
+      guildId: guildId,
+      currentUserId: me,
+    );
+    final int? avatarArgb = userDisplay?.avatarColor ?? user?.avatarColor;
+    final Color background = avatarArgb == null
+        ? context.colors.brandPrimary
+        : Color(0xFF000000 | avatarArgb);
+    if (participant == null) {
+      return _PipAvatarFallback(
+        user: user,
+        userId: match.userId,
+        userDisplay: userDisplay,
+        background: background,
+      );
+    }
+    return _PipTrackView(
+      participant: participant,
+      source: parsed.source,
+      isOwnCamera:
+          parsed.source == VoiceParticipantTileSource.camera &&
+          me != null &&
+          match.userId == me,
+      mirrorOwnCamera: ref.watch(
+        voiceSettingsProvider.select(
+          (VoiceSettingsState s) => s.shouldMirrorOwnCamera,
+        ),
+      ),
+      voice: match.voice,
+      user: user,
+      userDisplay: userDisplay,
+      userId: match.userId,
+      background: background,
+    );
+  }
+}
+
+class _PipTrackView extends StatefulWidget {
+  const _PipTrackView({
+    required this.participant,
+    required this.source,
+    required this.isOwnCamera,
+    required this.mirrorOwnCamera,
+    required this.voice,
+    required this.user,
+    required this.userDisplay,
+    required this.userId,
+    required this.background,
+  });
+
+  final VoiceMediaParticipant participant;
+  final VoiceParticipantTileSource source;
+  final bool isOwnCamera;
+  final bool mirrorOwnCamera;
+  final VoiceState voice;
+  final database.User? user;
+  final GuildUserDisplay? userDisplay;
+  final String userId;
+  final Color background;
+
+  @override
+  State<_PipTrackView> createState() => _PipTrackViewState();
+}
+
+class _PipTrackViewState extends State<_PipTrackView> {
+  late VoiceVideoClaim _claim;
+
+  @override
+  void initState() {
+    super.initState();
+    _claim = _claimVideo();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PipTrackView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.participant, widget.participant) ||
+        oldWidget.source != widget.source) {
+      _claim.release();
+      _claim = _claimVideo();
+    }
+  }
+
+  @override
+  void dispose() {
+    _claim.release();
+    super.dispose();
+  }
+
+  VoiceVideoClaim _claimVideo() {
+    final bool isScreen =
+        widget.source == VoiceParticipantTileSource.screenShare;
+    return VoiceVideoClaims.of(widget.participant).claim(
+      isScreen ? TrackSource.screenShareVideo : TrackSource.camera,
+      quality: isScreen ? VideoQuality.HIGH : VideoQuality.MEDIUM,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isScreen =
+        widget.source == VoiceParticipantTileSource.screenShare;
+    return VoiceParticipantTracksBuilder(
+      participant: widget.participant,
+      isScreenShare: isScreen,
+      builder:
+          (BuildContext context, VideoTrack? track, AudioTrack? audioTrack) {
+            final Widget fallback = _PipAvatarFallback(
+              user: widget.user,
+              userId: widget.userId,
+              userDisplay: widget.userDisplay,
+              background: widget.background,
+            );
+            if (track == null) {
+              if (audioTrack == null) {
+                return fallback;
+              }
+              return Stack(
+                fit: StackFit.expand,
+                children: <Widget>[
+                  fallback,
+                  VoiceScreenShareAudio(
+                    streamKey: buildViewerStreamKey(
+                      voice: widget.voice,
+                      isScreenShareTile: true,
+                    ),
+                    audioTrack: audioTrack,
+                  ),
+                ],
+              );
+            }
+            final VideoViewFit fit = isScreen
+                ? VideoViewFit.contain
+                : VideoViewFit.cover;
+            final VideoViewMirrorMode mirrorMode;
+            if (!widget.isOwnCamera || isScreen) {
+              mirrorMode = VideoViewMirrorMode.off;
+            } else if (widget.mirrorOwnCamera) {
+              mirrorMode = VideoViewMirrorMode.mirror;
+            } else {
+              mirrorMode = VideoViewMirrorMode.off;
+            }
+            final Widget video = ColoredBox(
+              color: widget.background,
+              child: IgnorePointer(
+                child: VoiceCachedVideoTrack(
+                  track: track,
+                  fit: fit,
+                  mirrorMode: mirrorMode,
+                ),
+              ),
+            );
+            if (audioTrack == null) {
+              return video;
+            }
+            return Stack(
+              fit: StackFit.expand,
+              children: <Widget>[
+                video,
+                VoiceScreenShareAudio(
+                  streamKey: buildViewerStreamKey(
+                    voice: widget.voice,
+                    isScreenShareTile: true,
+                  ),
+                  audioTrack: audioTrack,
+                ),
+              ],
+            );
+          },
+    );
+  }
+}
+
+class _PipAvatarFallback extends StatelessWidget {
+  const _PipAvatarFallback({
+    required this.user,
+    required this.userId,
+    required this.userDisplay,
+    required this.background,
+  });
+
+  final database.User? user;
+  final String userId;
+  final GuildUserDisplay? userDisplay;
+  final Color background;
+
+  @override
+  Widget build(BuildContext context) {
+    return VoiceCallAvatar(
+      background: background,
+      userId: userId,
+      user: user,
+      userDisplay: userDisplay,
+    );
+  }
+}

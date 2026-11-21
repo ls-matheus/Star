@@ -1,0 +1,155 @@
+import 'dart:async';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:star_app/core/permissions/permission.dart';
+import 'package:star_app/core/theme/star_theme_extension.dart';
+import 'package:star_app/features/guilds/domain/guild.dart';
+import 'package:star_app/features/guilds/providers/guild_providers.dart';
+import 'package:star_app/features/guilds/utils/guild_features.dart';
+import 'package:star_app/features/settings/domain/guild/roles/guild_role_permission_spec.dart';
+import 'package:star_app/features/settings/providers/guild/guild_emoji_settings_provider.dart';
+import 'package:star_app/features/settings/providers/guild/guild_settings_tab_providers.dart';
+import 'package:star_app/features/settings/providers/guild/guild_sticker_settings_provider.dart';
+import 'package:star_app/features/settings/utils/guild/guild_expression_permissions.dart';
+import 'package:star_app/features/ui/switch_group/star_switch_group.dart';
+import 'package:star_app/l10n/generated/star_localizations.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:star_app/shared/providers/input_modality_provider.dart';
+import 'package:star_app/shared/utils/api_error_presentation.dart';
+
+enum GuildCloneAllowedKind { emoji, sticker }
+
+class GuildCloneAllowedToggle extends ConsumerStatefulWidget {
+  const GuildCloneAllowedToggle({
+    required this.guildId,
+    required this.kind,
+    super.key,
+  });
+
+  final String guildId;
+  final GuildCloneAllowedKind kind;
+
+  @override
+  ConsumerState<GuildCloneAllowedToggle> createState() =>
+      _GuildCloneAllowedToggleState();
+}
+
+class _GuildCloneAllowedToggleState
+    extends ConsumerState<GuildCloneAllowedToggle> {
+  bool _isSaving = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final StarLocalizations l10n = StarLocalizations.of(context);
+    final int permissions = ref.watch(
+      guildSettingsPermissionsProvider(widget.guildId),
+    );
+    final Guild? guild = ref.watch(guildByIdProvider(widget.guildId)).value;
+    if (guild == null) {
+      return const SizedBox.shrink();
+    }
+    final bool canManage = canManageGuildCloneSettings(permissions);
+    final bool allowed = widget.kind == GuildCloneAllowedKind.emoji
+        ? isCloneEmojiAllowed(guild.features)
+        : isCloneStickerAllowed(guild.features);
+    final String label = widget.kind == GuildCloneAllowedKind.emoji
+        ? l10n.guildSettingsCloneEmojiTitle
+        : l10n.guildSettingsCloneStickerTitle;
+    final String description = widget.kind == GuildCloneAllowedKind.emoji
+        ? l10n.guildSettingsCloneEmojiDescription
+        : l10n.guildSettingsCloneStickerDescription;
+    final bool desktop = usesDesktopPointerUi(context);
+    return Padding(
+      padding: desktop
+          ? const EdgeInsets.only(bottom: 16)
+          : EdgeInsets.fromLTRB(
+              context.layout.s4,
+              context.layout.s4,
+              context.layout.s4,
+              0,
+            ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          StarSwitchGroup(
+            children: <Widget>[
+              StarSwitchGroupItem(
+                label: label,
+                description: description,
+                value: allowed,
+                enabled: canManage && !_isSaving,
+                onChanged: (bool nextAllowed) => unawaited(
+                  _handleToggle(
+                    guild: guild,
+                    nextAllowed: nextAllowed,
+                    l10n: l10n,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (!canManage) ...<Widget>[
+            SizedBox(height: desktop ? 8 : context.layout.s2),
+            Text(
+              l10n.guildSettingsClonePermissionHint(
+                permissionTitle(l10n, Permission.manageGuild),
+              ),
+              style: desktop
+                  ? context.textStyles.bodySmall.copyWith(
+                      fontSize: 12,
+                      height: 1.5,
+                      color: context.colors.textChatMuted,
+                    )
+                  : context.textStyles.bodySmall.copyWith(
+                      color: context.colors.textPrimaryMuted,
+                    ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleToggle({
+    required Guild guild,
+    required bool nextAllowed,
+    required StarLocalizations l10n,
+  }) async {
+    if (_isSaving) {
+      return;
+    }
+    setState(() => _isSaving = true);
+    try {
+      if (widget.kind == GuildCloneAllowedKind.emoji) {
+        await ref
+            .read(guildEmojiSettingsProvider(widget.guildId).notifier)
+            .toggleCloneAllowed(
+              currentFeatures: guild.features,
+              allowed: nextAllowed,
+            );
+      } else {
+        await ref
+            .read(guildStickerSettingsProvider(widget.guildId).notifier)
+            .toggleCloneAllowed(
+              currentFeatures: guild.features,
+              allowed: nextAllowed,
+            );
+      }
+    } on Object {
+      if (!mounted) {
+        return;
+      }
+      await showErrorDialog(
+        context,
+        title: widget.kind == GuildCloneAllowedKind.emoji
+            ? l10n.guildSettingsCloneEmojiUpdateFailed
+            : l10n.guildSettingsCloneStickerUpdateFailed,
+        body: l10n.guildSettingsRolesTryAgainInAMoment,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+}

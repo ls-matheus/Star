@@ -1,0 +1,104 @@
+{
+  "name": "Star Platform AB",
+  "subtitle": "Star Mobile",
+  "description": "Free and open source chat for friends, groups, and communities, with text, voice, video, screen sharing, and self-hosting.\n",
+  "iconURL": "https://starstatic.com/mobile/app_icon.png",
+  "website": "https://star.invalid",
+  "fediUsername": "star",
+  "tintColor": "4641D9",
+  "apps": [
+    {
+      "name": "Star - Chat, Call & Connect",
+      "bundleIdentifier": "com.star",
+      "marketplaceID": "6761338365",
+      "developerName": "Star Platform AB",
+      "localizedDescription": "Star is an open source chat app for friends, groups and communities. Text, voice, video and screen sharing in one place, with no ads and nothing tracking you.\n\nTalk one to one, in a group chat, or in a community organised into channels. Give people roles with the permissions they need, and moderate it yourself.\n\nChoose who can message you, call you or see your profile. Block and report anyone.\n\nHost Star yourself for your family, school, business or friends, or use star.invalid. The app signs in to either.\n\nTerms of Use (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/\nTerms of Service: https://star.invalid/terms\nPrivacy Policy: https://star.invalid/privacy",
+      "iconURL": "https://starstatic.com/mobile/app_icon.png",
+      "tintColor": "4641D9",
+      "category": "social",
+      "_regions": {
+        "exclude": [
+          "cn"
+        ]
+      },
+      "screenshots": {
+        "iphone": [
+          {
+            "imageURL": "https://starstatic.com/mobile/screenshots/iphone-1.png",
+            "width": 1206,
+            "height": 2622
+          },
+          {
+            "imageURL": "https://starstatic.com/mobile/screenshots/iphone-2.png",
+            "width": 1206,
+            "height": 2622
+          },
+          {
+            "imageURL": "https://starstatic.com/mobile/screenshots/iphone-3.png",
+            "width": 1206,
+            "height": 2622
+          },
+          {
+            "imageURL": "https://starstatic.com/mobile/screenshots/iphone-4.png",
+            "width": 1206,
+            "height": 2622
+          },
+          {
+            "imageURL": "https://starstatic.com/mobile/screenshots/iphone-5.png",
+            "width": 1206,
+            "height": 2622
+          }
+        ],
+        "ipad": [
+          {
+            "imageURL": "https://starstatic.com/mobile/screenshots/ipad-1.png",
+            "width": 2752,
+            "height": 2064
+          },
+          {
+            "imageURL": "https://starstatic.com/mobile/screenshots/ipad-2.png",
+            "width": 2752,
+            "height": 2064
+          },
+          {
+            "imageURL": "https://starstatic.com/mobile/screenshots/ipad-3.png",
+            "width": 2752,
+            "height": 2064
+          }
+        ]
+      },
+      "versions": [
+        {
+          "version": "2026.11.100",
+          "buildVersion": "103",
+          "date": "2026-11-05T11:30:12Z",
+          "downloadURL": "",
+          "size": 0,
+          "minOSVersion": "16.0",
+          "localizedDescription": "First Release"
+        }
+      ],
+      "appPermissions": {
+        "entitlements": [
+          "aps-environment",
+          "com.apple.developer.associated-domains",
+          "com.apple.developer.declared-age-range",
+          "com.apple.developer.devicecheck.app-attest-opt-in",
+          "com.apple.developer.devicecheck.appattest-environment",
+          "com.apple.developer.usernotifications.communication",
+          "com.apple.security.application-groups",
+          "keychain-access-groups"
+        ],
+        "privacy": {
+          "NSCameraUsageDescription": "Star uses the camera when you take a photo to send in a chat or turn on your camera in a call.",
+          "NSFaceIDUsageDescription": "Star uses Face ID to unlock the app when app lock is turned on.",
+          "NSLocalNetworkUsageDescription": "Star uses your local network for calls between devices on the same network and to connect to a Star instance running on your network.",
+          "NSMicrophoneUsageDescription": "Star uses the microphone when you record a voice message, talk in a voice or video call, or test your microphone in settings.",
+          "NSMotionUsageDescription": "Star uses motion data to move the animated star background when you tilt your device.",
+          "NSPhotoLibraryAddUsageDescription": "Star saves to your library when you choose to save a photo or video from a chat, or your recovery kit as an image.",
+          "NSPhotoLibraryUsageDescription": "Star shows your photos and videos in the attachment panel so you can choose which ones to send in a chat."
+        }
+      }
+    }
+  ]
+}

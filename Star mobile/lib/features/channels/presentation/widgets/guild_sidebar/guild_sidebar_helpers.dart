@@ -1,0 +1,52 @@
+part of 'guild_sidebar.dart';
+
+ReadStateRepository _readStateRepository(WidgetRef ref) => ReadStateRepository(
+  ref.read(starClientProvider),
+  ref.read(starDatabaseProvider),
+);
+
+Future<ChannelOverridesMuteConfig?> _loadChannelMuteConfig(
+  WidgetRef ref,
+  String guildId,
+  String channelId,
+) async {
+  final row = await ref
+      .read(starDatabaseProvider)
+      .userGuildSettingsDao
+      .getByGuildId(guildId);
+  if (row == null) {
+    return null;
+  }
+  try {
+    final settings = UserGuildSettingsResponse.fromJson(
+      jsonDecode(row.data) as Map<String, dynamic>,
+    );
+    return settings.channelOverrides?[channelId]?.muteConfig;
+  } on Object {
+    return null;
+  }
+}
+
+bool _canMarkChannelRead(Channel channel) =>
+    channel.type != ChannelType.guildCategory &&
+    channel.type != ChannelType.guildLink;
+
+Color _desktopSidebarRowTextColor(
+  BuildContext context, {
+  bool hovered = false,
+  bool selected = false,
+  bool unread = false,
+  bool category = false,
+}) {
+  final colors = context.colors;
+  if (hovered) {
+    return category ? colors.textPrimary : colors.textChat;
+  }
+  if (selected) {
+    return colors.textPrimary;
+  }
+  if (Theme.of(context).brightness == Brightness.light) {
+    return unread || category ? colors.textPrimary : colors.textTertiary;
+  }
+  return unread ? colors.textSecondary : colors.textTertiaryMuted;
+}

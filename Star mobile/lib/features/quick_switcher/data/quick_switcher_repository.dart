@@ -1,0 +1,46 @@
+import 'package:star_app/core/database/star_database.dart' hide Channel;
+import 'package:star_app/features/channels/data/read_state_write_batcher.dart';
+import 'package:star_app/features/channels/domain/channel.dart';
+import 'package:star_app/features/dm/domain/dm_conversation.dart';
+import 'package:star_app/features/quick_switcher/data/quick_switcher_unread_loader.dart';
+import 'package:star_app/features/quick_switcher/domain/quick_switcher_unread_channel.dart';
+
+class QuickSwitcherRepository {
+  const QuickSwitcherRepository(this._database, this._readStateWriteBatcher);
+
+  final StarDatabase _database;
+  final ReadStateWriteBatcher _readStateWriteBatcher;
+
+  Future<List<Channel>> getGuildChannels() async {
+    final Set<String> joined = await _database.threadDao.getJoinedThreadIds();
+    return <Channel>[
+      for (final row in await _database.channelDao.getAllChannels(
+        includeThreads: true,
+      ))
+        if (!isThreadChannelType(row.type) ||
+            (row.threadArchived != true &&
+                (joined.contains(row.id) ||
+                    row.type != ChannelType.privateThread.wireValue)))
+          Channel.fromRow(row),
+    ];
+  }
+
+  Future<String?> getChannelParentId(String channelId) async {
+    final row = await _database.channelDao.getChannelById(channelId);
+    return row?.parentId;
+  }
+
+  Future<List<QuickSwitcherUnreadChannel>> getUnreadChannels({
+    required String? currentUserId,
+    required List<DmConversation> conversations,
+    bool unreadBadgeCustomizationEnabled = false,
+  }) {
+    return loadQuickSwitcherUnreadChannels(
+      db: _database,
+      readStateWriteBatcher: _readStateWriteBatcher,
+      currentUserId: currentUserId,
+      conversations: conversations,
+      unreadBadgeCustomizationEnabled: unreadBadgeCustomizationEnabled,
+    );
+  }
+}

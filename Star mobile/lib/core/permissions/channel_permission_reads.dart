@@ -1,0 +1,72 @@
+import 'package:star_app/core/permissions/channel_permission_cache_provider.dart';
+import 'package:star_app/core/providers/app/account_user_id.dart';
+import 'package:riverpod/riverpod.dart';
+
+Future<int> readEffectiveGuildChannelPermissionBits({
+  required ProviderContainer container,
+  required String channelId,
+}) async {
+  if (channelId.isEmpty) {
+    return 0;
+  }
+  final ChannelPermissionCache cache = container.read(
+    channelPermissionCacheProvider(readAccountUserId(container)).notifier,
+  );
+  final int? cached = cache.getChannelBits(channelId);
+  if (cached != null) {
+    return cached;
+  }
+  await cache.rebuildChannel(channelId);
+  return cache.getChannelBits(channelId) ?? 0;
+}
+
+Future<int> readLocalGuildChannelPermissionBits({
+  required ProviderContainer container,
+  required String channelId,
+}) async {
+  if (channelId.isEmpty) {
+    return 0;
+  }
+  final ChannelPermissionCache cache = container.read(
+    channelPermissionCacheProvider(readAccountUserId(container)).notifier,
+  );
+  final int? cached = cache.getLocalChannelBits(channelId);
+  if (cached != null) {
+    return cached;
+  }
+  await cache.rebuildChannel(channelId, localOnly: true);
+  final int? local = cache.getLocalChannelBits(channelId);
+  if (local != null) {
+    return local;
+  }
+  return await readEffectiveGuildChannelPermissionBits(
+    container: container,
+    channelId: channelId,
+  );
+}
+
+Future<int> readEffectiveGuildChannelPermissionBitsRef({
+  required Ref ref,
+  required String channelId,
+}) {
+  if (!ref.mounted) {
+    return Future<int>.value(0);
+  }
+  return readEffectiveGuildChannelPermissionBits(
+    container: ref.container,
+    channelId: channelId,
+  );
+}
+
+Future<int> readLocalGuildChannelPermissionBitsRef({
+  required Ref ref,
+  required String channelId,
+}) {
+  if (!ref.mounted) {
+    return Future<int>.value(0);
+  }
+  return readLocalGuildChannelPermissionBits(
+    container: ref.container,
+    channelId: channelId,
+  );
+}

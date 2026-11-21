@@ -1,0 +1,140 @@
+import 'package:star_app/features/chat/utils/attachments/attachment_preview_utils.dart';
+import 'package:star_markdown/star_markdown.dart';
+import 'package:highlight/highlight.dart' show Mode;
+
+class PreviewLanguageOption {
+  const PreviewLanguageOption({
+    required this.code,
+    required this.canonicalCode,
+  });
+
+  final String code;
+  final String canonicalCode;
+
+  bool get hasSecondaryName =>
+      canonicalCode.isNotEmpty && canonicalCode != code;
+}
+
+const Set<String> _highlightLanguageIds = <String>{
+  'bash',
+  'cpp',
+  'cs',
+  'css',
+  'dart',
+  'diff',
+  'dockerfile',
+  'go',
+  'graphql',
+  'java',
+  'javascript',
+  'json',
+  'kotlin',
+  'lua',
+  'makefile',
+  'markdown',
+  'nginx',
+  'objectivec',
+  'php',
+  'powershell',
+  'python',
+  'ruby',
+  'rust',
+  'scala',
+  'scss',
+  'shell',
+  'sql',
+  'swift',
+  'typescript',
+  'xml',
+  'yaml',
+};
+
+String previewLanguageCanonicalCode(String code) {
+  final String normalized = code.trim().toLowerCase();
+  if (normalized.isEmpty) {
+    return normalized;
+  }
+  if (normalized == 'plaintext' ||
+      normalized == 'plain' ||
+      normalized == 'text') {
+    return 'text';
+  }
+  if (normalized == 'auto') {
+    return 'auto';
+  }
+
+  ensureStarMarkdownLanguagesRegistered();
+  final Mode? mode = kStarMarkdownLanguages[normalized];
+  if (mode == null) {
+    return normalized;
+  }
+
+  final List<String> aliases = mode.aliases ?? const <String>[];
+  final List<String> candidates = kStarMarkdownLanguages.entries
+      .where((MapEntry<String, Mode> entry) => identical(entry.value, mode))
+      .map((MapEntry<String, Mode> entry) => entry.key)
+      .toList(growable: false);
+  for (final String candidate in candidates) {
+    if (_highlightLanguageIds.contains(candidate)) {
+      return candidate;
+    }
+  }
+  final List<String> primary = candidates
+      .where((String key) => !aliases.contains(key))
+      .toList();
+  if (primary.isEmpty) {
+    primary.addAll(candidates);
+  }
+  primary.sort((String left, String right) {
+    final int lengthCompare = right.length.compareTo(left.length);
+    if (lengthCompare != 0) {
+      return lengthCompare;
+    }
+    return left.compareTo(right);
+  });
+  return primary.first;
+}
+
+List<PreviewLanguageOption> buildPreviewLanguageOptions({
+  String inferredLanguageCode = '',
+  String selectedLanguage = '',
+}) {
+  ensureStarMarkdownLanguagesRegistered();
+  final String inferred = inferredLanguageCode.trim().toLowerCase();
+  final String selected = selectedLanguage.trim().toLowerCase();
+  final Set<String> codes = <String>{
+    'plaintext',
+    ...kSupportedPreviewLanguages.where((String code) => code != 'auto'),
+    ...kStarMarkdownLanguages.keys,
+  };
+  final List<PreviewLanguageOption> options =
+      codes
+          .map(
+            (String code) => PreviewLanguageOption(
+              code: code,
+              canonicalCode: previewLanguageCanonicalCode(code),
+            ),
+          )
+          .toList()
+        ..sort((PreviewLanguageOption left, PreviewLanguageOption right) {
+          final int leftScore =
+              (left.code == inferred ||
+                  left.canonicalCode == inferred ||
+                  left.code == selected ||
+                  left.canonicalCode == selected)
+              ? 1
+              : 0;
+          final int rightScore =
+              (right.code == inferred ||
+                  right.canonicalCode == inferred ||
+                  right.code == selected ||
+                  right.canonicalCode == selected)
+              ? 1
+              : 0;
+          if (leftScore != rightScore) {
+            return rightScore.compareTo(leftScore);
+          }
+          return left.code.compareTo(right.code);
+        });
+  return options;
+}

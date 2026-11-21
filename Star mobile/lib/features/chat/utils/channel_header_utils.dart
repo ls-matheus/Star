@@ -1,0 +1,97 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:star_app/core/router/star_router.dart';
+import 'package:star_app/features/channels/domain/channel.dart';
+import 'package:star_app/features/dm/domain/dm_channel_types.dart';
+import 'package:star_app/features/dm/domain/dm_conversation.dart';
+import 'package:star_app/features/favorites/providers/favorite_channels_provider.dart';
+import 'package:star_app/features/friends/providers/friend_providers.dart';
+import 'package:star_app/features/threads/utils/thread_title.dart';
+import 'package:star_app/l10n/generated/star_localizations.dart';
+
+bool isPersonalNotesHeader({
+  required DmConversation? dm,
+  required String channelId,
+  required String? currentUserId,
+}) {
+  if (dm?.isPersonalNotes ?? false) {
+    return true;
+  }
+  return isPersonalNotesChannelRoute(
+    channelId: channelId,
+    currentUserId: currentUserId,
+  );
+}
+
+bool shouldShowPinsForContext({
+  required Channel? channel,
+  required DmConversation? dm,
+}) {
+  if (dm != null && dm.isSystem) {
+    return false;
+  }
+  if (channel != null &&
+      (channel.type == ChannelType.unknown || channel.isThreadOnly)) {
+    return false;
+  }
+  return channel != null || dm != null;
+}
+
+bool shouldShowSearchForContext({
+  required Channel? channel,
+  required DmConversation? dm,
+}) {
+  if (channel != null &&
+      (channel.type == ChannelType.unknown || channel.isThreadOnly)) {
+    return false;
+  }
+  return channel != null || dm != null;
+}
+
+bool shouldShowMemberListToggle({
+  required Channel? channel,
+  required DmConversation? dm,
+}) {
+  if (channel?.type == ChannelType.unknown) {
+    return false;
+  }
+  if (channel != null) {
+    return true;
+  }
+  return dm?.isGroup ?? false;
+}
+
+String resolveChannelHeaderTitle(
+  WidgetRef ref, {
+  required String channelId,
+  required StarLocalizations l10n,
+  required Channel? channel,
+  required DmConversation? dm,
+  required bool isPersonalNotes,
+}) {
+  final String? nickname = ref
+      .watch(favoriteChannelProvider(channelId))
+      .value
+      ?.nickname;
+  if (nickname != null && nickname.isNotEmpty) {
+    return nickname;
+  }
+  final String? friendNickname = dm != null && !dm.isGroup
+      ? ref.watch(friendNicknameProvider(dm.recipientId)).value
+      : null;
+  if (channel != null) {
+    return channel.isThread
+        ? watchThreadTitleText(ref, channel, l10n)
+        : channel.name;
+  }
+  if (isPersonalNotes) {
+    return l10n.personalNotesTitle;
+  }
+  if (dm != null) {
+    return dm.displayNameWith(
+      friendNickname,
+      l10n: l10n,
+      currentUserId: ref.watch(currentUserIdProvider),
+    );
+  }
+  return '';
+}

@@ -1,0 +1,120 @@
+import 'dart:async';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:star_app/core/gateway/providers/gateway_event_providers.dart';
+import 'package:star_app/core/permissions/channel_permission_cache_provider.dart';
+import 'package:star_app/core/permissions/permission.dart';
+import 'package:star_app/core/providers/app/account_user_id.dart';
+import 'package:star_app/core/theme/star_theme_extension.dart';
+import 'package:star_app/features/shell/presentation/widgets/user_panel_widgets.dart';
+import 'package:star_app/features/voice/providers/voice_capability_providers.dart';
+import 'package:star_app/features/voice/providers/voice_session_provider.dart';
+import 'package:star_app/features/voice/providers/voice_session_state.dart';
+import 'package:star_app/l10n/generated/star_localizations.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:star_app/shared/icons/phosphor.dart';
+import 'package:star_app/shared/providers/input_modality_provider.dart';
+import 'package:star_dart/gateway.dart';
+
+class VoiceConnectionLocalControls extends ConsumerWidget {
+  const VoiceConnectionLocalControls({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final StarLocalizations l10n = StarLocalizations.of(context);
+    final VoiceSessionState voice = ref.watch(voiceSessionProvider);
+    final String? connectionId = voice.activeConnectionId;
+    final VoiceState? selfVs = connectionId == null
+        ? null
+        : ref.watch(voiceStateForConnectionProvider(connectionId));
+    final bool isConnected = voice.isConnected;
+    final bool isCameraOn = selfVs?.selfVideo ?? false;
+    final bool isScreenSharing = selfVs?.selfStream ?? false;
+    final bool canScreenShare = ref
+        .watch(screenShareCapabilityProvider)
+        .maybeWhen(data: (bool value) => value, orElse: () => false);
+    final bool hasCamera = ref
+        .watch(videoCameraCapabilityProvider)
+        .maybeWhen(data: (bool value) => value, orElse: () => false);
+    final bool canVideo = hasCamera && _canUseVideo(ref, voice.channelId);
+    final bool canToggleCamera = isConnected && canVideo;
+    final bool desktop = usesDesktopPointerUi(context);
+
+    final List<Widget> controls = <Widget>[];
+    if (hasCamera) {
+      controls.add(
+        Expanded(
+          child: UserPanelMediaButton(
+            icon: PhosphorIcon(
+              desktop
+                  ? (isCameraOn
+                        ? PhosphorIconsFill.camera
+                        : PhosphorIconsFill.cameraSlash)
+                  : (isCameraOn
+                        ? PhosphorIconsFill.videoCamera
+                        : PhosphorIconsFill.videoCameraSlash),
+            ),
+            isActive: isCameraOn,
+            enabled: canToggleCamera,
+            tooltip: l10n.voiceControlVideo,
+            onPressed: canToggleCamera
+                ? () {
+                    unawaited(
+                      ref.read(voiceSessionProvider.notifier).toggleSelfVideo(),
+                    );
+                  }
+                : null,
+          ),
+        ),
+      );
+    }
+    if (canScreenShare) {
+      if (controls.isNotEmpty) {
+        controls.add(SizedBox(width: context.layout.s1));
+      }
+      controls.add(
+        Expanded(
+          child: UserPanelMediaButton(
+            icon: const PhosphorIcon(PhosphorIconsFill.monitorPlay),
+            isActive: isScreenSharing,
+            enabled: isConnected,
+            tooltip: l10n.voiceControlScreenShare,
+            onPressed: isConnected
+                ? () {
+                    unawaited(
+                      ref
+                          .read(voiceSessionProvider.notifier)
+                          .toggleSelfStream(
+                            screenShareNotificationText:
+                                l10n.voiceScreenShareNotificationText,
+                          ),
+                    );
+                  }
+                : null,
+          ),
+        ),
+      );
+    }
+    if (controls.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: EdgeInsets.only(top: context.layout.s3),
+      child: Row(children: controls),
+    );
+  }
+
+  bool _canUseVideo(WidgetRef ref, String? channelId) {
+    if (channelId == null || channelId.isEmpty) {
+      return true;
+    }
+    final int? permissionBits = ref
+        .read(channelPermissionCacheProvider(readAccountUserId(ref)).notifier)
+        .getChannelBits(channelId);
+    if (permissionBits == null) {
+      return true;
+    }
+    return hasPermission(permissionBits, Permission.stream);
+  }
+}

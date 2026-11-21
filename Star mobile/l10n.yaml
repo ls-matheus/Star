@@ -1,0 +1,9 @@
+arb-dir: lib/l10n
+output-class: StarLocalizations
+output-localization-file: star_localizations.dart
+output-dir: lib/l10n/generated
+template-arb-file: star_en.arb
+preferred-supported-locales: ["en"]
+nullable-getter: false
+format: true
+untranslated-messages-file: build/l10n_untranslated.json

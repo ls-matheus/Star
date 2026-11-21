@@ -1,0 +1,305 @@
+import 'dart:async';
+
+import 'package:star_app/core/database/star_database.dart';
+import 'package:star_app/core/permissions/channel_effective_permissions.dart';
+import 'package:star_app/core/providers/database_provider.dart';
+import 'package:star_app/core/router/star_router.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+part 'channel_permission_cache_provider.g.dart';
+
+class ChannelPermissionCaches {
+  const ChannelPermissionCaches({
+    this.effective = const <String, int>{},
+    this.local = const <String, int>{},
+  });
+
+  final Map<String, int> effective;
+  final Map<String, int> local;
+
+  int? operator [](String channelId) => effective[channelId];
+
+  bool get isEmpty => effective.isEmpty && local.isEmpty;
+
+  bool hasEffectiveBits(String channelId) => effective.containsKey(channelId);
+}
+
+@Riverpod(keepAlive: true)
+class ChannelPermissionCache extends _$ChannelPermissionCache {
+  @override
+  ChannelPermissionCaches build(String accountUserId) {
+    ref.watch(currentUserIdProvider);
+    return const ChannelPermissionCaches();
+  }
+
+  final Set<String> _queuedChannelIds = <String>{};
+  final Set<String> _inFlightChannelIds = <String>{};
+
+  int? getChannelBits(String channelId) => state.effective[channelId];
+
+  int? getLocalChannelBits(String channelId) => state.local[channelId];
+
+  void requestChannelBits(String channelId) {
+    if (channelId.isEmpty ||
+        state.effective.containsKey(channelId) ||
+        _inFlightChannelIds.contains(channelId) ||
+        !_queuedChannelIds.add(channelId)) {
+      return;
+    }
+    if (_queuedChannelIds.length == 1) {
+      scheduleMicrotask(() => unawaited(_flushQueuedChannelBits()));
+    }
+  }
+
+  Future<void> _flushQueuedChannelBits() async {
+    final List<String> channelIds = _queuedChannelIds.toList(growable: false);
+    _queuedChannelIds.clear();
+    _inFlightChannelIds.addAll(channelIds);
+    try {
+      final List<ChannelPermissionBitsOutcome> outcomes =
+          await Future.wait(<Future<ChannelPermissionBitsOutcome>>[
+            for (final String channelId in channelIds)
+              computeEffectiveGuildChannelPermissionBitsOutcome(
+                ref: ref,
+                channelId: channelId,
+              ),
+          ]);
+      if (!ref.mounted) {
+        return;
+      }
+      _mergeEffective(<String, ChannelPermissionBitsOutcome>{
+        for (var i = 0; i < channelIds.length; i++) channelIds[i]: outcomes[i],
+      });
+    } finally {
+      _inFlightChannelIds.removeAll(channelIds);
+    }
+  }
+
+  Future<void> rebuildChannel(
+    String channelId, {
+    bool localOnly = false,
+  }) async {
+    if (channelId.isEmpty) {
+      return;
+    }
+    final ChannelPermissionBitsOutcome outcome = localOnly
+        ? await computeChannelLocalGuildChannelPermissionBitsOutcome(
+            ref: ref,
+            channelId: channelId,
+          )
+        : await computeEffectiveGuildChannelPermissionBitsOutcome(
+            ref: ref,
+            channelId: channelId,
+          );
+    if (!ref.mounted) {
+      return;
+    }
+    if (localOnly) {
+      _setLocalBits(channelId: channelId, outcome: outcome);
+      return;
+    }
+    _setEffectiveBits(channelId: channelId, outcome: outcome);
+  }
+
+  Future<void> rebuildGuild(
+    String guildId, {
+    Set<String>? onlyChannelIds,
+  }) async {
+    if (guildId.isEmpty) {
+      return;
+    }
+    final Map<String, ChannelPermissionBitsOutcome> outcomes =
+        await computeEffectiveGuildChannelPermissionBitsOutcomesForGuild(
+          ref: ref,
+          guildId: guildId,
+          onlyChannelIds: onlyChannelIds,
+        );
+    if (!ref.mounted) {
+      return;
+    }
+    _mergeEffective(outcomes);
+  }
+
+  Future<void> rebuildAfterReady({
+    String? priorityGuildId,
+    String? priorityChannelId,
+  }) async {
+    if (priorityChannelId != null && priorityChannelId.isNotEmpty) {
+      await rebuildChannel(priorityChannelId);
+      if (!ref.mounted) {
+        return;
+      }
+    }
+    final db = ref.read(starDatabaseProvider);
+    final List<String> guildIds = <String>[
+      for (final Server guild in await db.guildDao.getServers()) guild.id,
+    ];
+    if (!ref.mounted) {
+      return;
+    }
+    if (priorityGuildId != null && guildIds.remove(priorityGuildId)) {
+      await rebuildGuild(priorityGuildId);
+      if (!ref.mounted) {
+        return;
+      }
+    }
+    final Map<String, int> before = state.effective;
+    final Map<String, ChannelPermissionBitsOutcome> outcomes =
+        <String, ChannelPermissionBitsOutcome>{};
+    for (final String guildId in guildIds) {
+      outcomes.addAll(
+        await computeEffectiveGuildChannelPermissionBitsOutcomesForGuild(
+          ref: ref,
+          guildId: guildId,
+        ),
+      );
+      if (!ref.mounted) {
+        return;
+      }
+    }
+    _mergeEffective(outcomes, unchangedSince: before);
+  }
+
+  void _mergeEffective(
+    Map<String, ChannelPermissionBitsOutcome> outcomes, {
+    Map<String, int>? unchangedSince,
+  }) {
+    final Map<String, int> current = state.effective;
+    final Map<String, int> nextEffective = Map<String, int>.from(current);
+    var changed = false;
+    for (final MapEntry<String, ChannelPermissionBitsOutcome> entry
+        in outcomes.entries) {
+      final String channelId = entry.key;
+      if (unchangedSince != null &&
+          (current[channelId] != unchangedSince[channelId] ||
+              current.containsKey(channelId) !=
+                  unchangedSince.containsKey(channelId))) {
+        continue;
+      }
+      if (entry.value.shouldCache) {
+        if (nextEffective[channelId] != entry.value.value) {
+          nextEffective[channelId] = entry.value.value;
+          changed = true;
+        }
+      } else if (nextEffective.remove(channelId) != null) {
+        changed = true;
+      }
+    }
+    if (changed) {
+      state = ChannelPermissionCaches(
+        effective: nextEffective,
+        local: state.local,
+      );
+    }
+  }
+
+  void evictChannel(String channelId) {
+    if (channelId.isEmpty) {
+      return;
+    }
+    if (!state.effective.containsKey(channelId) &&
+        !state.local.containsKey(channelId)) {
+      return;
+    }
+    final Map<String, int> nextEffective = Map<String, int>.from(
+      state.effective,
+    )..remove(channelId);
+    final Map<String, int> nextLocal = Map<String, int>.from(state.local)
+      ..remove(channelId);
+    state = ChannelPermissionCaches(effective: nextEffective, local: nextLocal);
+  }
+
+  Future<void> evictGuild(String guildId) async {
+    if (guildId.isEmpty || state.isEmpty) {
+      return;
+    }
+    final db = ref.read(starDatabaseProvider);
+    final channels = await db.channelDao.getChannels(
+      guildId,
+      includeThreads: true,
+    );
+    if (!ref.mounted) {
+      return;
+    }
+    final Map<String, int> nextEffective = Map<String, int>.from(
+      state.effective,
+    );
+    final Map<String, int> nextLocal = Map<String, int>.from(state.local);
+    for (final channel in channels) {
+      nextEffective.remove(channel.id);
+      nextLocal.remove(channel.id);
+    }
+    state = ChannelPermissionCaches(effective: nextEffective, local: nextLocal);
+  }
+
+  void clearAll() {
+    if (state.isEmpty) {
+      return;
+    }
+    state = const ChannelPermissionCaches();
+  }
+
+  void cacheEffectiveBits({
+    required String channelId,
+    required ChannelPermissionBitsOutcome outcome,
+  }) {
+    _setEffectiveBits(channelId: channelId, outcome: outcome);
+  }
+
+  void _setEffectiveBits({
+    required String channelId,
+    required ChannelPermissionBitsOutcome outcome,
+  }) {
+    if (!outcome.shouldCache) {
+      if (!state.effective.containsKey(channelId)) {
+        return;
+      }
+      final Map<String, int> nextEffective = Map<String, int>.from(
+        state.effective,
+      )..remove(channelId);
+      state = ChannelPermissionCaches(
+        effective: nextEffective,
+        local: state.local,
+      );
+      return;
+    }
+    if (state.effective[channelId] == outcome.value) {
+      return;
+    }
+    final Map<String, int> nextEffective = Map<String, int>.from(
+      state.effective,
+    );
+    nextEffective[channelId] = outcome.value;
+    state = ChannelPermissionCaches(
+      effective: nextEffective,
+      local: state.local,
+    );
+  }
+
+  void _setLocalBits({
+    required String channelId,
+    required ChannelPermissionBitsOutcome outcome,
+  }) {
+    if (!outcome.shouldCache) {
+      if (!state.local.containsKey(channelId)) {
+        return;
+      }
+      final Map<String, int> nextLocal = Map<String, int>.from(state.local)
+        ..remove(channelId);
+      state = ChannelPermissionCaches(
+        effective: state.effective,
+        local: nextLocal,
+      );
+      return;
+    }
+    if (state.local[channelId] == outcome.value) {
+      return;
+    }
+    final Map<String, int> nextLocal = Map<String, int>.from(state.local);
+    nextLocal[channelId] = outcome.value;
+    state = ChannelPermissionCaches(
+      effective: state.effective,
+      local: nextLocal,
+    );
+  }
+}

@@ -1,0 +1,114 @@
+import 'package:star_app/core/theme/star_theme_extension.dart';
+import 'package:star_app/features/ui/button/star_button.dart';
+import 'package:star_app/l10n/generated/star_localizations.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:star_app/shared/external_links/external_link_handler.dart';
+import 'package:star_app/shared/icons/phosphor.dart';
+
+class ChatVideoPlaybackFailureOverlay extends StatelessWidget {
+  const ChatVideoPlaybackFailureOverlay({
+    required this.fallbackUrl,
+    this.useRootNavigator = false,
+    this.onClose,
+    this.onOpenOptions,
+    super.key,
+  });
+
+  final String fallbackUrl;
+  final bool useRootNavigator;
+  final VoidCallback? onClose;
+  final VoidCallback? onOpenOptions;
+
+  bool get _canOpenInBrowser => fallbackUrl.isNotEmpty;
+
+  Future<void> _openInBrowser(BuildContext context) async {
+    if (!_canOpenInBrowser) {
+      return;
+    }
+    await openAttachmentInBrowser(
+      context,
+      fallbackUrl,
+      useRootNavigator: useRootNavigator,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final StarLocalizations l10n = StarLocalizations.of(context);
+    final Widget content = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          const PhosphorIcon(
+            PhosphorIconsFill.warningCircle,
+            color: Colors.white70,
+            size: 40,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            l10n.chatVideoPlaybackFailed,
+            textAlign: TextAlign.center,
+            style: context.textStyles.channelName.copyWith(color: Colors.white),
+          ),
+          if (_canOpenInBrowser) ...<Widget>[
+            const SizedBox(height: 20),
+            StarButton.primary(
+              onPressed: () => _openInBrowser(context),
+              label: l10n.mediaViewerOpenInBrowser,
+              trailingIcon: PhosphorIconsBold.arrowSquareOut,
+            ),
+          ],
+        ],
+      ),
+    );
+    return ColoredBox(
+      color: Colors.black.withValues(alpha: 0.82),
+      child: SafeArea(
+        child: onClose == null
+            ? Center(child: content)
+            : Stack(
+                fit: StackFit.expand,
+                children: <Widget>[
+                  Center(child: content),
+                  PositionedDirectional(
+                    top: 4,
+                    start: 8,
+                    child: IconButton(
+                      onPressed: onClose,
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.black.withValues(alpha: 0.5),
+                        foregroundColor: Colors.white,
+                      ),
+                      tooltip: l10n.mediaViewerClose,
+                      icon: const PhosphorIcon(
+                        PhosphorIconsBold.x,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                  if (onOpenOptions != null)
+                    PositionedDirectional(
+                      top: 4,
+                      end: 8,
+                      child: IconButton(
+                        onPressed: onOpenOptions,
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.black.withValues(alpha: 0.5),
+                          foregroundColor: Colors.white,
+                        ),
+                        tooltip: l10n.mediaViewerOptions,
+                        icon: const PhosphorIcon(
+                          PhosphorIconsBold.dotsThree,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+      ),
+    );
+  }
+}

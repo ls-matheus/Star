@@ -1,0 +1,176 @@
+import 'package:star_app/core/theme/star_theme_extension.dart';
+import 'package:star_app/features/chat/providers/pickers/emoji_picker_provider.dart';
+import 'package:star_app/features/ui/desktop_surface/star_desktop_surface.dart';
+import 'package:star_app/features/ui/tappable/star_gesture_detector.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:star_app/shared/icons/phosphor.dart';
+import 'package:star_app/shared/utils/emoji/emoji_image_cache.dart';
+import 'package:star_app/shared/utils/emoji/emoji_registry.dart';
+import 'package:star_app/shared/utils/emoji/emoji_utils.dart';
+import 'package:star_app/shared/utils/star_haptics.dart';
+import 'package:star_app/shared/widgets/unicode_emoji_widget.dart';
+
+sealed class QuickReactionItem {
+  const QuickReactionItem();
+}
+
+class UnicodeQuickReaction extends QuickReactionItem {
+  const UnicodeQuickReaction(this.emoji);
+  final String emoji;
+}
+
+class CustomQuickReaction extends QuickReactionItem {
+  const CustomQuickReaction(this.emoji);
+  final GuildEmojiEntry emoji;
+}
+
+String? quickReactionUsageKey(QuickReactionItem item) => switch (item) {
+  UnicodeQuickReaction(:final emoji) => switch (EmojiRegistry.entryBySurrogates(
+    emoji,
+  )) {
+    final EmojiEntry entry => unicodeEmojiFavoriteKey(entry),
+    null => null,
+  },
+  CustomQuickReaction(:final emoji) => emoji.favoriteKey,
+};
+
+String quickReactionShortcode(QuickReactionItem item) => switch (item) {
+  UnicodeQuickReaction(:final emoji) => switch (EmojiRegistry.entryBySurrogates(
+    emoji,
+  )) {
+    final EmojiEntry entry => ':${entry.primaryName}:',
+    null => emoji,
+  },
+  CustomQuickReaction(:final emoji) => ':${emoji.name}:',
+};
+
+const List<QuickReactionItem> kQuickReactionDefaults = [
+  UnicodeQuickReaction('\u{1F44D}'),
+  UnicodeQuickReaction('\u{1F44C}'),
+  UnicodeQuickReaction('\u{1F389}'),
+  UnicodeQuickReaction('\u{2764}\u{FE0F}'),
+];
+
+class QuickReactionRow extends StatelessWidget {
+  final List<QuickReactionItem> items;
+  final ValueChanged<QuickReactionItem> onReaction;
+  final VoidCallback? onAddMore;
+
+  const QuickReactionRow({
+    required this.onReaction,
+    this.items = kQuickReactionDefaults,
+    this.onAddMore,
+    super.key,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final layout = context.layout;
+    return Padding(
+      padding: EdgeInsets.only(
+        left: layout.s1_5,
+        right: layout.s1_5,
+        top: layout.s1,
+        bottom: layout.s1_5,
+      ),
+      child: Row(
+        spacing: layout.s1,
+        children: [
+          for (final item in items)
+            Expanded(
+              child: _QuickReactionButton(
+                onTap: () => onReaction(item),
+                child: QuickReactionGlyph(item: item),
+              ),
+            ),
+          if (onAddMore != null)
+            Expanded(
+              child: _QuickReactionButton(
+                onTap: onAddMore!,
+                child: PhosphorIcon(
+                  PhosphorIconsBold.plus,
+                  size: 24,
+                  color: context.colors.textPrimary,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class QuickReactionGlyph extends StatelessWidget {
+  const QuickReactionGlyph({required this.item, this.size = 24, super.key});
+
+  final QuickReactionItem item;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return switch (item) {
+      UnicodeQuickReaction(:final emoji) => UnicodeEmojiWidget(
+        emoji: emoji,
+        size: size,
+      ),
+      CustomQuickReaction(:final emoji) => CachedEmojiImage(
+        emojiId: emoji.id,
+        animated: false,
+        requestSize: kCustomEmojiFetchSize,
+        size: size,
+      ),
+    };
+  }
+}
+
+class _QuickReactionButton extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onTap;
+
+  const _QuickReactionButton({required this.child, required this.onTap});
+
+  @override
+  State<_QuickReactionButton> createState() => _QuickReactionButtonState();
+}
+
+class _QuickReactionButtonState extends State<_QuickReactionButton> {
+  var _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      cursor: SystemMouseCursors.click,
+      child: StarGestureDetector(
+        onTap: () {
+          StarHaptics.selection();
+          widget.onTap();
+        },
+        child: AspectRatio(
+          aspectRatio: 1,
+          child: StarDesktopSurfaceScope.isMenu(context)
+              ? AnimatedContainer(
+                  duration: context.motion.normal,
+                  decoration: BoxDecoration(
+                    color: _isHovered
+                        ? context.colors.backgroundModifierAccent
+                        : context.colors.backgroundModifierSelected,
+                    borderRadius: context.layout.radiusMd,
+                  ),
+                  child: Center(child: widget.child),
+                )
+              : DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: _isHovered
+                        ? context.colors.backgroundModifierSelected
+                        : context.colors.backgroundModifierHover,
+                    borderRadius: context.layout.radiusLg,
+                  ),
+                  child: Center(child: widget.child),
+                ),
+        ),
+      ),
+    );
+  }
+}

@@ -1,0 +1,122 @@
+import 'dart:async';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:star_app/core/providers/app/account_user_id.dart';
+import 'package:star_app/core/theme/star_theme_extension.dart';
+import 'package:star_app/features/settings/providers/view_models/privacy_dashboard_view_model.dart';
+import 'package:star_app/features/settings/utils/privacy_duration_formatting.dart';
+import 'package:star_app/features/ui/ui.dart';
+import 'package:star_app/l10n/generated/star_localizations.dart';
+import 'package:star_app/material_ui.dart';
+
+class PrivacyActivitySharingSection extends ConsumerStatefulWidget {
+  const PrivacyActivitySharingSection({super.key});
+
+  @override
+  ConsumerState<PrivacyActivitySharingSection> createState() =>
+      _PrivacyActivitySharingSectionState();
+}
+
+class _PrivacyActivitySharingSectionState
+    extends ConsumerState<PrivacyActivitySharingSection> {
+  Timer? _cooldownTimer;
+
+  @override
+  void dispose() {
+    _cooldownTimer?.cancel();
+    super.dispose();
+  }
+
+  void _syncCooldownTimer(int? remainingMs) {
+    if (remainingMs != null) {
+      _cooldownTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
+        if (mounted) {
+          setState(() {});
+        }
+      });
+    } else {
+      _cooldownTimer?.cancel();
+      _cooldownTimer = null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(
+      privacyDashboardViewModelProvider(watchAccountUserId(ref)),
+    );
+    final l10n = StarLocalizations.of(context);
+    final layout = context.layout;
+    final colors = context.colors;
+    final remainingMs = state.voiceActivityCooldownRemainingMs;
+    _syncCooldownTimer(remainingMs);
+
+    return StarSettingsSection(
+      sectionId: 'active-now',
+      title: l10n.privacyDashboardActivitySharingSection,
+      children: [
+        StarSettingsSubsection(
+          title: l10n.privacyDashboardVoiceActivityTitle,
+          children: [
+            StarSettingsSwitchGroup(
+              children: [
+                StarSettingsSwitchItem.grouped(
+                  label: l10n.privacyDashboardShareVoiceActivity,
+                  value: state.defaultShareVoiceActivity,
+                  enabled: remainingMs == null,
+                  onChanged: (value) => unawaited(_confirmChange(value)),
+                ),
+              ],
+            ),
+            if (remainingMs != null) ...[
+              SizedBox(height: layout.s2),
+              Text(
+                l10n.privacyDashboardVoiceActivityCooldown(
+                  formatPrivacyCooldown(l10n, remainingMs),
+                ),
+                style: context.textStyles.bodySmall.copyWith(
+                  color: colors.textPrimaryMuted,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _confirmChange(bool nextValue) async {
+    final l10n = StarLocalizations.of(context);
+    final title = nextValue
+        ? l10n.privacyDashboardVoiceActivityEnableTitle
+        : l10n.privacyDashboardVoiceActivityDisableTitle;
+    final description = nextValue
+        ? l10n.privacyDashboardVoiceActivityEnableDesc
+        : l10n.privacyDashboardVoiceActivityDisableDesc;
+    final confirmLabel = nextValue
+        ? l10n.privacyDashboardVoiceActivityEnableConfirm
+        : l10n.privacyDashboardVoiceActivityDisableConfirm;
+
+    final confirmed = await StarConfirmModal.show(
+      context,
+      title: title,
+      description: description,
+      confirmLabel: confirmLabel,
+      isDanger: !nextValue,
+      onConfirm: () {},
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    await ref
+        .read(
+          privacyDashboardViewModelProvider(readAccountUserId(ref)).notifier,
+        )
+        .updateVoiceActivitySharingWithToast(
+          value: nextValue,
+          successMessage: l10n.privacyDashboardVoiceActivityUpdated,
+          failureMessage: l10n.privacyDashboardVoiceActivityUpdateFailed,
+        );
+  }
+}

@@ -1,0 +1,190 @@
+import 'package:star_app/core/theme/star_theme_extension.dart';
+import 'package:star_app/features/shell/presentation/responsive_layout.dart';
+import 'package:star_app/features/ui/ui.dart';
+import 'package:star_app/material_ui.dart';
+
+abstract final class WideComposerLayout {
+  const WideComposerLayout._();
+  static const double boxInset = 6;
+  static const double boxRadius = 8;
+  static const double ringWidth = 1;
+  static const double boxMinHeight = 58;
+  static const double densePaddingY = 10;
+  static const double densePaddingYMouse = 12;
+  static const double densePaddingXMouse = 13;
+  static const double densePaddingXTouch = 12;
+  static const double actionGap = 8;
+  static const double mouseActionGap = 4;
+  static const double mouseContentGap = 20;
+  static const double mouseButtonRadius = 6;
+  static const double mouseButtonIconSize = 22;
+  static const double mouseVoiceDividerHeight = 24;
+  static const double denseColumnGap = 12;
+
+  static double densePaddingYFor({required bool touchPrimary}) =>
+      touchPrimary ? densePaddingY : densePaddingYMouse;
+
+  static double densePaddingX({required bool touchPrimary}) =>
+      touchPrimary ? densePaddingXTouch : densePaddingXMouse;
+
+  static EdgeInsets denseRowPadding({required bool touchPrimary}) =>
+      EdgeInsets.symmetric(
+        horizontal: densePaddingX(touchPrimary: touchPrimary),
+      );
+
+  static const double actionButtonExtent = 32;
+  static const double statusLineHeight = 18;
+  static const double statusSafeGap = 8;
+  static const double statusSafeArea =
+      statusLineHeight + statusSafeGap + statusSafeGap;
+  static const double fadeHeight = statusSafeArea - boxInset;
+  static const double mobileFadeHeight = statusSafeArea;
+  static const double statusRailPaddingInline = 10;
+  static const double mobileStatusRailPaddingInline = 8;
+  static const double statusRailGap = 8;
+  static const double typingMaxWidth = 384;
+  static const double slowmodeMaxWidth = 224;
+  static const double actionRowMinHeight = 36;
+  static const double statusFadeHeight = statusSafeArea;
+  static const double statusFadeOpacity = 0.7;
+  static const double statusOverlayHeight = 80;
+  static const double messageListTrailingInset = fadeHeight;
+  static const double statusRowHeight = 24;
+  static const double mobileComposerTopInset = 4;
+  static const double mobileMessageListTrailingInset =
+      statusRowHeight - mobileComposerTopInset;
+  static const Duration ringTransition = Duration(milliseconds: 150);
+
+  static double fadeHeightFor({required bool isMobile}) =>
+      isMobile ? mobileFadeHeight : fadeHeight;
+
+  static double statusRailPaddingInlineFor({required bool isMobile}) =>
+      isMobile ? mobileStatusRailPaddingInline : statusRailPaddingInline;
+}
+
+Color composerStatusSurfaceColor(BuildContext context) {
+  return isMobileLayout(context)
+      ? context.colors.chatBackground
+      : context.colors.backgroundSecondaryLighter;
+}
+
+Color wideComposerRingColor(BuildContext context, {required bool focused}) {
+  final Color accent = context.colors.backgroundModifierAccent;
+  return accent.withValues(alpha: accent.a * (focused ? 0.45 : 0.20));
+}
+
+Color wideComposerActionStackColor(BuildContext context) {
+  return Color.lerp(
+    context.colors.backgroundTextarea,
+    context.colors.backgroundTertiary,
+    0.16,
+  )!;
+}
+
+class WideComposerVoiceSeparator extends StatelessWidget {
+  const WideComposerVoiceSeparator({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: WideComposerLayout.mouseVoiceDividerHeight,
+      child: VerticalDivider(
+        color: context.colors.backgroundModifierHover,
+        width: 1,
+        thickness: 1,
+      ),
+    );
+  }
+}
+
+class WideComposerFade extends StatelessWidget {
+  const WideComposerFade({required this.surfaceColor, super.key});
+
+  final Color surfaceColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: <Color>[
+              surfaceColor.withValues(alpha: 0),
+              surfaceColor.withValues(
+                alpha: surfaceColor.a * WideComposerLayout.statusFadeOpacity,
+              ),
+            ],
+          ),
+        ),
+        child: const SizedBox.expand(),
+      ),
+    );
+  }
+}
+
+class WideComposerFloatingBox extends StatelessWidget {
+  const WideComposerFloatingBox({
+    required this.focused,
+    required this.child,
+    this.clipBehavior = Clip.antiAlias,
+    super.key,
+  });
+
+  final bool focused;
+  final Widget child;
+  final Clip clipBehavior;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color ringColor = wideComposerRingColor(context, focused: focused);
+    return AnimatedContainer(
+      duration: WideComposerLayout.ringTransition,
+      curve: Curves.easeInOut,
+      constraints: const BoxConstraints(
+        minHeight: WideComposerLayout.boxMinHeight,
+      ),
+      decoration: BoxDecoration(
+        color: context.colors.backgroundTextarea,
+        borderRadius: BorderRadius.circular(WideComposerLayout.boxRadius),
+        border: Border.all(color: ringColor),
+      ),
+      clipBehavior: clipBehavior,
+      child: child,
+    );
+  }
+}
+
+List<Shadow> wideComposerStatusTextShadows(Color surfaceColor) {
+  return <Shadow>[
+    Shadow(color: surfaceColor, blurRadius: 3),
+    Shadow(color: surfaceColor, blurRadius: 8),
+  ];
+}
+
+class WideComposerMouseButton extends StatelessWidget {
+  const WideComposerMouseButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+    super.key,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return StarButton.desktop(
+      icon: icon,
+      semanticLabel: tooltip,
+      onPressed: onPressed,
+      showTooltip: true,
+      extent: WideComposerLayout.actionButtonExtent,
+      iconSize: WideComposerLayout.mouseButtonIconSize,
+      borderRadius: WideComposerLayout.mouseButtonRadius,
+    );
+  }
+}

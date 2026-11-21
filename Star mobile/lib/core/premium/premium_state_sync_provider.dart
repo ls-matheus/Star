@@ -1,0 +1,65 @@
+import 'dart:async';
+
+import 'package:star_app/core/api/star_client_provider.dart';
+import 'package:star_app/core/premium/current_user_entitlements_provider.dart';
+import 'package:star_app/core/providers/app/account_user_id.dart';
+import 'package:star_app/core/providers/gateway/gateway_ready_provider.dart';
+import 'package:star_app/core/router/star_router.dart';
+import 'package:star_app/core/talker.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+part 'premium_state_sync_provider.g.dart';
+
+Future<void>? _premiumStateRefreshInFlight;
+String? _premiumStateRefreshUserId;
+
+@Riverpod(keepAlive: true)
+void premiumStateSyncBinding(Ref ref) {
+  ref.listen<bool>(gatewayReadyProvider, (bool? previous, bool next) {
+    if (!next) {
+      return;
+    }
+    unawaited(_refreshPremiumState(ref));
+  });
+}
+
+Future<void> refreshPremiumState(Ref ref) async {
+  await _refreshPremiumState(ref);
+}
+
+Future<void> _refreshPremiumState(Ref ref) async {
+  final String? userId = ref.read(currentUserIdProvider);
+  final Future<void>? inFlight = _premiumStateRefreshInFlight;
+  if (inFlight != null && _premiumStateRefreshUserId == userId) {
+    await inFlight;
+    return;
+  }
+  final Future<void> request = _fetchPremiumState(ref, userId);
+  _premiumStateRefreshInFlight = request;
+  _premiumStateRefreshUserId = userId;
+  try {
+    await request;
+  } finally {
+    if (identical(_premiumStateRefreshInFlight, request)) {
+      _premiumStateRefreshInFlight = null;
+      _premiumStateRefreshUserId = null;
+    }
+  }
+}
+
+Future<void> _fetchPremiumState(Ref ref, String? requestedUserId) async {
+  try {
+    final state = await ref
+        .read(starClientProvider)
+        .premium
+        .getPremiumState();
+    if (ref.read(currentUserIdProvider) != requestedUserId) {
+      return;
+    }
+    ref
+        .read(currentUserEntitlementsProvider(readAccountUserId(ref)).notifier)
+        .applyPremiumState(state);
+  } on Object catch (error, stackTrace) {
+    talker.error('Premium state fetch failed', error, stackTrace);
+  }
+}

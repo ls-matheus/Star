@@ -1,0 +1,422 @@
+import 'package:star_app/core/theme/color_families.dart';
+import 'package:star_app/core/theme/color_generator.dart';
+import 'package:star_app/core/theme/star_color_theme.dart';
+import 'package:star_app/material_ui.dart';
+
+StarColorTheme buildCoalColorTheme({double saturationFactor = 1.0}) {
+  Color tone(
+    ColorFamily family,
+    double lightness, {
+    double alpha = 1.0,
+    double? saturation,
+  }) {
+    final sat = saturation ?? family.saturation;
+    final effectiveSat = family.useSaturationFactor
+        ? sat * saturationFactor
+        : sat;
+    return generateTone(
+      hue: family.hue,
+      saturation: effectiveSat,
+      lightness: lightness,
+      opacity: alpha,
+    );
+  }
+
+  Color toneDirect({
+    required double hue,
+    required double saturation,
+    required double lightness,
+    double alpha = 1.0,
+    bool useSatFactor = true,
+  }) {
+    final effectiveSat = useSatFactor
+        ? saturation * saturationFactor
+        : saturation;
+    return generateTone(
+      hue: hue,
+      saturation: effectiveSat,
+      lightness: lightness,
+      opacity: alpha,
+    );
+  }
+
+  final coalSurface = const ColorScale(
+    family: StarColorFamilies.neutralDark,
+    lightnessStart: 1,
+    lightnessEnd: 12,
+    curve: ScaleCurves.easeOut,
+    stops: [
+      ScaleStop(name: 'backgroundPrimary', position: 0),
+      ScaleStop(name: 'backgroundSecondary', position: 0.16),
+      ScaleStop(name: 'backgroundSecondaryLighter', position: 0.22),
+      ScaleStop(name: 'backgroundSecondaryAlt', position: 0.28),
+      ScaleStop(name: 'backgroundTertiary', position: 0.4),
+      ScaleStop(name: 'backgroundChannelHeader', position: 0.34),
+      ScaleStop(name: 'guildListForeground', position: 0.38),
+      ScaleStop(name: 'backgroundHeaderSecondary', position: 0.5),
+      ScaleStop(name: 'backgroundHeaderPrimary', position: 0.5),
+      ScaleStop(name: 'backgroundTextarea', position: 0.3),
+      ScaleStop(name: 'backgroundHeaderPrimaryHover', position: 0.85),
+    ],
+  ).build(saturationFactor: saturationFactor);
+
+  final darkText = const ColorScale(
+    family: StarColorFamilies.neutralDark,
+    lightnessStart: 60,
+    lightnessEnd: 96,
+    curve: ScaleCurves.easeInOut,
+    stops: [
+      ScaleStop(name: 'textTertiarySecondary', position: 0),
+      ScaleStop(name: 'textTertiaryMuted', position: 0.2),
+      ScaleStop(name: 'textTertiary', position: 0.38),
+      ScaleStop(name: 'textPrimaryMuted', position: 0.55),
+      ScaleStop(name: 'textChatMuted', position: 0.55),
+      ScaleStop(name: 'textSecondary', position: 0.72),
+      ScaleStop(name: 'textChat', position: 0.82),
+      ScaleStop(name: 'textPrimary', position: 1),
+    ],
+  ).build(saturationFactor: saturationFactor);
+
+  final brandPrimary = tone(StarColorFamilies.brand, 55);
+  final statusOnline = tone(StarColorFamilies.statusOnline, 40);
+  final statusIdle = tone(StarColorFamilies.statusIdle, 50);
+  final statusDnd = tone(StarColorFamilies.statusDnd, 60);
+  final textLink = tone(StarColorFamilies.link, 70);
+  final textSecondary = darkText['textSecondary']!;
+  final textPrimary = darkText['textPrimary']!;
+
+  final backgroundPrimary = coalSurface['backgroundPrimary']!;
+  final backgroundSecondary = backgroundPrimary;
+  final backgroundSecondaryAlt = coalSurface['backgroundSecondaryAlt']!;
+  final backgroundTertiary = coalSurface['backgroundTertiary']!;
+
+  final borderColorVal = tone(StarColorFamilies.neutralDark, 50, alpha: 0.2);
+
+  final backgroundModifierHoverVal = tone(
+    StarColorFamilies.neutralDark,
+    100,
+    alpha: 0.04,
+  );
+  final backgroundModifierSelectedVal = tone(
+    StarColorFamilies.neutralDark,
+    100,
+    alpha: 0.08,
+  );
+  final backgroundModifierAccentVal = tone(
+    StarColorFamilies.neutralDark,
+    65,
+    saturation: 10,
+    alpha: 0.18,
+  );
+
+  return StarColorTheme(
+    backgroundPrimary: backgroundPrimary,
+    backgroundSecondary: backgroundSecondary,
+    backgroundSecondaryLighter: backgroundPrimary,
+    backgroundSecondaryAlt: backgroundSecondaryAlt,
+    backgroundTertiary: backgroundTertiary,
+    backgroundTextarea: coalSurface['backgroundTextarea']!,
+    backgroundHeaderPrimary: coalSurface['backgroundHeaderPrimary']!,
+    backgroundHeaderPrimaryHover: coalSurface['backgroundHeaderPrimaryHover']!,
+    backgroundHeaderSecondary: coalSurface['backgroundHeaderSecondary']!,
+    backgroundChannelHeader: coalSurface['backgroundChannelHeader']!,
+    backgroundFloating: tone(StarColorFamilies.neutralDark, 3),
+    guildListForeground: coalSurface['guildListForeground']!,
+    backgroundModifierHover: backgroundModifierHoverVal,
+    backgroundModifierSelected: backgroundModifierSelectedVal,
+    backgroundModifierAccent: backgroundModifierAccentVal,
+    backgroundModifierAccentFocus: tone(
+      StarColorFamilies.neutralDark,
+      70,
+      saturation: 10,
+      alpha: 0.26,
+    ),
+
+    brandPrimary: brandPrimary,
+    brandSecondary: tone(StarColorFamilies.brand, 49, saturation: 60),
+    brandPrimaryLight: toneDirect(hue: 242, saturation: 100, lightness: 84),
+    brandPrimaryFill: toneDirect(
+      hue: 0,
+      saturation: 0,
+      lightness: 100,
+      useSatFactor: false,
+    ),
+
+    statusOnline: statusOnline,
+    statusIdle: statusIdle,
+    statusDnd: statusDnd,
+    statusOffline: tone(StarColorFamilies.statusOffline, 65),
+    statusDanger: tone(StarColorFamilies.statusDanger, 55),
+    statusWarning: statusIdle,
+
+    textPrimary: textPrimary,
+    textSecondary: textSecondary,
+    textTertiary: darkText['textTertiary']!,
+    textPrimaryMuted: darkText['textPrimaryMuted']!,
+    textChat: darkText['textChat']!,
+    textChatMuted: darkText['textChatMuted']!,
+    textLink: textLink,
+    textOnBrandPrimary: toneDirect(
+      hue: 0,
+      saturation: 0,
+      lightness: 98,
+      useSatFactor: false,
+    ),
+    textTertiaryMuted: darkText['textTertiaryMuted']!,
+    textTertiarySecondary: darkText['textTertiarySecondary']!,
+    textWarning: tone(StarColorFamilies.statusIdle, 55),
+    textDanger: tone(StarColorFamilies.statusDanger, 55),
+    textPositive: statusOnline,
+    textCode: tone(StarColorFamilies.textCode, 90),
+
+    borderColor: borderColorVal,
+    borderColorHover: tone(StarColorFamilies.neutralDark, 50, alpha: 0.3),
+    borderColorFocus: toneDirect(
+      hue: 198,
+      saturation: 92,
+      lightness: 70,
+      alpha: 0.45,
+    ),
+
+    accentPrimary: brandPrimary,
+    accentSuccess: statusOnline,
+    accentWarning: statusIdle,
+    accentDanger: statusDnd,
+    accentInfo: textLink,
+    accentPurple: tone(StarColorFamilies.accentPurple, 65),
+
+    alertNote: tone(StarColorFamilies.link, 70),
+    alertTip: tone(StarColorFamilies.statusOnline, 45),
+    alertImportant: tone(StarColorFamilies.accentPurple, 65),
+    alertWarning: tone(StarColorFamilies.statusIdle, 55),
+    alertCaution: toneDirect(hue: 359, saturation: 75, lightness: 60),
+
+    markupMentionText: textLink,
+    markupMentionFill: textLink.withValues(alpha: 0.2),
+    markupMentionBorder: tone(StarColorFamilies.link, 70, alpha: 0.3),
+    markupInteractiveHoverText: textLink,
+    markupInteractiveHoverFill: textLink.withValues(alpha: 0.3),
+    markupJumpLinkText: textLink,
+    markupJumpLinkFill: textLink.withValues(alpha: 0.12),
+    markupJumpLinkHoverFill: textLink.withValues(alpha: 0.2),
+    markupEveryoneText: toneDirect(hue: 250, saturation: 80, lightness: 75),
+    markupEveryoneFill: toneDirect(
+      hue: 250,
+      saturation: 80,
+      lightness: 75,
+      alpha: 0.18,
+    ),
+    markupEveryoneBorder: toneDirect(
+      hue: 250,
+      saturation: 80,
+      lightness: 75,
+      alpha: 0.3,
+    ),
+    markupHereText: toneDirect(hue: 45, saturation: 90, lightness: 70),
+    markupHereFill: toneDirect(
+      hue: 45,
+      saturation: 90,
+      lightness: 70,
+      alpha: 0.18,
+    ),
+    markupHereBorder: toneDirect(
+      hue: 45,
+      saturation: 90,
+      lightness: 70,
+      alpha: 0.3,
+    ),
+
+    buttonPrimaryFill: toneDirect(hue: 139, saturation: 55, lightness: 44),
+    buttonPrimaryActiveFill: toneDirect(
+      hue: 136,
+      saturation: 60,
+      lightness: 38,
+    ),
+    buttonPrimaryText: toneDirect(
+      hue: 0,
+      saturation: 0,
+      lightness: 100,
+      useSatFactor: false,
+    ),
+    buttonSecondaryFill: toneDirect(
+      hue: 0,
+      saturation: 0,
+      lightness: 100,
+      alpha: 0.04,
+      useSatFactor: false,
+    ),
+    buttonSecondaryActiveFill: toneDirect(
+      hue: 0,
+      saturation: 0,
+      lightness: 100,
+      alpha: 0.07,
+      useSatFactor: false,
+    ),
+    buttonSecondaryText: textPrimary,
+    buttonSecondaryActiveText: textPrimary,
+    buttonDangerFill: toneDirect(hue: 359, saturation: 70, lightness: 54),
+    buttonDangerActiveFill: toneDirect(hue: 359, saturation: 65, lightness: 45),
+    buttonDangerText: toneDirect(
+      hue: 0,
+      saturation: 0,
+      lightness: 100,
+      useSatFactor: false,
+    ),
+    buttonDangerOutlineBorder: toneDirect(
+      hue: 359,
+      saturation: 70,
+      lightness: 54,
+    ),
+    buttonDangerOutlineText: toneDirect(
+      hue: 0,
+      saturation: 0,
+      lightness: 100,
+      useSatFactor: false,
+    ),
+    buttonDangerOutlineActiveFill: toneDirect(
+      hue: 359,
+      saturation: 65,
+      lightness: 48,
+    ),
+    buttonGhostText: toneDirect(
+      hue: 0,
+      saturation: 0,
+      lightness: 100,
+      useSatFactor: false,
+    ),
+    buttonInvertedFill: toneDirect(
+      hue: 0,
+      saturation: 0,
+      lightness: 100,
+      useSatFactor: false,
+    ),
+    buttonInvertedText: toneDirect(
+      hue: 0,
+      saturation: 0,
+      lightness: 0,
+      useSatFactor: false,
+    ),
+    buttonOutlineBorder: toneDirect(
+      hue: 0,
+      saturation: 0,
+      lightness: 100,
+      alpha: 0.08,
+      useSatFactor: false,
+    ),
+    buttonOutlineText: toneDirect(
+      hue: 0,
+      saturation: 0,
+      lightness: 100,
+      useSatFactor: false,
+    ),
+    buttonOutlineActiveFill: toneDirect(
+      hue: 0,
+      saturation: 0,
+      lightness: 100,
+      alpha: 0.12,
+      useSatFactor: false,
+    ),
+
+    panelControlBg: Color.alphaBlend(
+      backgroundPrimary.withValues(alpha: 0.9),
+      tone(StarColorFamilies.neutralDark, 0),
+    ),
+    panelControlBorder: tone(
+      StarColorFamilies.neutralDark,
+      30,
+      saturation: 20,
+      alpha: 0.35,
+    ),
+    panelControlDivider: tone(
+      StarColorFamilies.neutralDark,
+      25,
+      saturation: 20,
+      alpha: 0.28,
+    ),
+    panelControlHighlight: const Color(0x0FFFFFFF),
+
+    controlButtonNormalBg: Colors.transparent,
+    controlButtonNormalText: darkText['textPrimaryMuted']!,
+    controlButtonHoverBg: tone(StarColorFamilies.neutralDark, 12),
+    controlButtonHoverText: textPrimary,
+    controlButtonActiveBg: tone(StarColorFamilies.neutralDark, 14),
+    controlButtonActiveText: textPrimary,
+    controlButtonDangerText: toneDirect(hue: 1, saturation: 77, lightness: 60),
+    controlButtonDangerHoverBg: toneDirect(
+      hue: 1,
+      saturation: 77,
+      lightness: 20,
+    ),
+
+    switchTrackInactive: toneDirect(hue: 220, saturation: 9, lightness: 46),
+    switchThumb: Colors.white,
+    switchThumbCheckedIcon: brandPrimary,
+    switchThumbUncheckedIcon: darkText['textTertiary']!,
+
+    menuDangerText: toneDirect(hue: 350, saturation: 90, lightness: 65),
+
+    bgCode: tone(StarColorFamilies.neutralDark, 8),
+    bgCodeBlock: backgroundSecondaryAlt,
+    bgTableHeader: backgroundTertiary,
+    bgTableRowOdd: backgroundPrimary,
+    bgTableRowEven: backgroundSecondary,
+
+    surfaceInteractiveHoverBg: backgroundModifierHoverVal,
+    surfaceInteractiveSelectedBg: backgroundModifierSelectedVal,
+    surfaceInteractiveSelectedColor: textPrimary,
+    listItemSelectedBg: tone(
+      StarColorFamilies.neutralDark,
+      100,
+      alpha: 0.035,
+    ),
+    listItemSelectedBorder: tone(
+      StarColorFamilies.neutralDark,
+      100,
+      alpha: 0.05,
+    ),
+    listItemPressedBg: tone(StarColorFamilies.neutralDark, 100, alpha: 0.08),
+
+    scrollbarThumbBg: const Color(0x59A0A0A0),
+    scrollbarThumbBgHover: const Color(0x8CC8C8C8),
+    scrollbarTrackBg: const Color(0x73000000),
+
+    textSelection: toneDirect(
+      hue: 198,
+      saturation: 92,
+      lightness: 70,
+      alpha: 0.35,
+    ),
+
+    chatBackground: backgroundSecondary,
+    chatInputBackground: coalSurface['backgroundSecondaryLighter']!,
+    serverSidebarBackground: backgroundSecondary,
+    serverIconBackground: backgroundTertiary,
+    serverIconActive: brandPrimary,
+    channelSidebarBackground: backgroundSecondary,
+    memberListBackground: backgroundSecondary,
+    userPanelBackground: tone(StarColorFamilies.neutralDark, 10),
+    userAreaDividerColor: backgroundModifierHoverVal.withValues(
+      alpha: backgroundModifierHoverVal.a * 0.7,
+    ),
+    embedBackground: backgroundSecondaryAlt,
+    embedBorder: borderColorVal,
+    mentionBackground: backgroundModifierAccentVal,
+    spoilerBackground: const Color(0x14FFFFFF),
+    spoilerOverlayHoverColor: const Color(0x24FFFFFF),
+    modalScrim: const Color(0xB3000000),
+    guildBannerGradient: const Color(0x4D000000),
+    focusPrimary: const Color(0xFF00B0F4),
+    interactiveActive: Color.lerp(
+      toneDirect(hue: 0, saturation: 0, lightness: 100, useSatFactor: false),
+      toneDirect(hue: 245, saturation: 100, lightness: 80),
+      40 / 140,
+    )!,
+    interactiveNormal: textSecondary,
+    interactiveHover: textPrimary,
+    interactiveMuted: Color.lerp(
+      toneDirect(hue: 228, saturation: 10, lightness: 35),
+      toneDirect(hue: 245, saturation: 100, lightness: 80),
+      40 / 140,
+    )!,
+  );
+}

@@ -1,0 +1,754 @@
+import 'dart:async';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:star_app/core/gateway/providers/gateway_event_providers.dart';
+import 'package:star_app/core/permissions/channel_permission_cache_provider.dart';
+import 'package:star_app/core/providers/app/account_user_id.dart';
+import 'package:star_app/core/router/star_router.dart';
+import 'package:star_app/core/theme/star_theme_extension.dart';
+import 'package:star_app/features/accessibility/domain/text_scale.dart';
+import 'package:star_app/features/channels/domain/channel.dart';
+import 'package:star_app/features/channels/presentation/widgets/channel_icon.dart';
+import 'package:star_app/features/channels/providers/channel_list_view_model.dart';
+import 'package:star_app/features/channels/providers/channel_providers.dart';
+import 'package:star_app/features/chat/presentation/sheets/channel_details_sheet.dart';
+import 'package:star_app/features/chat/presentation/widgets/channel/chat_back_button.dart';
+import 'package:star_app/features/chat/presentation/widgets/channel/header/channel_header_left_section.dart';
+import 'package:star_app/features/chat/presentation/widgets/channel/header/channel_header_toolbar.dart';
+import 'package:star_app/features/chat/presentation/widgets/channel/header/dm_header_avatar.dart';
+import 'package:star_app/features/chat/providers/core/chat_back_button_unread_provider.dart';
+import 'package:star_app/features/chat/providers/core/chat_view_model.dart';
+import 'package:star_app/features/chat/utils/channel_details_handheld.dart';
+import 'package:star_app/features/chat/utils/channel_header_utils.dart';
+import 'package:star_app/features/chat/utils/composer/inline_expression_panel_layout.dart';
+import 'package:star_app/features/dm/domain/dm_channel_types.dart';
+import 'package:star_app/features/dm/domain/dm_conversation.dart';
+import 'package:star_app/features/dm/providers/dm_view_model.dart';
+import 'package:star_app/features/favorites/domain/favorite_guild_id.dart';
+import 'package:star_app/features/favorites/providers/favorite_channels_provider.dart';
+import 'package:star_app/features/forum/presentation/sheets/forum_view_options_sheet.dart';
+import 'package:star_app/features/forum/presentation/widgets/forum_mobile_header_search.dart';
+import 'package:star_app/features/forum/providers/forum_header_search_provider.dart';
+import 'package:star_app/features/guilds/domain/guild.dart';
+import 'package:star_app/features/guilds/providers/guild_list_view_model.dart';
+import 'package:star_app/features/mature_content/providers/mature_content_agreements_provider.dart';
+import 'package:star_app/features/settings/providers/preferences/appearance_preferences_provider.dart';
+import 'package:star_app/features/shell/navigation/invoke_shell_back.dart';
+import 'package:star_app/features/shell/navigation/shell_chat_back.dart';
+import 'package:star_app/features/shell/presentation/responsive_layout.dart';
+import 'package:star_app/features/threads/presentation/thread_header_buttons.dart';
+import 'package:star_app/features/threads/presentation/thread_menu_sheet.dart';
+import 'package:star_app/features/threads/utils/thread_title.dart';
+import 'package:star_app/features/ui/ui.dart';
+import 'package:star_app/features/voice/providers/voice_session_provider.dart';
+import 'package:star_app/features/voice/providers/voice_session_state.dart';
+import 'package:star_app/features/voice/utils/callkit/call_actions.dart';
+import 'package:star_app/features/voice/utils/e2ee/e2ee_display.dart';
+import 'package:star_app/features/voice/utils/media/camera_platform.dart';
+import 'package:star_app/l10n/generated/star_localizations.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:star_app/shared/icons/phosphor.dart';
+import 'package:star_app/shared/providers/input_modality_provider.dart';
+import 'package:star_app/shared/utils/chat_context_utils.dart';
+import 'package:star_dart/gateway.dart';
+
+class ChannelHeader extends ConsumerWidget {
+  const ChannelHeader({
+    this.channelId,
+    this.showMessageActions = true,
+    this.forceVoiceCallStyle = false,
+    super.key,
+  });
+
+  final String? channelId;
+  final bool showMessageActions;
+  final bool forceVoiceCallStyle;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final StarLocalizations l10n = StarLocalizations.of(context);
+    final String viewModelChannelId = ref.watch(
+      chatViewModelProvider.select((s) => s.channelId),
+    );
+    final String channelId =
+        (this.channelId != null && this.channelId!.isNotEmpty)
+        ? this.channelId!
+        : viewModelChannelId;
+    final Channel? channel =
+        ref.watch(channelByIdProvider(channelId)).value ??
+        ref.watch(
+          channelListViewModelProvider.select(
+            (ChannelListState state) => findChannelById(state, channelId),
+          ),
+        );
+    final String? currentUserId = ref.watch(currentUserIdProvider);
+    final DmConversation? dm = channel == null
+        ? findDmById(
+            ref.watch(dmViewModelProvider.select((s) => s.conversations)),
+            channelId,
+          )
+        : null;
+    final bool isPersonalNotes = isPersonalNotesHeader(
+      dm: dm,
+      channelId: channelId,
+      currentUserId: currentUserId,
+    );
+    final bool isMemberListVisible = ref.watch(
+      channelListViewModelProvider.select(
+        (ChannelListState state) => state.isMemberListToggleActive(
+          channelId: channelId,
+          channelType: channel?.type,
+        ),
+      ),
+    );
+    final bool highContrast = _resolveHighContrast(
+      ref,
+      channel: channel,
+      forceVoiceCallStyle: forceVoiceCallStyle,
+    );
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: highContrast
+            ? Colors.transparent
+            : context.colors.backgroundSecondaryLighter,
+        border: Border(
+          bottom: BorderSide(
+            color: highContrast
+                ? Colors.transparent
+                : context.colors.userAreaDividerColor,
+          ),
+        ),
+      ),
+      child: highContrast
+          ? Stack(
+              children: [
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.black.withValues(alpha: 0.96),
+                          Colors.black.withValues(alpha: 0.58),
+                          Colors.transparent,
+                        ],
+                        stops: const <double>[0, 0.72, 1],
+                      ),
+                    ),
+                  ),
+                ),
+                _buildBody(
+                  context,
+                  ref,
+                  channelId: channelId,
+                  l10n: l10n,
+                  channel: channel,
+                  dm: dm,
+                  isPersonalNotes: isPersonalNotes,
+                  isMemberListVisible: isMemberListVisible,
+                  highContrast: highContrast,
+                ),
+              ],
+            )
+          : _buildBody(
+              context,
+              ref,
+              channelId: channelId,
+              l10n: l10n,
+              channel: channel,
+              dm: dm,
+              isPersonalNotes: isPersonalNotes,
+              isMemberListVisible: isMemberListVisible,
+              highContrast: highContrast,
+            ),
+    );
+  }
+
+  Widget _buildBody(
+    BuildContext context,
+    WidgetRef ref, {
+    required String channelId,
+    required StarLocalizations l10n,
+    required Channel? channel,
+    required DmConversation? dm,
+    required bool isPersonalNotes,
+    required bool isMemberListVisible,
+    required bool highContrast,
+  }) {
+    final bool forumHandheld =
+        (channel?.isThreadOnly ?? false) && isForumHandheldLayout(context);
+    return ResponsiveLayout(
+      builder: (context, mode) {
+        if (mode == LayoutMode.mobile || forumHandheld) {
+          return _buildMobileBar(
+            context,
+            ref,
+            channelId: channelId,
+            l10n: l10n,
+            channel: channel,
+            dm: dm,
+            isPersonalNotes: isPersonalNotes,
+          );
+        }
+        return _buildWideBar(
+          context,
+          ref,
+          channelId: channelId,
+          channel: channel,
+          dm: dm,
+          isPersonalNotes: isPersonalNotes,
+          isMemberListVisible: isMemberListVisible,
+          highContrast: highContrast,
+        );
+      },
+    );
+  }
+
+  Widget _buildWideBar(
+    BuildContext context,
+    WidgetRef ref, {
+    required String channelId,
+    required Channel? channel,
+    required DmConversation? dm,
+    required bool isPersonalNotes,
+    required bool isMemberListVisible,
+    required bool highContrast,
+  }) {
+    final bool isThread = channel?.isThread ?? false;
+    final int backButtonUnreadCount = ref.watch(
+      chatBackButtonUnreadCountProvider(channelId),
+    );
+    final bool showBackButton = showsChannelHeaderBackButton(
+      context,
+      ref,
+      isThread: isThread,
+    );
+    return StarConstrainedUiTextScale(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: context.layout.headerHeight),
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: context.layout.s4),
+          child: Row(
+            children: [
+              if (showBackButton)
+                ChatBackButton(
+                  unreadCount: backButtonUnreadCount,
+                  badgeCutoutColor: highContrast
+                      ? Colors.transparent
+                      : context.colors.backgroundSecondaryLighter,
+                  onPressed: () => invokeShellBack(context, ref),
+                ),
+              Expanded(
+                child: ChannelHeaderLeftSection(
+                  channelId: channelId,
+                  channel: channel,
+                  dm: dm,
+                  isPersonalNotes: isPersonalNotes,
+                  highContrast: highContrast,
+                ),
+              ),
+              if (usesDesktopPointerUi(context)) const SizedBox(width: 16),
+              ChannelHeaderToolbar(
+                channelId: channelId,
+                channel: channel,
+                dm: dm,
+                isPersonalNotes: isPersonalNotes,
+                isMemberListVisible: isMemberListVisible,
+                showMessageActions: showMessageActions,
+                highContrast: highContrast,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileBar(
+    BuildContext context,
+    WidgetRef ref, {
+    required String channelId,
+    required StarLocalizations l10n,
+    required Channel? channel,
+    required DmConversation? dm,
+    required bool isPersonalNotes,
+  }) {
+    final bool showFavorites = ref.watch(
+      appearancePreferencesProvider.select((s) => s.showFavorites),
+    );
+    final String? targetChannelId = channel?.id ?? dm?.id;
+    final bool isFavorite =
+        showFavorites &&
+        targetChannelId != null &&
+        (ref.watch(favoriteChannelProvider(targetChannelId)).asData?.value !=
+            null);
+    final int backButtonUnreadCount = ref.watch(
+      chatBackButtonUnreadCountProvider(channelId),
+    );
+    final bool forumHandheldHeader =
+        (channel?.isThreadOnly ?? false) && isForumHandheldLayout(context);
+    final bool matureGateUp =
+        channel != null && watchMatureContentGateUp(ref, channel.id);
+    final bool forumSearchExpanded =
+        forumHandheldHeader &&
+        !matureGateUp &&
+        ref.watch(forumHeaderSearchProvider(channelId)).expanded;
+
+    final Color headerBackground = shellChannelHeaderBackgroundColor(context);
+
+    return StarConstrainedUiTextScale(
+      child: Container(
+        constraints: const BoxConstraints(
+          minHeight: kMobileChannelHeaderHeight,
+        ),
+        color: headerBackground,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: [
+            if (showsChannelHeaderBackButton(
+              context,
+              ref,
+              isThread: channel?.isThread ?? false,
+            ))
+              ChatBackButton(
+                unreadCount: backButtonUnreadCount,
+                badgeCutoutColor: headerBackground,
+                onPressed: () => invokeShellBack(context, ref),
+              ),
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: context.motion.normal,
+                switchInCurve: Curves.easeOut,
+                switchOutCurve: Curves.easeIn,
+                child: forumSearchExpanded
+                    ? ForumMobileHeaderSearch(
+                        key: const ValueKey<String>('forum-search'),
+                        channelId: channelId,
+                      )
+                    : Semantics(
+                        key: const ValueKey<String>('channel-title'),
+                        button: true,
+                        label: StarLocalizations.of(
+                          context,
+                        ).channelHeaderOpenDetails,
+                        child: InkWell(
+                          onTap: () => _openDetails(
+                            context,
+                            ref,
+                            channel: channel,
+                            dm: dm,
+                          ),
+                          borderRadius: BorderRadius.circular(6),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 2,
+                              vertical: 6,
+                            ),
+                            child: Row(
+                              children: [
+                                _buildMobileLeadingIcon(
+                                  context,
+                                  ref,
+                                  channel: channel,
+                                  dm: dm,
+                                  isPersonalNotes: isPersonalNotes,
+                                ),
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              resolveChannelHeaderTitle(
+                                                ref,
+                                                channelId: channelId,
+                                                l10n: l10n,
+                                                channel: channel,
+                                                dm: dm,
+                                                isPersonalNotes:
+                                                    isPersonalNotes,
+                                              ),
+                                              style: context
+                                                  .textStyles
+                                                  .channelName,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          if (dm != null &&
+                                              isBotOrSystemDmRecipient(dm)) ...[
+                                            const SizedBox(width: 6),
+                                            StarUserTag(
+                                              isSystem: dm.isSystem,
+                                            ),
+                                          ],
+                                          const SizedBox(width: 4),
+                                          PhosphorIcon(
+                                            PhosphorIconsBold.caretRight,
+                                            size: 16,
+                                            color:
+                                                context.colors.textPrimaryMuted,
+                                          ),
+                                        ],
+                                      ),
+                                      if (dm != null && dm.isGroup)
+                                        GroupDmMemberCountSubtitle(dm: dm),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+              ),
+            ),
+            if (!forumSearchExpanded)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                spacing: 8,
+                children: [
+                  if (showMessageActions &&
+                      showFavorites &&
+                      !isPersonalNotes &&
+                      targetChannelId != null &&
+                      !(channel != null &&
+                          isThreadFeatureChannelType(channel.type.wireValue)))
+                    StarGestureDetector(
+                      onLongPress: () => _showFavoriteActions(context, ref),
+                      child: StarButton.circle(
+                        icon: isFavorite
+                            ? PhosphorIconsFill.star
+                            : PhosphorIconsBold.star,
+                        variant: isFavorite
+                            ? StarButtonVariant.primary
+                            : StarButtonVariant.secondary,
+                        size: StarButtonSize.small,
+                        iconSize: 20,
+                        semanticLabel: isFavorite
+                            ? l10n.favoritesRemoveFromFavorites
+                            : l10n.favoritesAddToFavorites,
+                        onPressedAsync: () => _toggleFavorite(
+                          context,
+                          ref,
+                          channel: channel,
+                          dm: dm,
+                          isFavorite: isFavorite,
+                        ),
+                      ),
+                    ),
+                  if (dm != null && canStartDmCall(dm)) ...[
+                    StarButton.circle(
+                      icon: PhosphorIconsFill.phone,
+                      variant: StarButtonVariant.secondary,
+                      size: StarButtonSize.small,
+                      iconSize: 20,
+                      semanticLabel: l10n.uiStartCall,
+                      onPressed: () => _executeOutboundDmCall(
+                        ref: ref,
+                        context: context,
+                        dm: dm,
+                      ),
+                    ),
+                    StarButton.circle(
+                      icon: PhosphorIconsFill.videoCamera,
+                      variant: StarButtonVariant.secondary,
+                      size: StarButtonSize.small,
+                      iconSize: 20,
+                      semanticLabel: l10n.uiStartVideoCall,
+                      onPressed: () => _executeOutboundDmCall(
+                        ref: ref,
+                        context: context,
+                        dm: dm,
+                        startWithVideo: true,
+                      ),
+                    ),
+                  ],
+                  if (showMessageActions &&
+                      dm == null &&
+                      channel != null &&
+                      !matureGateUp)
+                    if (forumHandheldHeader) ...<Widget>[
+                      StarButton.circle(
+                        icon: PhosphorIconsBold.slidersHorizontal,
+                        variant: StarButtonVariant.secondary,
+                        size: StarButtonSize.small,
+                        iconSize: 20,
+                        semanticLabel: l10n.forumViewOptions,
+                        onPressed: () => unawaited(
+                          showForumViewOptionsSheet(context, forum: channel),
+                        ),
+                      ),
+                      StarButton.circle(
+                        icon: PhosphorIconsBold.magnifyingGlass,
+                        variant: StarButtonVariant.secondary,
+                        size: StarButtonSize.small,
+                        iconSize: 20,
+                        semanticLabel: l10n.forumSearchPosts,
+                        onPressed: () => ref
+                            .read(
+                              forumHeaderSearchProvider(channel.id).notifier,
+                            )
+                            .expand(),
+                      ),
+                    ] else
+                      StarButton.circle(
+                        icon: PhosphorIconsBold.magnifyingGlass,
+                        variant: StarButtonVariant.secondary,
+                        size: StarButtonSize.small,
+                        iconSize: 20,
+                        semanticLabel: l10n.uiSearch,
+                        onPressed: () => unawaited(
+                          showChannelSearchPageAndJump(
+                            context,
+                            container: ref.container,
+                            channelId: channel.id,
+                            guildId: channel.guildId,
+                          ),
+                        ),
+                      ),
+                  if (showMessageActions &&
+                      channel != null &&
+                      showsThreadHeaderActions(channel))
+                    ThreadHeaderMobileButton(channel: channel),
+                  if (channel != null &&
+                      channel.type == ChannelType.guildVoice) ...[
+                    ChatButton(
+                      channelId: channel.id,
+                      channelName: channel.name.isNotEmpty
+                          ? channel.name
+                          : null,
+                    ),
+                    if (isMobileVoiceCameraPlatform()) const FlipCameraButton(),
+                  ],
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileLeadingIcon(
+    BuildContext context,
+    WidgetRef ref, {
+    required Channel? channel,
+    required DmConversation? dm,
+    required bool isPersonalNotes,
+  }) {
+    if (isPersonalNotes) {
+      return SizedBox(
+        width: 32,
+        height: 32,
+        child: Center(
+          child: PhosphorIcon(
+            PhosphorIconsFill.notePencil,
+            size: 20,
+            color: context.colors.interactiveNormal,
+          ),
+        ),
+      );
+    }
+    if (channel != null) {
+      final int? effectivePermissionBits = ref.watch(
+        channelPermissionCacheProvider(
+          watchAccountUserId(ref),
+        ).select((m) => m[channel.id]),
+      );
+      final VoiceSessionState voice = ref.watch(voiceSessionProvider);
+      final Map<String, VoiceState> voiceStates = ref.watch(
+        voiceStatesMapProvider(readAccountUserId(ref)),
+      );
+      final bool isVoiceChannel = channel.type == ChannelType.guildVoice;
+      final Guild? guild = ref
+          .watch(guildListViewModelProvider)
+          .guilds
+          .where((Guild g) => g.id == channel.guildId)
+          .firstOrNull;
+      final bool e2eeEncrypted =
+          isVoiceChannel &&
+          isVoiceChannelE2eeEncryptedForIcon(
+            voiceStates: voiceStates,
+            guildId: channel.guildId,
+            channelId: channel.id,
+            connectedVoiceGuildId: voice.guildId,
+            connectedVoiceChannelId: voice.channelId,
+            guildHasVoiceE2ee: guild?.hasVoiceE2ee ?? false,
+          );
+      return ChannelIcon(
+        type: channel.type,
+        channel: channel,
+        effectivePermissionBits: effectivePermissionBits,
+        e2eeEncrypted: e2eeEncrypted,
+      );
+    }
+    if (dm != null) {
+      return DmHeaderAvatar(dm: dm);
+    }
+    return PhosphorIcon(
+      PhosphorIconsFill.chatCircle,
+      size: 20,
+      color: context.colors.interactiveNormal,
+    );
+  }
+
+  void _openDetails(
+    BuildContext context,
+    WidgetRef ref, {
+    required Channel? channel,
+    required DmConversation? dm,
+  }) {
+    if (channel == null && dm == null) {
+      return;
+    }
+    if (channel != null && channel.isThread) {
+      unawaited(showThreadMenuSheet(context, ref, channel));
+      return;
+    }
+    unawaited(
+      openHandheldChannelDetailsAndJump(
+        context,
+        ref: ref,
+        container: ref.container,
+        channel: channel,
+        dm: dm,
+      ),
+    );
+  }
+
+  Future<void> _toggleFavorite(
+    BuildContext context,
+    WidgetRef ref, {
+    required Channel? channel,
+    required DmConversation? dm,
+    required bool isFavorite,
+  }) async {
+    final String? targetChannelId = channel?.id ?? dm?.id;
+    if (targetChannelId == null) {
+      return;
+    }
+    final repository = ref.read(favoriteChannelsRepositoryProvider);
+    if (isFavorite) {
+      await repository.removeChannel(targetChannelId);
+    } else {
+      await repository.addChannel(
+        channelId: targetChannelId,
+        guildId: resolveFavoriteGuildId(
+          channelGuildId: channel?.guildId,
+          isDm: dm != null,
+        ),
+        nickname:
+            (channel == null
+                ? null
+                : readThreadTitleText(
+                    ref,
+                    channel,
+                    StarLocalizations.of(context),
+                  )) ??
+            (dm == null
+                ? null
+                : dmConversationDisplayName(
+                    StarLocalizations.of(context),
+                    dm,
+                  )),
+      );
+    }
+    if (!context.mounted) {
+      return;
+    }
+    final StarLocalizations l10n = StarLocalizations.of(context);
+    ref
+        .read(toastProvider.notifier)
+        .show(
+          StarToast(
+            message: isFavorite
+                ? l10n.favoritesRemovedToast
+                : l10n.favoritesAddedToast,
+            variant: StarToastVariant.success,
+          ),
+        );
+  }
+
+  void _showFavoriteActions(BuildContext context, WidgetRef ref) {
+    final StarLocalizations l10n = StarLocalizations.of(context);
+    unawaited(
+      StarBottomSheet.show<void>(
+        context,
+        title: l10n.favoritesTitle,
+        variant: StarBottomSheetVariant.menu,
+        builder: (sheetContext, close) => StarBottomSheetContent(
+          child: StarBottomSheetMenuItem(
+            label: l10n.favoritesHideConfirmTitle,
+            icon: PhosphorIconsBold.eyeSlash,
+            onTap: () {
+              close();
+              unawaited(
+                ref
+                    .read(appearancePreferencesProvider.notifier)
+                    .setShowFavorites(value: false),
+              );
+              ref
+                  .read(toastProvider.notifier)
+                  .show(
+                    StarToast(
+                      message: l10n.favoritesHiddenToast,
+                      variant: StarToastVariant.success,
+                    ),
+                  );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  bool _resolveHighContrast(
+    WidgetRef ref, {
+    required Channel? channel,
+    required bool forceVoiceCallStyle,
+  }) {
+    if (forceVoiceCallStyle) {
+      return true;
+    }
+    if (channel?.type != ChannelType.guildVoice) {
+      return false;
+    }
+    final VoiceSessionState voice = ref.watch(voiceSessionProvider);
+    return voice.isInVoice &&
+        voice.channelId == channel!.id &&
+        voice.guildId == channel.guildId;
+  }
+}
+
+void _executeOutboundDmCall({
+  required WidgetRef ref,
+  required BuildContext context,
+  required DmConversation dm,
+  bool startWithVideo = false,
+}) {
+  unawaited(() async {
+    final String? selfId = ref.read(currentUserIdProvider);
+    final List<String> ringTargets = dm.remoteRecipientIds
+        .where((String id) => selfId == null || id != selfId)
+        .toList();
+    final StartDirectVoiceCallResult r = await startDirectVoiceCall(
+      ref,
+      context,
+      dm.id,
+      outboundRingRecipients: ringTargets.isEmpty ? null : ringTargets,
+      startWithVideo: startWithVideo,
+    );
+    if (!context.mounted) {
+      return;
+    }
+    await explainDirectCallFailure(context, r);
+  }());
+}

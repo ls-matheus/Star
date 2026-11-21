@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>aps-environment</key>
+	<string>development</string>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:star.invalid</string>
+		<string>applinks:star.invalid</string>
+		<string>applinks:canary.star.invalid</string>
+		<string>applinks:star.gg</string>
+		<string>webcredentials:star.invalid</string>
+		<string>webcredentials:web.star.invalid</string>
+		<string>webcredentials:star.invalid</string>
+	</array>
+	<key>com.apple.developer.declared-age-range</key>
+	<true/>
+	<key>com.apple.developer.devicecheck.app-attest-opt-in</key>
+	<array>
+		<string>CDhash</string>
+	</array>
+	<key>com.apple.developer.devicecheck.appattest-environment</key>
+	<string>$(APP_ATTEST_ENVIRONMENT)</string>
+	<key>com.apple.developer.usernotifications.communication</key>
+	<true/>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.star</string>
+	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.star</string>
+		<string>$(AppIdentifierPrefix)com.star.canary</string>
+	</array>
+</dict>
+</plist>

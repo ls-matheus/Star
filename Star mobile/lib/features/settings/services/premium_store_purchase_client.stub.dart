@@ -1,0 +1,79 @@
+import 'dart:io';
+
+import 'package:star_app/features/settings/services/plutonium_store_products.dart';
+import 'package:star_app/features/settings/services/premium_store_product_matching.dart';
+import 'package:star_app/features/settings/services/premium_store_purchase_update.dart';
+
+export 'package:star_app/features/settings/services/premium_store_product_matching.dart'
+    show PremiumStoreProduct, PremiumStoreProductSet, matchPremiumStoreProducts;
+
+abstract class PremiumStorePurchaseClient {
+  bool get supportsPurchases;
+
+  PremiumBillingStore? get billingStore;
+
+  Future<bool> isStoreAvailable();
+
+  Future<PremiumStoreProductSet> loadProducts(PremiumStoreCatalog catalog);
+
+  Future<bool> buy(PremiumStoreProduct product);
+
+  Stream<List<PremiumStorePurchaseUpdate>> get purchaseUpdates;
+
+  Future<void> complete(PremiumStorePurchaseUpdate purchase);
+
+  Future<void> restore({required bool userInitiated});
+
+  Future<String?> storefrontCountryCode();
+}
+
+class UnavailablePremiumStorePurchaseClient
+    implements PremiumStorePurchaseClient {
+  const UnavailablePremiumStorePurchaseClient();
+
+  @override
+  bool get supportsPurchases => false;
+
+  @override
+  PremiumBillingStore? get billingStore => null;
+
+  @override
+  Future<bool> isStoreAvailable() async => false;
+
+  @override
+  Future<PremiumStoreProductSet> loadProducts(
+    PremiumStoreCatalog catalog,
+  ) async {
+    return const PremiumStoreProductSet();
+  }
+
+  @override
+  Future<bool> buy(PremiumStoreProduct product) async => false;
+
+  @override
+  Stream<List<PremiumStorePurchaseUpdate>> get purchaseUpdates =>
+      const Stream.empty();
+
+  @override
+  Future<void> complete(PremiumStorePurchaseUpdate purchase) async {}
+
+  @override
+  Future<void> restore({required bool userInitiated}) async {}
+
+  @override
+  Future<String?> storefrontCountryCode() async => null;
+}
+
+PremiumBillingStore? currentPremiumBillingStore() {
+  if (Platform.isIOS) {
+    return PremiumBillingStore.appStore;
+  }
+  if (Platform.isAndroid) {
+    return PremiumBillingStore.googlePlay;
+  }
+  return null;
+}
+
+PremiumStorePurchaseClient createPremiumStorePurchaseClient() {
+  return const UnavailablePremiumStorePurchaseClient();
+}

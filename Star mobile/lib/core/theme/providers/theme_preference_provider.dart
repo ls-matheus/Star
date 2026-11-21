@@ -1,0 +1,970 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:drift/drift.dart';
+import 'package:dynamic_color/dynamic_color.dart';
+import 'package:star_app/core/database/star_database.dart';
+import 'package:star_app/core/providers/database_provider.dart';
+import 'package:star_app/core/router/star_router.dart';
+import 'package:star_app/core/synced_preferences/engine/synced_preference_field.dart';
+import 'package:star_app/core/synced_preferences/engine/synced_preferences_store.dart';
+import 'package:star_app/core/talker.dart';
+import 'package:star_app/core/theme/custom_theme_css.dart';
+import 'package:star_app/core/theme/star_color_theme.dart';
+import 'package:star_app/core/theme/star_text_theme.dart';
+import 'package:star_app/core/theme/star_theme_mode.dart';
+import 'package:star_app/core/theme/system_dynamic_colors.dart';
+import 'package:star_app/core/theme/theme_color_editor.dart';
+import 'package:star_app/core/theme/theme_variable_mapping.dart';
+import 'package:star_app/core/theme/themes/coal.dart';
+import 'package:star_app/core/theme/themes/dark.dart';
+import 'package:star_app/core/theme/themes/dark_legacy.dart';
+import 'package:star_app/core/theme/themes/light.dart';
+import 'package:star_app/features/accessibility/domain/text_scale.dart';
+import 'package:star_app/features/profile/providers/user_settings_status_provider.dart';
+import 'package:star_app/features/settings/providers/sync/user_settings_sync_service.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:star_dart/export.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+part 'theme_preference_provider.g.dart';
+
+const _kInflightSentinel = Object();
+
+class _BuiltColorThemes {
+  const _BuiltColorThemes({
+    required this.dark,
+    required this.darkLegacy,
+    required this.light,
+    required this.coal,
+  });
+
+  final StarColorTheme dark;
+  final StarColorTheme darkLegacy;
+  final StarColorTheme light;
+  final StarColorTheme coal;
+}
+
+final Map<
+  StarThemeMode,
+  ({
+    double saturationFactor,
+    String? customThemeCss,
+    SystemDynamicPalette? dynamicPalette,
+    StarColorTheme theme,
+  })
+>
+_lastColorThemeByMode =
+    <
+      StarThemeMode,
+      ({
+        double saturationFactor,
+        String? customThemeCss,
+        SystemDynamicPalette? dynamicPalette,
+        StarColorTheme theme,
+      })
+    >{};
+
+StarColorTheme _themedColor(
+  StarThemeMode mode,
+  StarColorTheme Function({double saturationFactor}) builder, {
+  required double saturationFactor,
+  required String? customThemeCss,
+  required SystemDynamicPalette? dynamicPalette,
+}) {
+  final last = _lastColorThemeByMode[mode];
+  if (last != null &&
+      last.saturationFactor == saturationFactor &&
+      last.customThemeCss == customThemeCss &&
+      last.dynamicPalette == dynamicPalette) {
+    return last.theme;
+  }
+  final StarColorTheme theme = applyCustomThemeCss(
+    applySystemDynamicColors(
+      builder(saturationFactor: saturationFactor),
+      palette: dynamicPalette,
+      saturationFactor: saturationFactor,
+    ),
+    css: customThemeCss,
+    saturationFactor: saturationFactor,
+    mode: mode,
+  );
+  _lastColorThemeByMode[mode] = (
+    saturationFactor: saturationFactor,
+    customThemeCss: customThemeCss,
+    dynamicPalette: dynamicPalette,
+    theme: theme,
+  );
+  return theme;
+}
+
+_BuiltColorThemes _buildColorThemes({
+  required double saturationFactor,
+  required String? customThemeCss,
+  required SystemDynamicPalette? dynamicPalette,
+}) {
+  return _BuiltColorThemes(
+    dark: _themedColor(
+      StarThemeMode.dark,
+      buildDarkColorTheme,
+      saturationFactor: saturationFactor,
+      customThemeCss: customThemeCss,
+      dynamicPalette: dynamicPalette,
+    ),
+    darkLegacy: _themedColor(
+      StarThemeMode.darkLegacy,
+      buildDarkLegacyColorTheme,
+      saturationFactor: saturationFactor,
+      customThemeCss: customThemeCss,
+      dynamicPalette: dynamicPalette,
+    ),
+    light: _themedColor(
+      StarThemeMode.light,
+      buildLightColorTheme,
+      saturationFactor: saturationFactor,
+      customThemeCss: customThemeCss,
+      dynamicPalette: dynamicPalette,
+    ),
+    coal: _themedColor(
+      StarThemeMode.coal,
+      buildCoalColorTheme,
+      saturationFactor: saturationFactor,
+      customThemeCss: customThemeCss,
+      dynamicPalette: dynamicPalette,
+    ),
+  );
+}
+
+_BuiltColorThemes _buildActiveColorThemes({
+  required StarThemeMode mode,
+  required double saturationFactor,
+  required String? customThemeCss,
+  required SystemDynamicPalette? dynamicPalette,
+  required StarColorTheme dark,
+  required StarColorTheme darkLegacy,
+  required StarColorTheme light,
+  required StarColorTheme coal,
+}) {
+  switch (mode) {
+    case StarThemeMode.dark:
+      return _BuiltColorThemes(
+        dark: _themedColor(
+          StarThemeMode.dark,
+          buildDarkColorTheme,
+          saturationFactor: saturationFactor,
+          customThemeCss: customThemeCss,
+          dynamicPalette: dynamicPalette,
+        ),
+        darkLegacy: darkLegacy,
+        light: light,
+        coal: coal,
+      );
+    case StarThemeMode.darkLegacy:
+      return _BuiltColorThemes(
+        dark: dark,
+        darkLegacy: _themedColor(
+          StarThemeMode.darkLegacy,
+          buildDarkLegacyColorTheme,
+          saturationFactor: saturationFactor,
+          customThemeCss: customThemeCss,
+          dynamicPalette: dynamicPalette,
+        ),
+        light: light,
+        coal: coal,
+      );
+    case StarThemeMode.light:
+      return _BuiltColorThemes(
+        dark: dark,
+        darkLegacy: darkLegacy,
+        light: _themedColor(
+          StarThemeMode.light,
+          buildLightColorTheme,
+          saturationFactor: saturationFactor,
+          customThemeCss: customThemeCss,
+          dynamicPalette: dynamicPalette,
+        ),
+        coal: coal,
+      );
+    case StarThemeMode.coal:
+      return _BuiltColorThemes(
+        dark: dark,
+        darkLegacy: darkLegacy,
+        light: light,
+        coal: _themedColor(
+          StarThemeMode.coal,
+          buildCoalColorTheme,
+          saturationFactor: saturationFactor,
+          customThemeCss: customThemeCss,
+          dynamicPalette: dynamicPalette,
+        ),
+      );
+    case StarThemeMode.system:
+      return _BuiltColorThemes(
+        dark: _themedColor(
+          StarThemeMode.dark,
+          buildDarkColorTheme,
+          saturationFactor: saturationFactor,
+          customThemeCss: customThemeCss,
+          dynamicPalette: dynamicPalette,
+        ),
+        darkLegacy: darkLegacy,
+        light: _themedColor(
+          StarThemeMode.light,
+          buildLightColorTheme,
+          saturationFactor: saturationFactor,
+          customThemeCss: customThemeCss,
+          dynamicPalette: dynamicPalette,
+        ),
+        coal: coal,
+      );
+  }
+}
+
+class ThemePreferenceState {
+  static const Object unspecifiedCustomThemeCss = Object();
+  static const Object unspecifiedSystemDynamicPalette = Object();
+
+  factory ThemePreferenceState({
+    StarThemeMode mode = StarThemeMode.system,
+    double scaleFactor = 1.0,
+    int chatFontSize = 16,
+    bool syncAcrossDevices = true,
+    double saturationFactor = 1.0,
+    String? customThemeCss,
+    bool syncThemeColorsFromThemeStudio = true,
+    bool syncThemeColorsToThemeStudio = true,
+    bool customThemeCssEditedLocally = false,
+    bool useSystemDynamicColors = false,
+    SystemDynamicPalette? systemDynamicPalette,
+    StarThemeMode? inflightTheme,
+  }) {
+    final _BuiltColorThemes themes = _buildColorThemes(
+      saturationFactor: clampSaturationFactor(saturationFactor),
+      customThemeCss: normalizeCustomThemeCss(customThemeCss),
+      dynamicPalette: useSystemDynamicColors ? systemDynamicPalette : null,
+    );
+    return ThemePreferenceState._(
+      mode: mode,
+      scaleFactor: scaleFactor,
+      chatFontSize: chatFontSize,
+      syncAcrossDevices: syncAcrossDevices,
+      saturationFactor: clampSaturationFactor(saturationFactor),
+      customThemeCss: normalizeCustomThemeCss(customThemeCss),
+      syncThemeColorsFromThemeStudio: syncThemeColorsFromThemeStudio,
+      syncThemeColorsToThemeStudio: syncThemeColorsToThemeStudio,
+      customThemeCssEditedLocally: customThemeCssEditedLocally,
+      useSystemDynamicColors: useSystemDynamicColors,
+      systemDynamicPalette: systemDynamicPalette,
+      inflightTheme: inflightTheme,
+      darkColorTheme: themes.dark,
+      darkLegacyColorTheme: themes.darkLegacy,
+      lightColorTheme: themes.light,
+      coalColorTheme: themes.coal,
+    );
+  }
+
+  ThemePreferenceState._({
+    required this.mode,
+    required this.scaleFactor,
+    required this.chatFontSize,
+    required this.syncAcrossDevices,
+    required this.saturationFactor,
+    required this.customThemeCss,
+    required this.syncThemeColorsFromThemeStudio,
+    required this.syncThemeColorsToThemeStudio,
+    required this.customThemeCssEditedLocally,
+    required this.useSystemDynamicColors,
+    required this.systemDynamicPalette,
+    required this.inflightTheme,
+    required this.darkColorTheme,
+    required this.darkLegacyColorTheme,
+    required this.lightColorTheme,
+    required this.coalColorTheme,
+  });
+
+  final StarThemeMode mode;
+  final double scaleFactor;
+  final int chatFontSize;
+  final bool syncAcrossDevices;
+  final double saturationFactor;
+  final String? customThemeCss;
+  final bool syncThemeColorsFromThemeStudio;
+  final bool syncThemeColorsToThemeStudio;
+  final bool customThemeCssEditedLocally;
+  final bool useSystemDynamicColors;
+  final SystemDynamicPalette? systemDynamicPalette;
+
+  final StarThemeMode? inflightTheme;
+
+  final StarColorTheme darkColorTheme;
+  final StarColorTheme darkLegacyColorTheme;
+  final StarColorTheme lightColorTheme;
+  final StarColorTheme coalColorTheme;
+
+  bool get isSyncing => inflightTheme != null;
+
+  bool get systemDynamicColorsAvailable => systemDynamicPalette != null;
+
+  SystemDynamicPalette? get activeDynamicPalette =>
+      useSystemDynamicColors ? systemDynamicPalette : null;
+
+  StarColorTheme get colorTheme => colorThemeForMode(mode);
+
+  StarColorTheme colorThemeForMode(StarThemeMode resolvedMode) {
+    return switch (resolvedMode) {
+      StarThemeMode.dark => darkColorTheme,
+      StarThemeMode.darkLegacy => darkLegacyColorTheme,
+      StarThemeMode.light => lightColorTheme,
+      StarThemeMode.coal => coalColorTheme,
+      StarThemeMode.system => darkColorTheme,
+    };
+  }
+
+  StarTextTheme get textTheme => StarTextTheme.forColors(colorTheme);
+  StarTextTheme get darkTextTheme =>
+      StarTextTheme.forColors(darkColorTheme);
+  StarTextTheme get lightTextTheme =>
+      StarTextTheme.forColors(lightColorTheme);
+
+  ThemePreferenceState copyWith({
+    StarThemeMode? mode,
+    double? scaleFactor,
+    int? chatFontSize,
+    bool? syncAcrossDevices,
+    double? saturationFactor,
+    Object? customThemeCss = unspecifiedCustomThemeCss,
+    bool? syncThemeColorsFromThemeStudio,
+    bool? syncThemeColorsToThemeStudio,
+    bool? customThemeCssEditedLocally,
+    bool? useSystemDynamicColors,
+    Object? systemDynamicPalette = unspecifiedSystemDynamicPalette,
+    bool clearCustomThemeCss = false,
+    Object? inflightTheme = _kInflightSentinel,
+    bool rebuildAllColorThemes = true,
+  }) {
+    final StarThemeMode nextMode = mode ?? this.mode;
+    final double nextSaturationFactor = saturationFactor == null
+        ? this.saturationFactor
+        : clampSaturationFactor(saturationFactor);
+    final bool customThemeCssArgumentProvided = !identical(
+      customThemeCss,
+      unspecifiedCustomThemeCss,
+    );
+    final String? nextCustomThemeCss = clearCustomThemeCss
+        ? null
+        : normalizeCustomThemeCss(
+            customThemeCssArgumentProvided
+                ? customThemeCss as String?
+                : this.customThemeCss,
+          );
+    final double nextScaleFactor = scaleFactor ?? this.scaleFactor;
+    final bool nextUseSystemDynamicColors =
+        useSystemDynamicColors ?? this.useSystemDynamicColors;
+    final SystemDynamicPalette? nextSystemDynamicPalette =
+        identical(systemDynamicPalette, unspecifiedSystemDynamicPalette)
+        ? this.systemDynamicPalette
+        : systemDynamicPalette as SystemDynamicPalette?;
+    final SystemDynamicPalette? nextActiveDynamicPalette =
+        nextUseSystemDynamicColors ? nextSystemDynamicPalette : null;
+    final String? normalizedCurrentCss = normalizeCustomThemeCss(
+      this.customThemeCss,
+    );
+    final bool themesChanged =
+        nextSaturationFactor != this.saturationFactor ||
+        ((customThemeCssArgumentProvided || clearCustomThemeCss) &&
+            nextCustomThemeCss != normalizedCurrentCss) ||
+        nextActiveDynamicPalette != activeDynamicPalette;
+    final _BuiltColorThemes themes;
+    if (!themesChanged) {
+      themes = _BuiltColorThemes(
+        dark: darkColorTheme,
+        darkLegacy: darkLegacyColorTheme,
+        light: lightColorTheme,
+        coal: coalColorTheme,
+      );
+    } else if (rebuildAllColorThemes) {
+      themes = _buildColorThemes(
+        saturationFactor: nextSaturationFactor,
+        customThemeCss: nextCustomThemeCss,
+        dynamicPalette: nextActiveDynamicPalette,
+      );
+    } else {
+      themes = _buildActiveColorThemes(
+        mode: nextMode,
+        saturationFactor: nextSaturationFactor,
+        customThemeCss: nextCustomThemeCss,
+        dynamicPalette: nextActiveDynamicPalette,
+        dark: darkColorTheme,
+        darkLegacy: darkLegacyColorTheme,
+        light: lightColorTheme,
+        coal: coalColorTheme,
+      );
+    }
+    return ThemePreferenceState._(
+      mode: nextMode,
+      scaleFactor: nextScaleFactor,
+      chatFontSize: chatFontSize ?? this.chatFontSize,
+      syncAcrossDevices: syncAcrossDevices ?? this.syncAcrossDevices,
+      saturationFactor: nextSaturationFactor,
+      customThemeCss: nextCustomThemeCss,
+      syncThemeColorsFromThemeStudio:
+          syncThemeColorsFromThemeStudio ?? this.syncThemeColorsFromThemeStudio,
+      syncThemeColorsToThemeStudio:
+          syncThemeColorsToThemeStudio ?? this.syncThemeColorsToThemeStudio,
+      customThemeCssEditedLocally:
+          customThemeCssEditedLocally ?? this.customThemeCssEditedLocally,
+      useSystemDynamicColors: nextUseSystemDynamicColors,
+      systemDynamicPalette: nextSystemDynamicPalette,
+      inflightTheme: identical(inflightTheme, _kInflightSentinel)
+          ? this.inflightTheme
+          : inflightTheme as StarThemeMode?,
+      darkColorTheme: themes.dark,
+      darkLegacyColorTheme: themes.darkLegacy,
+      lightColorTheme: themes.light,
+      coalColorTheme: themes.coal,
+    );
+  }
+}
+
+const Duration _kThemeColorPersistDebounce = Duration(milliseconds: 1500);
+
+@Riverpod(keepAlive: true)
+class ThemePreference extends _$ThemePreference {
+  String? _userId;
+  String? _loadingUserId;
+  bool _systemThemeChosenLocally = false;
+  bool _isApplyingRemote = false;
+  Timer? _themeColorPersistTimer;
+  AppLifecycleListener? _lifecycleListener;
+
+  @override
+  ThemePreferenceState build() {
+    ref.onDispose(() {
+      _themeColorPersistTimer?.cancel();
+      _themeColorPersistTimer = null;
+      _lifecycleListener?.dispose();
+      _lifecycleListener = null;
+    });
+    if (Platform.isAndroid) {
+      _lifecycleListener = AppLifecycleListener(
+        onResume: () => unawaited(_refreshSystemDynamicPalette()),
+      );
+      unawaited(_refreshSystemDynamicPalette());
+    }
+    ref.listen<AsyncValue<UserSettingsResponse?>>(
+      userSettingsStatusStreamProvider,
+      (
+        AsyncValue<UserSettingsResponse?>? previous,
+        AsyncValue<UserSettingsResponse?> next,
+      ) {
+        final UserSettingsResponse? settings = next.value;
+        final String? currentUserId = ref.read(currentUserIdProvider);
+        if (settings == null || _userId == null || currentUserId != _userId) {
+          return;
+        }
+        unawaited(applyServerSettings(settings));
+      },
+    );
+    return ThemePreferenceState();
+  }
+
+  Future<void> load(String userId) async {
+    _loadingUserId = userId;
+    _userId = null;
+    final int accountGeneration = ref
+        .read(syncedPreferencesStoreProvider)
+        .accountGeneration;
+    final db = ref.read(starDatabaseProvider);
+    final prefs = await db.userPreferencesDao.getPreferences(userId);
+    if (!_isCurrentLoad(userId, accountGeneration)) {
+      return;
+    }
+    _systemThemeChosenLocally = prefs?.systemThemeChosenLocally ?? false;
+    if (prefs != null) {
+      final mode =
+          StarThemeMode.fromApiValue(prefs.theme) ?? StarThemeMode.system;
+      state = ThemePreferenceState(
+        mode: mode,
+        scaleFactor: prefs.scaleFactor,
+        chatFontSize: prefs.chatFontSize,
+        syncAcrossDevices: prefs.syncAcrossDevices,
+        saturationFactor: prefs.saturationFactor,
+        customThemeCss: prefs.customThemeCss.isEmpty
+            ? null
+            : prefs.customThemeCss,
+        syncThemeColorsFromThemeStudio: prefs.syncThemeColorsFromThemeStudio,
+        syncThemeColorsToThemeStudio: prefs.syncThemeColorsToThemeStudio,
+        useSystemDynamicColors: prefs.useSystemDynamicColors,
+        systemDynamicPalette: state.systemDynamicPalette,
+      );
+    } else {
+      state = ThemePreferenceState(
+        systemDynamicPalette: state.systemDynamicPalette,
+      );
+    }
+    _userId = userId;
+    final bool hadCachedSettings = await _applyCachedUserSettings(
+      userId,
+      accountGeneration,
+    );
+    if (!hadCachedSettings && _isCurrentLoad(userId, accountGeneration)) {
+      await _hydrateThemeFromServerOnLoad(userId, accountGeneration);
+    }
+  }
+
+  bool _isCurrentLoad(String userId, int accountGeneration) =>
+      ref.mounted &&
+      _loadingUserId == userId &&
+      ref.read(syncedPreferencesStoreProvider).accountGeneration ==
+          accountGeneration;
+
+  Future<bool> _applyCachedUserSettings(
+    String userId,
+    int accountGeneration,
+  ) async {
+    final row = await ref
+        .read(starDatabaseProvider)
+        .userSettingsDao
+        .getSettings(userId);
+    if (row == null) {
+      return false;
+    }
+    try {
+      final Object? decoded = jsonDecode(row.data);
+      if (decoded is! Map<String, dynamic>) {
+        return false;
+      }
+      await _applyRemoteUserSettings(
+        UserSettingsResponse.fromJson(decoded),
+        userId: userId,
+        accountGeneration: accountGeneration,
+        fromCache: true,
+      );
+      return true;
+    } on Object catch (e, st) {
+      talker.warning('[ThemePreference] Cached settings apply failed', e, st);
+      return false;
+    }
+  }
+
+  Future<void> _hydrateThemeFromServerOnLoad(
+    String userId,
+    int accountGeneration,
+  ) async {
+    try {
+      final UserSettingsResponse settings = await ref
+          .read(userSettingsSyncProvider)
+          .fetchCurrentSettings();
+      await _applyRemoteUserSettings(
+        settings,
+        userId: userId,
+        accountGeneration: accountGeneration,
+      );
+    } on Object catch (e, st) {
+      talker.warning('[ThemePreference] Server theme fetch failed', e, st);
+    }
+  }
+
+  Future<void> _applyRemoteUserSettings(
+    UserSettingsResponse settings, {
+    required String userId,
+    required int accountGeneration,
+    bool fromCache = false,
+  }) async {
+    if (!_isCurrentLoad(userId, accountGeneration)) {
+      return;
+    }
+    await ref
+        .read(syncedPreferencesStoreProvider)
+        .hydrateFromUserSettings(
+          settings,
+          themeCustomizationApplier: applySyncedThemeCustomization,
+          fromCache: fromCache,
+          accountGeneration: accountGeneration,
+        );
+    if (!_isCurrentLoad(userId, accountGeneration)) {
+      return;
+    }
+    if (_followsServerTheme) {
+      await applyServerSettings(settings);
+    }
+  }
+
+  Future<void> setTheme(StarThemeMode mode) async {
+    if (state.inflightTheme != null) {
+      return;
+    }
+    if (state.mode == mode) {
+      return;
+    }
+    _systemThemeChosenLocally = mode == StarThemeMode.system;
+
+    final wantsServerPush =
+        state.syncAcrossDevices && mode != StarThemeMode.system;
+
+    if (!wantsServerPush) {
+      state = state.copyWith(mode: mode);
+      await _persist();
+      return;
+    }
+
+    state = state.copyWith(inflightTheme: mode);
+    try {
+      await ref
+          .read(userSettingsSyncProvider)
+          .pushTheme(_toSettingsTheme(mode));
+      state = state.copyWith(mode: mode, inflightTheme: null);
+      await _persist();
+    } on Object {
+      state = state.copyWith(inflightTheme: null);
+      rethrow;
+    }
+  }
+
+  Future<void> setScaleFactor(double factor) async {
+    state = state.copyWith(scaleFactor: clampLayoutZoomLevel(factor));
+    await _persist();
+    _markAccessibilityDirty();
+  }
+
+  Future<void> setChatFontSize(int size) async {
+    state = state.copyWith(chatFontSize: snapChatFontSize(size.toDouble()));
+    await _persist();
+    _markAccessibilityDirty();
+  }
+
+  void previewSaturationFactor(double value) {
+    final double clamped = clampSaturationFactor(value);
+    if (state.saturationFactor == clamped) {
+      return;
+    }
+    state = state.copyWith(
+      saturationFactor: clamped,
+      rebuildAllColorThemes: false,
+    );
+  }
+
+  Future<void> setSaturationFactor(double value) async {
+    final ThemePreferenceState current = state;
+    state = ThemePreferenceState(
+      mode: current.mode,
+      scaleFactor: current.scaleFactor,
+      chatFontSize: current.chatFontSize,
+      syncAcrossDevices: current.syncAcrossDevices,
+      saturationFactor: clampSaturationFactor(value),
+      customThemeCss: current.customThemeCss,
+      syncThemeColorsFromThemeStudio: current.syncThemeColorsFromThemeStudio,
+      syncThemeColorsToThemeStudio: current.syncThemeColorsToThemeStudio,
+      customThemeCssEditedLocally: current.customThemeCssEditedLocally,
+      useSystemDynamicColors: current.useSystemDynamicColors,
+      systemDynamicPalette: current.systemDynamicPalette,
+      inflightTheme: current.inflightTheme,
+    );
+    await _persist();
+    _markAccessibilityDirty();
+  }
+
+  Future<void> applySyncedThemeCustomization({
+    double? saturationFactor,
+    String? customThemeCss,
+    int? chatFontSize,
+    double? scaleFactor,
+    bool updateSaturationFactor = true,
+    bool updateCustomThemeCss = true,
+    bool updateChatFontSize = false,
+    bool updateScaleFactor = false,
+    bool clearCustomThemeCss = false,
+  }) async {
+    final bool applyCustomThemeCss =
+        updateCustomThemeCss && state.syncThemeColorsFromThemeStudio;
+    if (_userId == null) {
+      return;
+    }
+    final currentUserId = ref.read(currentUserIdProvider);
+    if (currentUserId != null && currentUserId != _userId) {
+      return;
+    }
+    _isApplyingRemote = true;
+    try {
+      state = state.copyWith(
+        saturationFactor: updateSaturationFactor ? saturationFactor : null,
+        customThemeCss: applyCustomThemeCss
+            ? customThemeCss
+            : ThemePreferenceState.unspecifiedCustomThemeCss,
+        chatFontSize: updateChatFontSize ? chatFontSize : null,
+        scaleFactor: updateScaleFactor ? scaleFactor : null,
+        clearCustomThemeCss: applyCustomThemeCss && clearCustomThemeCss,
+        customThemeCssEditedLocally: applyCustomThemeCss ? false : null,
+      );
+      await _persist();
+    } finally {
+      _isApplyingRemote = false;
+    }
+  }
+
+  Future<void> setSyncAcrossDevices({required bool value}) async {
+    if (state.mode == StarThemeMode.system) {
+      return;
+    }
+    if (state.inflightTheme != null) {
+      return;
+    }
+    if (state.syncAcrossDevices == value) {
+      return;
+    }
+
+    if (!value) {
+      state = state.copyWith(syncAcrossDevices: false);
+      await _persist();
+      return;
+    }
+
+    state = state.copyWith(syncAcrossDevices: true, inflightTheme: state.mode);
+    try {
+      await ref
+          .read(userSettingsSyncProvider)
+          .pushTheme(_toSettingsTheme(state.mode));
+      state = state.copyWith(inflightTheme: null);
+      await _persist();
+    } on Object {
+      state = state.copyWith(syncAcrossDevices: false, inflightTheme: null);
+      await _persist();
+      rethrow;
+    }
+  }
+
+  Future<void> applyServerSettings(UserSettingsResponse settings) async {
+    final String? currentUserId = ref.read(currentUserIdProvider);
+    if (_userId == null ||
+        (currentUserId != null && currentUserId != _userId)) {
+      talker.warning(
+        '[ThemePreference] Hydration dropped: '
+        '${_userId == null ? 'userId not loaded yet' : 'user mismatch'}',
+      );
+      return;
+    }
+    if (!_followsServerTheme) {
+      return;
+    }
+    if (state.inflightTheme != null) {
+      return;
+    }
+    final serverMode = _modeFromJson(settings.theme);
+    if (serverMode == null || serverMode == state.mode) {
+      return;
+    }
+    state = state.copyWith(mode: serverMode);
+    await _persist();
+  }
+
+  Future<void> _refreshSystemDynamicPalette() async {
+    final SystemDynamicPalette? palette;
+    try {
+      final corePalette = await DynamicColorPlugin.getCorePalette();
+      palette = corePalette == null
+          ? null
+          : SystemDynamicPalette.fromPalettes(
+              accent: corePalette.primary,
+              neutral: corePalette.neutral,
+            );
+    } on Object catch (e, st) {
+      talker.warning('[ThemePreference] Dynamic color fetch failed', e, st);
+      return;
+    }
+    if (!ref.mounted || palette == state.systemDynamicPalette) {
+      return;
+    }
+    state = state.copyWith(systemDynamicPalette: palette);
+  }
+
+  Future<void> setUseSystemDynamicColors({required bool value}) async {
+    if (state.useSystemDynamicColors == value) {
+      return;
+    }
+    state = state.copyWith(useSystemDynamicColors: value);
+    await _persist();
+  }
+
+  Future<void> setSyncThemeColorsFromThemeStudio({required bool value}) async {
+    if (state.syncThemeColorsFromThemeStudio == value) {
+      return;
+    }
+    state = state.copyWith(syncThemeColorsFromThemeStudio: value);
+    await _persist();
+    if (value) {
+      final String? wireCss = normalizeCustomThemeCss(
+        ref.read(syncedPreferencesStoreProvider).readWireCustomThemeCss(),
+      );
+      if (wireCss != null) {
+        await applySyncedThemeCustomization(
+          customThemeCss: wireCss,
+          updateSaturationFactor: false,
+        );
+      }
+    }
+  }
+
+  Future<void> setSyncThemeColorsToThemeStudio({required bool value}) async {
+    if (state.syncThemeColorsToThemeStudio == value) {
+      return;
+    }
+    state = state.copyWith(syncThemeColorsToThemeStudio: value);
+    await _persist();
+    if (value) {
+      _markAccessibilityDirty();
+    }
+  }
+
+  void previewThemeColorOverride({
+    required StarThemeMode editingMode,
+    required String cssVariable,
+    required Color color,
+  }) {
+    _applyThemeColorCssChange(
+      upsertScopedThemeColor(
+        customThemeCss: state.customThemeCss,
+        editingMode: editingMode,
+        cssVariable: cssVariable,
+        hexValue: themeColorToCssHex(color),
+      ),
+    );
+    _scheduleThemeColorPersist();
+  }
+
+  Future<void> setThemeColorOverride({
+    required StarThemeMode editingMode,
+    required String cssVariable,
+    required Color color,
+  }) async {
+    previewThemeColorOverride(
+      editingMode: editingMode,
+      cssVariable: cssVariable,
+      color: color,
+    );
+    await _flushThemeColorPersist();
+  }
+
+  Future<void> clearThemeColorOverride({
+    required StarThemeMode editingMode,
+    required String cssVariable,
+  }) async {
+    _applyThemeColorCssChange(
+      clearScopedThemeColor(
+        customThemeCss: state.customThemeCss,
+        editingMode: editingMode,
+        cssVariable: cssVariable,
+      ),
+    );
+    await _flushThemeColorPersist();
+  }
+
+  Future<void> resetThemeColorOverridesForMode(
+    StarThemeMode editingMode,
+  ) async {
+    _applyThemeColorCssChange(
+      clearAllScopedThemeColorsForMode(
+        customThemeCss: state.customThemeCss,
+        editingMode: editingMode,
+      ),
+    );
+    await _flushThemeColorPersist();
+  }
+
+  void _applyThemeColorCssChange(String nextCss) {
+    final ThemePreferenceState current = state;
+    state = ThemePreferenceState(
+      mode: current.mode,
+      scaleFactor: current.scaleFactor,
+      chatFontSize: current.chatFontSize,
+      syncAcrossDevices: current.syncAcrossDevices,
+      saturationFactor: current.saturationFactor,
+      customThemeCss: nextCss.isEmpty ? null : nextCss,
+      syncThemeColorsFromThemeStudio: current.syncThemeColorsFromThemeStudio,
+      syncThemeColorsToThemeStudio: current.syncThemeColorsToThemeStudio,
+      customThemeCssEditedLocally: true,
+      useSystemDynamicColors: current.useSystemDynamicColors,
+      systemDynamicPalette: current.systemDynamicPalette,
+      inflightTheme: current.inflightTheme,
+    );
+  }
+
+  void _scheduleThemeColorPersist() {
+    _themeColorPersistTimer?.cancel();
+    _themeColorPersistTimer = Timer(_kThemeColorPersistDebounce, () {
+      unawaited(_flushThemeColorPersist());
+    });
+  }
+
+  Future<void> flushPendingThemeColorPersist() async {
+    await _flushThemeColorPersist();
+  }
+
+  Future<void> _flushThemeColorPersist() async {
+    _themeColorPersistTimer?.cancel();
+    _themeColorPersistTimer = null;
+    if (!ref.mounted) {
+      return;
+    }
+    await _persist();
+    if (!ref.mounted) {
+      return;
+    }
+    _markAccessibilityDirty();
+  }
+
+  void _markAccessibilityDirty() {
+    if (_isApplyingRemote) {
+      return;
+    }
+    ref
+        .read(syncedPreferencesStoreProvider)
+        .markDirty(SyncedPreferenceField.accessibility);
+  }
+
+  bool get _followsServerTheme =>
+      state.syncAcrossDevices &&
+      (state.mode != StarThemeMode.system || !_systemThemeChosenLocally);
+
+  Future<void> _persist() async {
+    final userId = _userId;
+    if (userId == null) {
+      return;
+    }
+    final db = ref.read(starDatabaseProvider);
+    try {
+      await db.userPreferencesDao.savePreferences(
+        UserPreferencesTableCompanion(
+          userId: Value(userId),
+          theme: Value(state.mode.apiValue),
+          systemThemeChosenLocally: Value(_systemThemeChosenLocally),
+          scaleFactor: Value(state.scaleFactor),
+          chatFontSize: Value(state.chatFontSize),
+          syncAcrossDevices: Value(state.syncAcrossDevices),
+          saturationFactor: Value(state.saturationFactor),
+          customThemeCss: Value(state.customThemeCss ?? ''),
+          syncThemeColorsFromThemeStudio: Value(
+            state.syncThemeColorsFromThemeStudio,
+          ),
+          syncThemeColorsToThemeStudio: Value(
+            state.syncThemeColorsToThemeStudio,
+          ),
+          useSystemDynamicColors: Value(state.useSystemDynamicColors),
+        ),
+      );
+    } on Object catch (e, st) {
+      talker.error('[ThemePreference] Persist failed', e, st);
+    }
+  }
+
+  UserThemeType _toSettingsTheme(StarThemeMode mode) => switch (mode) {
+    StarThemeMode.dark => UserThemeType.dark,
+    StarThemeMode.darkLegacy => UserThemeType.darkLegacy,
+    StarThemeMode.coal => UserThemeType.coal,
+    StarThemeMode.light => UserThemeType.light,
+    StarThemeMode.system => UserThemeType.system,
+  };
+
+  StarThemeMode? _modeFromJson(String raw) =>
+      StarThemeMode.fromApiValue(raw);
+}

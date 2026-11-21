@@ -1,0 +1,311 @@
+import 'dart:typed_data';
+
+import 'package:crop_your_image/crop_your_image.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:star_app/core/theme/star_theme_extension.dart';
+import 'package:star_app/features/settings/presentation/widgets/image_crop_layout.dart';
+import 'package:star_app/features/settings/presentation/widgets/image_crop_painters.dart';
+import 'package:star_app/features/ui/ui.dart';
+import 'package:star_app/l10n/generated/star_localizations.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:star_app/shared/providers/input_modality_provider.dart';
+
+enum CropMaskShape { circle, rectangle }
+
+const _landscapeControlsWidth = 280.0;
+
+Future<Uint8List?> showImageCropSheet(
+  BuildContext context, {
+  required Uint8List imageBytes,
+  required double aspectRatio,
+  required String title,
+  CropMaskShape maskShape = CropMaskShape.rectangle,
+  String? hintText,
+  String? saveLabel,
+  String? skipLabel,
+  bool showSkip = true,
+}) async {
+  final imageSize = await imageCropDecodeImageSize(imageBytes);
+  if (!context.mounted) {
+    return null;
+  }
+  return await Navigator.of(context, rootNavigator: true).push<Uint8List?>(
+    MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (_) => _ImageCropDialog(
+        imageBytes: imageBytes,
+        imageSize: imageSize,
+        aspectRatio: aspectRatio,
+        maskShape: maskShape,
+        title: title,
+        hintText: hintText,
+        saveLabel: saveLabel,
+        skipLabel: skipLabel,
+        showSkip: showSkip,
+      ),
+    ),
+  );
+}
+
+class _ImageCropDialog extends StatelessWidget {
+  const _ImageCropDialog({
+    required this.imageBytes,
+    required this.imageSize,
+    required this.aspectRatio,
+    required this.maskShape,
+    required this.title,
+    this.hintText,
+    this.saveLabel,
+    this.skipLabel,
+    this.showSkip = true,
+  });
+
+  final Uint8List imageBytes;
+  final Size? imageSize;
+  final double aspectRatio;
+  final CropMaskShape maskShape;
+  final String title;
+  final String? hintText;
+  final String? saveLabel;
+  final String? skipLabel;
+  final bool showSkip;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Scaffold(
+      backgroundColor: colors.backgroundPrimary,
+      appBar: AppBar(
+        backgroundColor: colors.backgroundPrimary,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+        leading: const CloseButton(),
+        title: Text(title),
+      ),
+      body: _ImageCropContent(
+        imageBytes: imageBytes,
+        imageSize: imageSize,
+        aspectRatio: aspectRatio,
+        maskShape: maskShape,
+        hintText: hintText,
+        saveLabel: saveLabel,
+        skipLabel: skipLabel,
+        showSkip: showSkip,
+      ),
+    );
+  }
+}
+
+class _ImageCropContent extends ConsumerStatefulWidget {
+  const _ImageCropContent({
+    required this.imageBytes,
+    required this.imageSize,
+    required this.aspectRatio,
+    required this.maskShape,
+    this.hintText,
+    this.saveLabel,
+    this.skipLabel,
+    this.showSkip = true,
+  });
+
+  final Uint8List imageBytes;
+  final Size? imageSize;
+  final double aspectRatio;
+  final CropMaskShape maskShape;
+  final String? hintText;
+  final String? saveLabel;
+  final String? skipLabel;
+  final bool showSkip;
+
+  @override
+  ConsumerState<_ImageCropContent> createState() => _ImageCropContentState();
+}
+
+class _ImageCropContentState extends ConsumerState<_ImageCropContent> {
+  final _cropController = CropController();
+  var _isCropping = false;
+  late final bool _isTouchMode;
+  Size? _viewportSize;
+
+  @override
+  void initState() {
+    super.initState();
+    _isTouchMode = ref.read(inputModalityProvider);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final l10n = StarLocalizations.of(context);
+    final isCircle = widget.maskShape == CropMaskShape.circle;
+    final frameBorderColor = colors.textPrimary.withValues(alpha: 0.9);
+    final frameGuideColor = colors.textPrimary.withValues(alpha: 0.18);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final useSideControls = constraints.maxWidth > constraints.maxHeight;
+        final controls = _buildControls(
+          context,
+          l10n,
+          useSideControls: useSideControls,
+        );
+        final cropArea = _buildCropArea(
+          isCircle: isCircle,
+          frameBorderColor: frameBorderColor,
+          frameGuideColor: frameGuideColor,
+          backgroundColor: colors.backgroundPrimary,
+          textPrimary: colors.textPrimary,
+        );
+
+        if (useSideControls) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: cropArea),
+              SizedBox(width: _landscapeControlsWidth, child: controls),
+            ],
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: cropArea),
+            controls,
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildCropArea({
+    required bool isCircle,
+    required Color frameBorderColor,
+    required Color frameGuideColor,
+    required Color backgroundColor,
+    required Color textPrimary,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        _viewportSize = constraints.biggest;
+        return SizedBox.expand(
+          child: Crop(
+            key: ValueKey(
+              '${constraints.maxWidth.round()}x${constraints.maxHeight.round()}',
+            ),
+            controller: _cropController,
+            image: widget.imageBytes,
+            aspectRatio: widget.aspectRatio,
+            withCircleUi: isCircle,
+            interactive: _isTouchMode,
+            fixCropRect: _isTouchMode,
+            baseColor: backgroundColor,
+            maskColor: backgroundColor.withValues(alpha: 0.7),
+            initialRectBuilder: InitialRectBuilder.withBuilder(
+              (viewportRect, _) =>
+                  computeInitialCropRect(viewportRect, widget.aspectRatio),
+            ),
+            overlayBuilder: (_, _) => CustomPaint(
+              painter: ImageCropFramePainter(
+                isCircle: isCircle,
+                borderColor: frameBorderColor,
+                guideColor: frameGuideColor,
+              ),
+            ),
+            cornerDotBuilder: _isTouchMode
+                ? (_, _) => const SizedBox.shrink()
+                : (size, alignment) => ImageCropCornerHandle(
+                    packageDotSize: size,
+                    alignment: alignment,
+                    color: textPrimary,
+                  ),
+            willUpdateScale: _isTouchMode ? _willUpdateScale : null,
+            progressIndicator: const Center(child: StarLoadingSpinner()),
+            onCropped: _handleCropped,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildControls(
+    BuildContext context,
+    StarLocalizations l10n, {
+    required bool useSideControls,
+  }) {
+    final layout = context.layout;
+    final colors = context.colors;
+    final bottomInset = StarBottomSheet.systemBottomInsetOf(context);
+    final endInset = useSideControls
+        ? StarBottomSheet.systemEndInsetOf(context)
+        : 0.0;
+
+    return Padding(
+      padding: EdgeInsetsDirectional.only(
+        start: layout.s4,
+        top: layout.s3,
+        end: layout.s4 + endInset,
+        bottom: layout.s2 + bottomInset,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            widget.hintText ??
+                (_isTouchMode ? l10n.cropTouchHint : l10n.cropMouseHint),
+            textAlign: TextAlign.center,
+            style: context.textStyles.smallText.copyWith(
+              color: colors.textSecondary,
+            ),
+          ),
+          SizedBox(height: layout.s4),
+          Row(
+            children: [
+              if (widget.showSkip) ...<Widget>[
+                Expanded(
+                  child: StarButton.secondary(
+                    onPressed: _isCropping ? null : _skip,
+                    label: widget.skipLabel ?? l10n.skip,
+                  ),
+                ),
+                SizedBox(width: layout.s3),
+              ],
+              Expanded(
+                child: StarButton.primary(
+                  onPressed: _isCropping ? null : _confirmCrop,
+                  label: widget.saveLabel ?? l10n.crop,
+                  isLoading: _isCropping,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _handleCropped(CropResult result) {
+    if (result case CropSuccess(:final croppedImage)) {
+      Navigator.of(context).pop(croppedImage);
+      return;
+    }
+    setState(() => _isCropping = false);
+  }
+
+  void _skip() => Navigator.of(context).pop(widget.imageBytes);
+
+  void _confirmCrop() {
+    setState(() => _isCropping = true);
+    _cropController.crop();
+  }
+
+  bool _willUpdateScale(double nextScale) {
+    if (widget.imageSize == null || _viewportSize == null) {
+      return true;
+    }
+    final maxScale = imageCropMaxScaleFor(widget.imageSize!, _viewportSize!);
+    return imageCropScaleAllowed(nextScale, maxScale);
+  }
+}

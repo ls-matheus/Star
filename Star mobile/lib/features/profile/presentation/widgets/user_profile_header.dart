@@ -1,0 +1,141 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:star_app/core/providers/instance/instance_runtime_config_provider.dart';
+import 'package:star_app/core/theme/star_theme_extension.dart';
+import 'package:star_app/features/profile/domain/custom_status_utils.dart';
+import 'package:star_app/features/profile/presentation/widgets/user_profile_badges.dart';
+import 'package:star_app/features/profile/presentation/widgets/user_profile_custom_status.dart';
+import 'package:star_app/features/profile/utils/profile_badge_media.dart';
+import 'package:star_app/features/shell/presentation/responsive_layout.dart';
+import 'package:star_app/features/ui/ui.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:star_app/shared/icons/phosphor.dart';
+import 'package:star_app/shared/utils/user_tag.dart';
+import 'package:star_dart/export.dart';
+
+class UserProfileHeader extends ConsumerWidget {
+  const UserProfileHeader({
+    required this.username,
+    required this.discriminator,
+    required this.displayName,
+    required this.badges,
+    required this.customStatus,
+    this.pronouns,
+    this.showUsername = true,
+    this.isBot = false,
+    this.isSystem = false,
+    this.isCurrentUser = false,
+    this.onDisplayNameTap,
+    this.profileBadgeMaxVisible,
+    super.key,
+  });
+
+  final String username;
+  final String discriminator;
+  final String displayName;
+  final List<ProfileBadgeResponse> badges;
+  final String? customStatus;
+  final String? pronouns;
+  final bool showUsername;
+  final bool isBot;
+  final bool isSystem;
+  final bool isCurrentUser;
+  final VoidCallback? onDisplayNameTap;
+  final int? profileBadgeMaxVisible;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.colors;
+    final textStyles = context.textStyles;
+    final layout = context.layout;
+    final String? pronounsTrimmed = pronouns?.trim();
+    final bool showPronouns =
+        pronounsTrimmed != null && pronounsTrimmed.isNotEmpty;
+    final bool showUserTag = isBot || isSystem;
+    final int badgeMaxVisible =
+        profileBadgeMaxVisible ?? _defaultBadgeMaxVisible(context);
+    final TextStyle displayNameStyle = textStyles.heading.copyWith(
+      color: colors.textPrimary,
+      fontSize: 24,
+      fontWeight: FontWeight.w700,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 6,
+          runSpacing: 4,
+          children: [
+            if (onDisplayNameTap != null)
+              StarTappable(
+                onTap: onDisplayNameTap,
+                builder: (BuildContext context, Set<WidgetState> states) {
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(displayName, style: displayNameStyle),
+                      SizedBox(width: layout.s1),
+                      PhosphorIcon(
+                        PhosphorIconsBold.caretDown,
+                        size: 16,
+                        color: colors.textPrimaryMuted,
+                      ),
+                    ],
+                  );
+                },
+              )
+            else
+              Text(displayName, style: displayNameStyle),
+            if (showUserTag) StarUserTag(isSystem: isSystem),
+          ],
+        ),
+        if (showUsername) ...[
+          SizedBox(height: layout.s1),
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              Text(
+                formatUserTag(
+                  username,
+                  discriminator,
+                  uniqueUsernames:
+                      isCurrentUser || ref.watch(uniqueUsernamesProvider),
+                  bot: isBot,
+                ),
+                style: textStyles.bodySmall.copyWith(
+                  color: colors.textTertiary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              UserProfileBadges(badges: badges, maxVisible: badgeMaxVisible),
+            ],
+          ),
+        ],
+        SizedBox(height: layout.s1),
+        if (showPronouns) ...[
+          Text(
+            pronounsTrimmed,
+            style: textStyles.bodySmall.copyWith(color: colors.textTertiary),
+          ),
+          SizedBox(height: layout.s1),
+        ],
+        if (hasVisibleCustomStatus(customStatus))
+          UserProfileCustomStatus(text: customStatus),
+      ],
+    );
+  }
+
+  static int _defaultBadgeMaxVisible(BuildContext context) {
+    if (StarBottomSheet.isInSheet(context)) {
+      return kProfileBadgesCompactMaxVisible;
+    }
+    if (isDesktopLayout(context)) {
+      return kProfileBadgesWideMaxVisible;
+    }
+    return kProfileBadgesCompactMaxVisible;
+  }
+}

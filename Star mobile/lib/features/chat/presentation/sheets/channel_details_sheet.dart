@@ -1,0 +1,693 @@
+import 'dart:async';
+
+import 'package:cupertino_ui/cupertino_ui.dart' hide RichText, Text;
+import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:star_app/core/api/star_client_provider.dart';
+import 'package:star_app/core/database/star_database.dart' as db;
+import 'package:star_app/core/limits/instance_limit_provider.dart';
+import 'package:star_app/core/limits/limit_key.dart';
+import 'package:star_app/core/media/star_media_url.dart';
+import 'package:star_app/core/permissions/channel_effective_permissions.dart';
+import 'package:star_app/core/permissions/channel_permission_reads.dart';
+import 'package:star_app/core/permissions/permission.dart';
+import 'package:star_app/core/providers/app/account_user_id.dart';
+import 'package:star_app/core/providers/app/obscuring_overlay_tracker_provider.dart';
+import 'package:star_app/core/providers/database_provider.dart';
+import 'package:star_app/core/providers/instance/instance_runtime_config_provider.dart';
+import 'package:star_app/core/router/star_router.dart';
+import 'package:star_app/core/theme/star_theme_extension.dart';
+import 'package:star_app/core/utils/channel_jump_link.dart';
+import 'package:star_app/features/channels/data/read_state_repository.dart';
+import 'package:star_app/features/channels/domain/announcement_follow.dart';
+import 'package:star_app/features/channels/domain/channel.dart';
+import 'package:star_app/features/channels/presentation/channel_settings/channel_settings_flow.dart';
+import 'package:star_app/features/channels/presentation/delete_channel_flow.dart';
+import 'package:star_app/features/channels/presentation/modals/show_channel_invite_modal.dart';
+import 'package:star_app/features/channels/presentation/sheets/channel_follow_sheet.dart';
+import 'package:star_app/features/channels/presentation/sheets/channel_notification_settings_sheet.dart';
+import 'package:star_app/features/channels/presentation/sheets/mute_duration_sheet.dart';
+import 'package:star_app/features/channels/presentation/widgets/channel_icon.dart';
+import 'package:star_app/features/channels/providers/channel_list_view_model.dart';
+import 'package:star_app/features/channels/providers/channel_mute_provider.dart';
+import 'package:star_app/features/channels/providers/unread_provider.dart';
+import 'package:star_app/features/channels/utils/channel_invite_capability.dart';
+import 'package:star_app/features/channels/utils/show_channel_debug_sheet.dart';
+import 'package:star_app/features/chat/data/channel_pins_repository.dart';
+import 'package:star_app/features/chat/data/channel_search_history_repository.dart';
+import 'package:star_app/features/chat/data/channel_search_query_parser.dart';
+import 'package:star_app/features/chat/data/message_search_repository.dart';
+import 'package:star_app/features/chat/domain/channel_search_token.dart';
+import 'package:star_app/features/chat/domain/message.dart';
+import 'package:star_app/features/chat/presentation/widgets/channel/search/channel_search_field.dart';
+import 'package:star_app/features/chat/presentation/widgets/channel/search/channel_search_recent_row.dart';
+import 'package:star_app/features/chat/presentation/widgets/channel/search/channel_search_suggestions.dart';
+import 'package:star_app/features/chat/presentation/widgets/messages/blocked_author_preview.dart';
+import 'package:star_app/features/chat/presentation/widgets/messages/message_item.dart';
+import 'package:star_app/features/chat/presentation/widgets/messages/message_markdown.dart';
+import 'package:star_app/features/chat/providers/channel/channel_details_providers.dart';
+import 'package:star_app/features/chat/utils/channel_jump_navigator.dart';
+import 'package:star_app/features/chat/utils/messages/delete_my_messages_in_channel_action.dart';
+import 'package:star_app/features/chat/utils/messages/message_link.dart';
+import 'package:star_app/features/chat/utils/search/channel_search_autocomplete.dart';
+import 'package:star_app/features/chat/utils/search/channel_search_utils.dart';
+import 'package:star_app/features/dm/domain/dm_channel_types.dart';
+import 'package:star_app/features/dm/domain/dm_conversation.dart';
+import 'package:star_app/features/dm/domain/group_dm_utils.dart';
+import 'package:star_app/features/dm/presentation/add_friends_to_group_flow.dart';
+import 'package:star_app/features/dm/presentation/create_dm_flow.dart';
+import 'package:star_app/features/dm/presentation/edit_group_dm_flow.dart';
+import 'package:star_app/features/dm/presentation/group_dm_invites_flow.dart';
+import 'package:star_app/features/dm/presentation/menus/group_dm_member_context_menu.dart';
+import 'package:star_app/features/dm/presentation/widgets/group_dm_avatar.dart';
+import 'package:star_app/features/dm/providers/create_dm_view_model.dart';
+import 'package:star_app/features/dm/providers/dm_mute_provider.dart';
+import 'package:star_app/features/dm/providers/dm_pinned_provider.dart';
+import 'package:star_app/features/dm/providers/dm_providers.dart';
+import 'package:star_app/features/dm/providers/dm_view_model.dart';
+import 'package:star_app/features/favorites/domain/favorite_guild_id.dart';
+import 'package:star_app/features/favorites/providers/favorite_channels_provider.dart';
+import 'package:star_app/features/friends/domain/friend.dart';
+import 'package:star_app/features/friends/providers/blocked_user_ids_provider.dart';
+import 'package:star_app/features/friends/providers/friend_providers.dart';
+import 'package:star_app/features/guilds/data/guild_user_settings_repository.dart';
+import 'package:star_app/features/guilds/providers/guild_list_view_model.dart';
+import 'package:star_app/features/guilds/providers/guild_permissions_provider.dart';
+import 'package:star_app/features/mature_content/providers/mature_content_agreements_provider.dart';
+import 'package:star_app/features/members/domain/group_dm_member_groups.dart';
+import 'package:star_app/features/members/presentation/widgets/guild_members_tab_content.dart';
+import 'package:star_app/features/members/providers/member_list_desired_ranges_provider.dart';
+import 'package:star_app/features/members/providers/member_list_viewport_provider.dart';
+import 'package:star_app/features/profile/domain/custom_status_utils.dart';
+import 'package:star_app/features/profile/presentation/user_profile_sheet.dart';
+import 'package:star_app/features/profile/providers/user_presence_provider.dart';
+import 'package:star_app/features/settings/providers/preferences/appearance_preferences_provider.dart';
+import 'package:star_app/features/settings/providers/view_models/user_settings_view_model.dart';
+import 'package:star_app/features/shell/hosted_ui/hosted_ui_background_bleed.dart';
+import 'package:star_app/features/shell/hosted_ui/hosted_ui_root_scaffold.dart';
+import 'package:star_app/features/shell/hosted_ui/iphone_duo_hosted_ui.dart';
+import 'package:star_app/features/threads/utils/thread_title.dart';
+import 'package:star_app/features/ui/action_menu/context_menu_widgets.dart';
+import 'package:star_app/features/ui/bottom_sheet/star_confirm_sheet.dart';
+import 'package:star_app/features/ui/ui.dart';
+import 'package:star_app/l10n/generated/star_localizations.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:star_app/shared/icons/phosphor.dart';
+import 'package:star_app/shared/utils/api_error_presentation.dart';
+import 'package:star_app/shared/utils/clipboard_utils.dart';
+import 'package:star_app/shared/widgets/custom_status_display.dart';
+import 'package:star_app/shared/widgets/debug_bottom_sheet.dart';
+import 'package:star_markdown/star_markdown.dart';
+
+part '../pages/channel_search_page.dart';
+part 'channel_details_dm_members.dart';
+part 'channel_details_identity.dart';
+part 'channel_details_more_sheet.dart';
+part 'channel_details_sheet_states.dart';
+part 'channel_details_tabs.dart';
+
+const _kSheetLoadMoreThreshold = 160.0;
+
+enum ChannelDetailsInitialTab { members, pins }
+
+Future<void> showChannelDetailsSheetAndJump(
+  BuildContext context, {
+  required ProviderContainer container,
+  required Channel? channel,
+  required DmConversation? dm,
+  ChannelDetailsInitialTab initialTab = ChannelDetailsInitialTab.members,
+  bool openSearchImmediately = false,
+}) async {
+  final ChannelDetailsJumpRequest? request = await showChannelDetailsSheet(
+    context,
+    channel: channel,
+    dm: dm,
+    initialTab: initialTab,
+    openSearchImmediately: openSearchImmediately,
+  );
+  if (request == null) {
+    return;
+  }
+  await executeChannelDetailsJumpRequest(
+    container: container,
+    request: request,
+  );
+}
+
+Future<void> executeChannelDetailsJumpRequest({
+  required ProviderContainer container,
+  required ChannelDetailsJumpRequest request,
+}) async {
+  final db.StarDatabase database = container.read(starDatabaseProvider);
+  await database.messageDao.upsertMessage(request.message.toCompanion());
+  final String? resolvedGuildId =
+      request.guildId ??
+      (await database.channelDao.getChannelById(
+        request.message.channelId,
+      ))?.guildId;
+  await navigateToChannelJumpLink(
+    container: container,
+    link: MessageJumpLink(
+      scope: resolvedGuildId ?? '@me',
+      channelId: request.message.channelId,
+      messageId: request.message.id,
+    ),
+  );
+}
+
+Future<ChannelDetailsJumpRequest?> showChannelDetailsSheet(
+  BuildContext context, {
+  required Channel? channel,
+  required DmConversation? dm,
+  ChannelDetailsInitialTab initialTab = ChannelDetailsInitialTab.members,
+  bool openSearchImmediately = false,
+}) {
+  return StarBottomSheet.showScrollable<ChannelDetailsJumpRequest>(
+    context,
+    desktop: const StarDesktopPresentation(
+      surface: StarDesktopSurface.popout,
+      width: 480,
+      placement: StarDesktopPlacement.belowEnd,
+    ),
+    builder: (sheetContext, scrollController, close) => ChannelDetailsSheet(
+      channel: channel,
+      dm: dm,
+      initialTab: initialTab,
+      openSearchImmediately: openSearchImmediately,
+      scrollController: scrollController,
+      close: close,
+    ),
+  );
+}
+
+class ChannelDetailsJumpRequest {
+  const ChannelDetailsJumpRequest({
+    required this.message,
+    required this.guildId,
+  });
+
+  final Message message;
+  final String? guildId;
+}
+
+class ChannelDetailsSheet extends ConsumerStatefulWidget {
+  const ChannelDetailsSheet({
+    required this.channel,
+    required this.dm,
+    required this.initialTab,
+    required this.openSearchImmediately,
+    required this.scrollController,
+    required this.close,
+    this.closeOnLeading = false,
+    this.completeWithResult,
+    super.key,
+  });
+
+  final Channel? channel;
+  final DmConversation? dm;
+  final ChannelDetailsInitialTab initialTab;
+  final bool openSearchImmediately;
+  final ScrollController scrollController;
+  final VoidCallback close;
+  final bool closeOnLeading;
+  final void Function(ChannelDetailsJumpRequest request)? completeWithResult;
+
+  @override
+  ConsumerState<ChannelDetailsSheet> createState() =>
+      _ChannelDetailsSheetState();
+}
+
+class _ChannelDetailsSheetState extends ConsumerState<ChannelDetailsSheet> {
+  late int _selectedIndex;
+  bool _topicExpanded = false;
+  bool _searchOpened = false;
+  MemberListViewport? _memberListViewport;
+  MemberListDesiredRanges? _memberListDesiredRanges;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedIndex = widget.initialTab == ChannelDetailsInitialTab.pins ? 1 : 0;
+    widget.scrollController.addListener(_onScroll);
+    if (_targetGuildId != null && _targetChannelId != null) {
+      _memberListViewport = ref.read(
+        memberListViewportProvider(readAccountUserId(ref)).notifier,
+      );
+      _memberListDesiredRanges = ref.read(
+        memberListDesiredRangesProvider(readAccountUserId(ref)).notifier,
+      );
+    }
+    if (_selectedIndex == 1) {
+      _ackPins();
+    }
+    if (widget.openSearchImmediately && _targetChannelId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_searchOpened) {
+          _openSearch();
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.scrollController.removeListener(_onScroll);
+    final MemberListViewport? viewport = _memberListViewport;
+    final MemberListDesiredRanges? desiredRanges = _memberListDesiredRanges;
+    final String? guildId = _targetGuildId;
+    final String? channelId = _targetChannelId;
+    if (viewport != null &&
+        desiredRanges != null &&
+        guildId != null &&
+        channelId != null) {
+      scheduleMicrotask(() {
+        viewport.clearChannel(guildId: guildId, channelId: channelId);
+        desiredRanges.clearChannel(guildId: guildId, channelId: channelId);
+      });
+    }
+    super.dispose();
+  }
+
+  String? get _targetChannelId => widget.channel?.id ?? widget.dm?.id;
+  String? get _targetGuildId => widget.channel?.guildId;
+
+  void _onScroll() {
+    final channelId = _targetChannelId;
+    if (_selectedIndex != 1 || channelId == null) {
+      return;
+    }
+    final position = widget.scrollController.position;
+    if (position.pixels >=
+        position.maxScrollExtent - _kSheetLoadMoreThreshold) {
+      unawaited(ref.read(channelPinsProvider(channelId).notifier).loadMore());
+    }
+  }
+
+  void _ackPins() {
+    final channelId = _targetChannelId;
+    if (channelId == null) {
+      return;
+    }
+    unawaited(
+      ReadStateRepository(
+        ref.read(starClientProvider),
+        ref.read(starDatabaseProvider),
+      ).ackPins(channelId),
+    );
+  }
+
+  void _openSearch() {
+    final channelId = _targetChannelId;
+    if (channelId == null) {
+      return;
+    }
+    _searchOpened = true;
+    unawaited(_runSearch(channelId: channelId));
+  }
+
+  Future<void> _runSearch({required String channelId}) async {
+    final ChannelDetailsJumpRequest? request = await showChannelSearchPage(
+      context,
+      channelId: channelId,
+      guildId: _targetGuildId,
+    );
+    if (request == null || !mounted) {
+      return;
+    }
+    _completeChannelDetailsJump(context, request);
+  }
+
+  Future<void> _markRead() async {
+    final channel = widget.channel;
+    final dm = widget.dm;
+    if (channel != null) {
+      await ReadStateRepository(
+        ref.read(starClientProvider),
+        ref.read(starDatabaseProvider),
+      ).ackLatest(channel.id);
+      return;
+    }
+    if (dm != null) {
+      await ref.read(dmViewModelProvider.notifier).markAsRead(dm.id);
+    }
+  }
+
+  Future<void> _toggleFavorite({required bool isFavorite}) async {
+    final channel = widget.channel;
+    final dm = widget.dm;
+    final channelId = channel?.id ?? dm?.id;
+    if (channelId == null) {
+      return;
+    }
+
+    final repository = ref.read(favoriteChannelsRepositoryProvider);
+    if (isFavorite) {
+      await repository.removeChannel(channelId);
+    } else {
+      await repository.addChannel(
+        channelId: channelId,
+        guildId: resolveFavoriteGuildId(
+          channelGuildId: channel?.guildId,
+          isDm: dm != null,
+        ),
+        nickname:
+            (channel == null
+                ? null
+                : readThreadTitleText(
+                    ref,
+                    channel,
+                    StarLocalizations.of(context),
+                  )) ??
+            (dm == null
+                ? null
+                : dmConversationDisplayName(
+                    StarLocalizations.of(context),
+                    dm,
+                  )),
+      );
+    }
+    if (!mounted) {
+      return;
+    }
+    _toast(
+      isFavorite
+          ? StarLocalizations.of(context).favoritesRemovedToast
+          : StarLocalizations.of(context).favoritesAddedToast,
+    );
+  }
+
+  Future<void> _toggleDmPin({required bool isPinned}) async {
+    final dm = widget.dm;
+    if (dm == null) {
+      return;
+    }
+    final repository = ref.read(dmRepositoryProvider);
+    if (isPinned) {
+      await repository.unpinDm(dm.id);
+      if (!mounted) {
+        return;
+      }
+      _toast(StarLocalizations.of(context).dmUnpinned);
+    } else {
+      await repository.pinDm(dm.id);
+      if (!mounted) {
+        return;
+      }
+      _toast(StarLocalizations.of(context).dmPinned);
+    }
+  }
+
+  Future<void> _copy(String value) async {
+    await copyToClipboard(context: context, value: value);
+  }
+
+  Future<void> _confirmCloseDm() async {
+    final dm = widget.dm;
+    if (dm == null) {
+      return;
+    }
+    final String? friendNickname = dm.isGroup
+        ? null
+        : ref.read(friendNicknameProvider(dm.recipientId)).value;
+    final StarLocalizations l10n = StarLocalizations.of(context);
+    final String? currentUserId = ref.read(currentUserIdProvider);
+    final String resolvedName = dm.displayNameWith(
+      friendNickname,
+      l10n: l10n,
+      currentUserId: currentUserId,
+    );
+    await StarConfirmModal.show(
+      context,
+      title: dm.isGroup ? l10n.dmLeaveGroup : l10n.dmCloseDmConfirmTitle,
+      description: dm.isGroup
+          ? l10n.channelDetailsLeaveGroupDescription(resolvedName)
+          : l10n.channelDetailsCloseDmDescription(resolvedName),
+      confirmLabel: dm.isGroup ? l10n.dmLeaveGroup : l10n.dmCloseDm,
+      isDanger: true,
+      onConfirm: () {
+        unawaited(
+          ref
+              .read(dmViewModelProvider.notifier)
+              .closeDmChannel(dm.id, isGroup: dm.isGroup),
+        );
+        widget.close();
+      },
+    );
+  }
+
+  Future<void> _openMuteSheet({required bool isMuted}) async {
+    if (isMuted) {
+      await _setMute(isMuted: false);
+      return;
+    }
+    final l10n = StarLocalizations.of(context);
+    final selection = await showMuteDurationSheet(
+      context,
+      muteTitle: widget.dm != null
+          ? l10n.dmMuteConversation
+          : l10n.notificationMuteChannel,
+    );
+    if (selection == null || !mounted) {
+      return;
+    }
+    await _setMute(isMuted: true, durationSeconds: selection.durationSeconds);
+  }
+
+  Future<void> _setMute({required bool isMuted, int? durationSeconds}) async {
+    final StarLocalizations l10n = StarLocalizations.of(context);
+    final dm = widget.dm;
+    final channel = widget.channel;
+    if (dm != null) {
+      if (isMuted) {
+        await ref
+            .read(dmRepositoryProvider)
+            .muteDm(dm.id, durationSeconds: durationSeconds);
+        _toast(l10n.channelDetailsMutedConversation);
+      } else {
+        await ref.read(dmRepositoryProvider).unmuteDm(dm.id);
+        _toast(l10n.channelDetailsUnmutedConversation);
+      }
+      return;
+    }
+    if (channel != null) {
+      await ref
+          .read(guildUserSettingsRepositoryProvider)
+          .updateChannelOverride(
+            guildId: channel.guildId,
+            channelId: channel.id,
+            muted: isMuted,
+            durationSeconds: durationSeconds,
+          );
+      _toast(
+        isMuted
+            ? l10n.channelDetailsMutedChannel
+            : l10n.channelDetailsUnmutedChannel,
+      );
+    }
+  }
+
+  void _toast(
+    String message, {
+    StarToastVariant variant = StarToastVariant.success,
+  }) {
+    ref
+        .read(toastProvider.notifier)
+        .show(StarToast(message: message, variant: variant));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final StarLocalizations l10n = StarLocalizations.of(context);
+    final targetChannelId = widget.channel?.id ?? widget.dm?.id;
+    final bool matureGateShown =
+        targetChannelId != null &&
+        (ref
+                .watch(shouldShowMatureContentGateProvider(targetChannelId))
+                .value ??
+            true);
+    final hasPins = targetChannelId != null && !matureGateShown;
+    final showFavorites = ref.watch(
+      appearancePreferencesProvider.select((s) => s.showFavorites),
+    );
+    final isFavorite =
+        showFavorites &&
+        targetChannelId != null &&
+        (ref.watch(favoriteChannelProvider(targetChannelId)).asData?.value !=
+            null);
+    final mutedDmIds = ref.watch(mutedDmChannelIdsProvider).value ?? {};
+    final mutedChannelIds = widget.channel == null
+        ? const <String>{}
+        : ref.watch(mutedChannelIdsProvider(widget.channel!.guildId)).value ??
+              const <String>{};
+    final isMuted = widget.dm != null
+        ? mutedDmIds.contains(widget.dm!.id)
+        : widget.channel != null &&
+              mutedChannelIds.contains(widget.channel!.id);
+    final pinnedDmIds = ref.watch(pinnedDmChannelIdsProvider).value ?? {};
+    final isDmPinned = widget.dm != null && pinnedDmIds.contains(widget.dm!.id);
+    final unread = targetChannelId == null
+        ? 0
+        : widget.dm?.unreadCount ??
+              (ref
+                          .watch(channelUnreadProvider(targetChannelId))
+                          .value
+                          ?.hasUnread ??
+                      false
+                  ? 1
+                  : 0);
+    final tabs = <StarTab>[
+      StarTab(
+        label: l10n.channelDetailsTabMembers,
+        icon: PhosphorIconsFill.users,
+      ),
+      if (hasPins)
+        StarTab(
+          label: l10n.channelDetailsTabPins,
+          icon: PhosphorIconsFill.pushPin,
+        ),
+    ];
+    final selectedIndex = _selectedIndex.clamp(0, tabs.length - 1);
+    if (widget.channel != null) {
+      final String prefetchChannelId = widget.channel!.id;
+      ref.watch(effectiveGuildChannelPermissionBitsProvider(prefetchChannelId));
+    }
+
+    return Column(
+      children: [
+        _DetailsIdentityHeader(
+          channel: widget.channel,
+          dm: widget.dm,
+          showTopic: !matureGateShown,
+          topicExpanded: _topicExpanded,
+          onToggleTopic: () => setState(() => _topicExpanded = !_topicExpanded),
+          onClose: widget.close,
+          closeOnLeading: widget.closeOnLeading,
+        ),
+        SizedBox(height: context.layout.s3),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: context.layout.s4),
+          child: Row(
+            children: [
+              Expanded(
+                child: StarActionButton(
+                  icon: PhosphorIconsFill.bellSlash,
+                  label: isMuted
+                      ? l10n.channelDetailsActionUnmute
+                      : l10n.channelDetailsActionMute,
+                  isActive: isMuted,
+                  onTap: () => _openMuteSheet(isMuted: isMuted),
+                ),
+              ),
+              if (hasPins) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: StarActionButton(
+                    icon: PhosphorIconsBold.magnifyingGlass,
+                    label: l10n.channelDetailsActionSearch,
+                    onTap: _openSearch,
+                  ),
+                ),
+              ],
+              const SizedBox(width: 8),
+              Expanded(
+                child: StarActionButton(
+                  icon: PhosphorIconsBold.dotsThreeVertical,
+                  label: l10n.channelDetailsActionMore,
+                  onTap: () {
+                    final bits = widget.channel == null
+                        ? 0
+                        : ref
+                                  .read(
+                                    effectiveGuildChannelPermissionBitsProvider(
+                                      widget.channel!.id,
+                                    ),
+                                  )
+                                  .value ??
+                              0;
+                    final developerMode = ref
+                        .read(userSettingsViewModelProvider)
+                        .developerMode;
+                    unawaited(
+                      _showDetailsMoreSheet(
+                        context,
+                        ref: ref,
+                        channel: widget.channel,
+                        dm: widget.dm,
+                        showFavorite:
+                            showFavorites &&
+                            targetChannelId != null &&
+                            !(widget.dm?.isPersonalNotes ?? false),
+                        isFavorite: isFavorite,
+                        isDmPinned: isDmPinned,
+                        hasUnread: unread > 0,
+                        channelPermissionBits: bits,
+                        developerMode: developerMode,
+                        onMarkRead: _markRead,
+                        onToggleFavorite: _toggleFavorite,
+                        onToggleDmPin: _toggleDmPin,
+                        onCopy: _copy,
+                        onCloseDm: _confirmCloseDm,
+                        onDeleteMyMessages: () {
+                          final dm = widget.dm;
+                          if (dm == null) {
+                            return Future<void>.value();
+                          }
+                          return confirmAndDeleteMyMessagesInChannel(
+                            context,
+                            ref,
+                            channelId: dm.id,
+                            isPrivateConversation: true,
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: context.layout.s3),
+        Stack(
+          alignment: Alignment.bottomCenter,
+          children: [
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                height: 2,
+                color: context.colors.backgroundModifierAccent,
+              ),
+            ),
+            StarTabs(
+              tabs: tabs,
+              selectedIndex: selectedIndex,
+              onChanged: (index) {
+                setState(() => _selectedIndex = index);
+                if (index == 1) {
+                  _ackPins();
+                }
+              },
+            ),
+          ],
+        ),
+        SizedBox(height: context.layout.s3),
+        Expanded(
+          child: selectedIndex == 1 && hasPins
+              ? _PinsTab(
+                  channelId: targetChannelId,
+                  guildId: widget.channel?.guildId,
+                  scrollController: widget.scrollController,
+                )
+              : _MembersTab(
+                  dm: widget.dm,
+                  guildId: widget.channel?.guildId,
+                  channelId: targetChannelId,
+                  scrollController: widget.scrollController,
+                ),
+        ),
+      ],
+    );
+  }
+}

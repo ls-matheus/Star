@@ -1,0 +1,233 @@
+library;
+
+import 'dart:async';
+import 'dart:collection';
+import 'dart:convert';
+import 'dart:math' as math;
+
+import 'package:cached_network_image_ce/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart'
+    show RenderAbstractViewport, ScrollCacheExtent;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:star_app/core/api/star_client_provider.dart';
+import 'package:star_app/core/experiments/experiments_provider.dart';
+import 'package:star_app/core/gateway/providers/gateway_event_providers.dart';
+import 'package:star_app/core/permissions/channel_effective_permissions.dart';
+import 'package:star_app/core/permissions/channel_permission_cache_provider.dart';
+import 'package:star_app/core/permissions/permission.dart';
+import 'package:star_app/core/providers/app/account_user_id.dart';
+import 'package:star_app/core/providers/database_provider.dart';
+import 'package:star_app/core/router/navigate_to_content.dart';
+import 'package:star_app/core/router/route_kind.dart';
+import 'package:star_app/core/router/route_names.dart';
+import 'package:star_app/core/router/route_state_providers.dart';
+import 'package:star_app/core/theme/star_theme_extension.dart';
+import 'package:star_app/features/channels/data/channel_repository.dart';
+import 'package:star_app/features/channels/data/read_state_repository.dart';
+import 'package:star_app/features/channels/domain/announcement_follow.dart';
+import 'package:star_app/features/channels/domain/channel.dart';
+import 'package:star_app/features/channels/domain/channel_unread_state.dart';
+import 'package:star_app/features/channels/presentation/category_menu_data.dart';
+import 'package:star_app/features/channels/presentation/channel_menu_data.dart';
+import 'package:star_app/features/channels/presentation/channel_settings/channel_settings_flow.dart';
+import 'package:star_app/features/channels/presentation/delete_channel_flow.dart';
+import 'package:star_app/features/channels/presentation/modals/show_channel_invite_modal.dart';
+import 'package:star_app/features/channels/presentation/sheets/channel_follow_sheet.dart';
+import 'package:star_app/features/channels/presentation/sheets/channel_notification_settings_sheet.dart';
+import 'package:star_app/features/channels/presentation/sheets/create_channel_sheet.dart';
+import 'package:star_app/features/channels/presentation/sheets/duplicate_channel_sheet.dart';
+import 'package:star_app/features/channels/presentation/sheets/move_channel_to_category_sheet.dart';
+import 'package:star_app/features/channels/presentation/sheets/mute_duration_sheet.dart';
+import 'package:star_app/features/channels/presentation/widgets/channel_icon.dart';
+import 'package:star_app/features/channels/presentation/widgets/channel_list_typing_indicator.dart';
+import 'package:star_app/features/channels/presentation/widgets/channel_unread_indicator.dart';
+import 'package:star_app/features/channels/presentation/widgets/desktop_sidebar_header_surface.dart';
+import 'package:star_app/features/channels/presentation/widgets/guild_sidebar_skeleton.dart';
+import 'package:star_app/features/channels/presentation/widgets/voice_channel_participants.dart';
+import 'package:star_app/features/channels/presentation/widgets/voice_channel_user_count.dart';
+import 'package:star_app/features/channels/providers/channel_list_view_model.dart';
+import 'package:star_app/features/channels/providers/channel_mute_provider.dart';
+import 'package:star_app/features/channels/providers/channel_providers.dart';
+import 'package:star_app/features/channels/providers/channel_sidebar_icon_connect_bits_provider.dart';
+import 'package:star_app/features/channels/providers/guild_channel_unread_snapshot_provider.dart';
+import 'package:star_app/features/channels/providers/guild_collapsed_categories_provider.dart';
+import 'package:star_app/features/channels/providers/guild_sidebar_entries_provider.dart';
+import 'package:star_app/features/channels/providers/guild_sidebar_scroll_store_provider.dart';
+import 'package:star_app/features/channels/providers/unread_provider.dart';
+import 'package:star_app/features/channels/utils/channel_scroll_indicator_severity.dart';
+import 'package:star_app/features/channels/utils/navigation/navigate_to_channel_content.dart';
+import 'package:star_app/features/channels/utils/show_channel_debug_sheet.dart';
+import 'package:star_app/features/chat/presentation/widgets/channel/channel_hover_preload.dart';
+import 'package:star_app/features/chat/utils/messages/delete_my_messages_in_channel_action.dart';
+import 'package:star_app/features/chat/utils/messages/message_link.dart';
+import 'package:star_app/features/favorites/providers/favorite_channels_provider.dart';
+import 'package:star_app/features/guilds/data/guild_user_settings_repository.dart';
+import 'package:star_app/features/guilds/domain/guild.dart';
+import 'package:star_app/features/guilds/presentation/widgets/guild_navbar.dart';
+import 'package:star_app/features/guilds/presentation/widgets/guild_scroll_indicator.dart';
+import 'package:star_app/features/guilds/providers/guild_availability_provider.dart';
+import 'package:star_app/features/guilds/providers/guild_permissions_provider.dart';
+import 'package:star_app/features/guilds/providers/guild_read_state_provider.dart';
+import 'package:star_app/features/guilds/providers/route_guild_provider.dart';
+import 'package:star_app/features/guilds/utils/guild_outage_availability.dart';
+import 'package:star_app/features/mature_content/domain/mature_content_types.dart';
+import 'package:star_app/features/mature_content/providers/mature_content_agreements_provider.dart';
+import 'package:star_app/features/mature_content/providers/sensitive_content_provider.dart';
+import 'package:star_app/features/members/utils/guild_members_page_permissions.dart';
+import 'package:star_app/features/settings/domain/guild/guild_settings_tab.dart';
+import 'package:star_app/features/settings/providers/preferences/advanced_preferences_provider.dart';
+import 'package:star_app/features/settings/providers/preferences/appearance_preferences_provider.dart';
+import 'package:star_app/features/settings/providers/view_models/user_settings_view_model.dart';
+import 'package:star_app/features/shell/presentation/responsive_layout.dart';
+import 'package:star_app/features/shell/providers/layout/shell_sidebar_width_provider.dart';
+import 'package:star_app/features/threads/presentation/thread_sidebar_tile.dart';
+import 'package:star_app/features/ui/action_menu/context_menu_widgets.dart';
+import 'package:star_app/features/ui/scroller/star_smooth_scrollbar.dart';
+import 'package:star_app/features/ui/ui.dart';
+import 'package:star_app/features/voice/presentation/sheets/voice_channel_chat_sheet.dart';
+import 'package:star_app/features/voice/presentation/sheets/voice_p2p_sheets.dart';
+import 'package:star_app/features/voice/providers/voice_channel_member_count_provider.dart';
+import 'package:star_app/features/voice/providers/voice_channel_participants_provider.dart';
+import 'package:star_app/features/voice/providers/voice_p2p_mode_provider.dart';
+import 'package:star_app/features/voice/providers/voice_session_provider.dart';
+import 'package:star_app/features/voice/providers/voice_session_state.dart';
+import 'package:star_app/features/voice/utils/connection/connection_actions.dart';
+import 'package:star_app/features/voice/utils/e2ee/e2ee_display.dart';
+import 'package:star_app/features/voice/utils/e2ee/p2p_mode.dart';
+import 'package:star_app/l10n/generated/star_localizations.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:star_app/shared/external_links/external_link_handler.dart';
+import 'package:star_app/shared/icons/phosphor.dart';
+import 'package:star_app/shared/providers/input_modality_provider.dart';
+import 'package:star_app/shared/utils/api_error_presentation.dart';
+import 'package:star_app/shared/utils/clipboard_utils.dart';
+import 'package:star_app/shared/utils/navigation_item_semantics.dart';
+import 'package:star_dart/export.dart' hide ChannelType;
+import 'package:star_dart/gateway.dart';
+import 'package:go_router/go_router.dart';
+
+part 'guild_sidebar_banner_layout.dart';
+part 'guild_sidebar_category_header.dart';
+part 'guild_sidebar_channel_list.dart';
+part 'guild_sidebar_channel_tile.dart';
+part 'guild_sidebar_header.dart';
+part 'guild_sidebar_helpers.dart';
+part 'guild_sidebar_members_tile.dart';
+
+class GuildSidebar extends ConsumerStatefulWidget {
+  const GuildSidebar({super.key});
+
+  @override
+  ConsumerState<GuildSidebar> createState() => _GuildSidebarState();
+}
+
+class _GuildSidebarState extends ConsumerState<GuildSidebar> {
+  Future<void> _handleServerHeaderTap(BuildContext context, Guild guild) async {
+    if (isMobileLayout(context) || usesDesktopPointerUi(context)) {
+      await presentGuildMenuSheet(context, ref, guild: guild);
+      return;
+    }
+
+    await ref
+        .read(guildPermissionsProvider(readAccountUserId(ref)).notifier)
+        .refreshPermissions(guild.id);
+    if (!context.mounted) {
+      return;
+    }
+
+    final int permissions =
+        ref.read(guildPermissionsProvider(readAccountUserId(ref)))[guild.id] ??
+        0;
+    if (canOpenGuildSettingsForRef(
+      ref: ref,
+      permissions: permissions,
+      guild: guild,
+    )) {
+      await context.push(RoutePaths.guildSettingsPath(guild.id));
+      return;
+    }
+
+    await presentGuildMenuSheet(context, ref, guild: guild);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final String? guildId = ref.watch(activeGuildIdProvider);
+    final (Guild? listGuild, bool listReceived) = ref.watch(
+      channelListViewModelProvider.select(
+        (ChannelListState state) =>
+            (state.guild, state.hasReceivedInitialChannelList),
+      ),
+    );
+    final Guild? routeGuild = guildId == null
+        ? null
+        : ref.watch(routeGuildProvider(guildId)).value;
+    final Guild? guild = listGuild?.id == guildId ? listGuild : routeGuild;
+    final bool guildOutageUnavailable =
+        guildId != null &&
+        ref.watch(
+          guildAvailabilityProvider.select(
+            (Set<String> ids) => isGuildOutageUnavailable(
+              guildId: guildId,
+              trackedUnavailableGuildIds: ids,
+              guild: guild,
+            ),
+          ),
+        );
+    final bool hasReceivedInitialChannelList =
+        listGuild?.id == guildId && listReceived;
+    final bool guildReady =
+        guild != null && guildId != null && guild.id == guildId;
+
+    final bool showStaticHeader =
+        guildOutageUnavailable || !guildReady || !hasReceivedInitialChannelList;
+
+    final double channelSidebarWidth = watchResolvedShellChannelSidebarWidth(
+      ref,
+      context,
+    );
+    final double savedScrollOffset =
+        guildId != null &&
+            guildReady &&
+            !guildOutageUnavailable &&
+            !hasReceivedInitialChannelList
+        ? ref.read(guildSidebarScrollStoreProvider).offsetFor(guildId) ?? 0
+        : 0;
+
+    return Container(
+      width: channelSidebarHasFixedWidth(context) ? channelSidebarWidth : null,
+      padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
+      decoration: BoxDecoration(
+        color: context.colors.channelSidebarBackground,
+        border: BorderDirectional(
+          end: BorderSide(color: context.colors.borderColor),
+        ),
+      ),
+      child: Column(
+        children: [
+          if (showStaticHeader)
+            GuildSidebarHeader(
+              guild: guild,
+              outageUnavailable: guildOutageUnavailable,
+              channelSidebarWidth: channelSidebarWidth,
+              scrollOffset: savedScrollOffset,
+              onTap: guildOutageUnavailable || guild == null
+                  ? null
+                  : () => unawaited(_handleServerHeaderTap(context, guild)),
+            ),
+          Expanded(
+            child: showStaticHeader
+                ? const GuildSidebarSkeleton()
+                : _GuildSidebarChannelListHost(
+                    activeGuildId: guildId,
+                    guild: guild,
+                    onHeaderTap: () =>
+                        unawaited(_handleServerHeaderTap(context, guild)),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}

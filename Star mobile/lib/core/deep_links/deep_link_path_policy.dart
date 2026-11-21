@@ -1,0 +1,170 @@
+import 'package:star_app/core/instance/instance_endpoints.dart';
+import 'package:star_app/core/router/route_names.dart';
+import 'package:star_app/core/utils/channel_jump_link.dart';
+import 'package:star_app/features/guilds/utils/invites/invite_link_parser.dart';
+
+const String appProtocolScheme = 'star';
+
+const Set<String> kInviteShortLinkHosts = <String>{'star.gg'};
+
+const Set<String> kOfficialAppLinkHosts = <String>{
+  'star.invalid',
+  'star.invalid',
+  'canary.star.invalid',
+  'star.gg',
+};
+
+final RegExp _inviteShortLinkCodePattern = RegExp(r'^[a-zA-Z0-9\-]{2,32}$');
+
+final RegExp _routePathBlocklist = RegExp(r'''["'<>\\|\t\r\n]''');
+
+const String userSettingsDeepLinkPath = '/settings/user';
+
+String normalizeDeepLinkPath(String path) {
+  final String trimmed = path.replaceAll(RegExp(r'/+$'), '');
+  return trimmed.isEmpty ? '/' : trimmed;
+}
+
+Uri? parseStarAppLinkUri(String href) {
+  if (!href.startsWith('star:')) {
+    return null;
+  }
+  if (href.startsWith('star://') || href.startsWith('star:/')) {
+    final String normalized =
+        href.startsWith('star:/') && !href.startsWith('star://')
+        ? 'star://${href.substring('star:/'.length)}'
+        : href;
+    return normalizeAppProtocolDeepLinkUri(Uri.parse(normalized));
+  }
+  final String path = href.substring('star:'.length);
+  return Uri(path: path.startsWith('/') ? path : '/$path');
+}
+
+Uri normalizeAppProtocolDeepLinkUri(Uri uri) {
+  if (uri.scheme != appProtocolScheme) {
+    return uri;
+  }
+  final String host = uri.host;
+  final String rawPath = uri.path;
+  final String path = host.isNotEmpty
+      ? (rawPath.isEmpty || rawPath == '/' ? '/$host' : '/$host$rawPath')
+      : (rawPath.isEmpty ? '/' : rawPath);
+  return Uri(
+    path: normalizeDeepLinkPath(path),
+    queryParameters: uri.queryParameters.isEmpty ? null : uri.queryParameters,
+    fragment: uri.fragment.isEmpty ? null : uri.fragment,
+  );
+}
+
+Uri normalizeInviteDeepLinkUri(Uri uri) {
+  final Uri protocolNormalized = normalizeAppProtocolDeepLinkUri(uri);
+  if (protocolNormalized.scheme == appProtocolScheme) {
+    return protocolNormalized;
+  }
+  final String host = protocolNormalized.host.toLowerCase();
+  if (kInviteShortLinkHosts.contains(host)) {
+    final List<String> segments = protocolNormalized.pathSegments;
+    if (segments.length == 1 &&
+        _inviteShortLinkCodePattern.hasMatch(segments.first)) {
+      return Uri(path: RoutePaths.inviteLink(segments.first));
+    }
+    if (segments.length >= 2 &&
+        segments.first == 'invite' &&
+        _inviteShortLinkCodePattern.hasMatch(segments[1])) {
+      return Uri(path: RoutePaths.inviteLink(segments[1]));
+    }
+  }
+  final String? parsedCode = parseInviteCode(protocolNormalized.toString());
+  if (parsedCode != null && protocolNormalized.path.startsWith('/invite/')) {
+    return Uri(path: RoutePaths.inviteLink(parsedCode));
+  }
+  return protocolNormalized;
+}
+
+Uri normalizeIncomingDeepLinkUri(Uri uri) {
+  return normalizeInviteDeepLinkUri(normalizeAppProtocolDeepLinkUri(uri));
+}
+
+Set<String> starOAuthDeepLinkHosts({String? instanceWebAppBase}) {
+  final Set<String> hosts = <String>{
+    ...kOfficialAppLinkHosts,
+    ...kOfficialChannelJumpHosts,
+    ...kInviteShortLinkHosts,
+  };
+  final String? instanceHost = channelJumpHostFromBaseUrl(
+    instanceWebAppBase ?? InstanceEndpoints.webApp,
+  );
+  if (instanceHost != null && instanceHost.isNotEmpty) {
+    hosts.add(instanceHost);
+  }
+  return hosts;
+}
+
+bool isStarOAuthDeepLinkPath(String path) {
+  return normalizeDeepLinkPath(path).startsWith('/oauth2/');
+}
+
+bool isStarOAuthDeepLinkUri(Uri uri, {String? instanceWebAppBase}) {
+  if (uri.scheme != 'http' && uri.scheme != 'https') {
+    return false;
+  }
+  if (!isStarOAuthDeepLinkPath(uri.path)) {
+    return false;
+  }
+  return starOAuthDeepLinkHosts(
+    instanceWebAppBase: instanceWebAppBase,
+  ).contains(uri.host.toLowerCase());
+}
+
+bool isOfficialLinkForOtherInstance(
+  Uri uri, {
+  required String instanceWebAppBase,
+}) {
+  if (uri.scheme != 'http' && uri.scheme != 'https') {
+    return false;
+  }
+  final Set<String> officialHosts = <String>{
+    ...kOfficialAppLinkHosts,
+    ...kOfficialChannelJumpHosts,
+    ...kInviteShortLinkHosts,
+  };
+  if (!officialHosts.contains(uri.host.toLowerCase())) {
+    return false;
+  }
+  final String? instanceHost = channelJumpHostFromBaseUrl(instanceWebAppBase);
+  return instanceHost != null && !officialHosts.contains(instanceHost);
+}
+
+bool isAllowedDeepLinkPath(Uri uri) {
+  if (isStarOAuthDeepLinkUri(uri)) {
+    return false;
+  }
+  final String path = normalizeIncomingDeepLinkUri(uri).path;
+  if (_routePathBlocklist.hasMatch(path)) {
+    return false;
+  }
+  final String normalized = normalizeDeepLinkPath(path);
+  if (normalized == '/') {
+    return false;
+  }
+  if (normalized == RoutePaths.me || normalized.startsWith('/channels/')) {
+    return true;
+  }
+  if (normalized.startsWith('/invite/')) {
+    return true;
+  }
+  if (normalized.startsWith('/gift/')) {
+    return true;
+  }
+  if (normalized.startsWith('/users/')) {
+    return true;
+  }
+  if (normalized == userSettingsDeepLinkPath) {
+    return true;
+  }
+  if (normalized == RoutePaths.notificationsPath ||
+      normalized == RoutePaths.youPath) {
+    return true;
+  }
+  return false;
+}

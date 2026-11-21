@@ -1,0 +1,17 @@
+name: Release Drafter
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  update_beta_draft:
+    name: Update beta release draft
+    uses: ./.github/workflows/_draft-beta-release.yml
+    secrets: inherit
+
+  update_stable_draft:
+    name: Update stable release draft
+    uses: ./.github/workflows/_draft-stable-release.yml
+    secrets: inherit

@@ -1,0 +1,65 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:star_app/core/permissions/channel_effective_permissions.dart';
+import 'package:star_app/core/permissions/channel_permission_cache_provider.dart';
+import 'package:star_app/core/permissions/permission.dart';
+import 'package:star_app/core/providers/app/account_user_id.dart';
+import 'package:star_app/core/providers/database_provider.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+part 'slowmode_immunity_provider.g.dart';
+
+@riverpod
+Future<bool> isSlowmodeImmune(Ref ref, String channelId) async {
+  if (channelId.isEmpty) {
+    return false;
+  }
+
+  ref.watch(
+    channelPermissionCacheProvider(
+      watchAccountUserId(ref),
+    ).select((ChannelPermissionCaches caches) => caches[channelId]),
+  );
+
+  final db = ref.read(starDatabaseProvider);
+  final channelRow = await db.channelDao.getChannelById(channelId);
+  if (!ref.mounted) {
+    return false;
+  }
+  if (channelRow == null) {
+    return false;
+  }
+  if (channelRow.guildId.isEmpty) {
+    return true;
+  }
+
+  int? cachedBits = ref
+      .read(channelPermissionCacheProvider(readAccountUserId(ref)).notifier)
+      .getChannelBits(channelId);
+  if (cachedBits == null) {
+    await ref
+        .read(channelPermissionCacheProvider(readAccountUserId(ref)).notifier)
+        .rebuildChannel(channelId);
+    if (!ref.mounted) {
+      return false;
+    }
+    cachedBits = ref
+        .read(channelPermissionCacheProvider(readAccountUserId(ref)).notifier)
+        .getChannelBits(channelId);
+  }
+  if (cachedBits != null) {
+    return bypassesSlowmode(cachedBits);
+  }
+
+  final ChannelPermissionBitsOutcome outcome =
+      await computeEffectiveGuildChannelPermissionBitsOutcome(
+        ref: ref,
+        channelId: channelId,
+      );
+  if (!ref.mounted) {
+    return false;
+  }
+  if (!outcome.shouldCache) {
+    return false;
+  }
+  return bypassesSlowmode(outcome.value);
+}

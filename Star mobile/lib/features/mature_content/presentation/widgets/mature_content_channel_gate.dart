@@ -1,0 +1,146 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:star_app/core/providers/instance/well_known_provider.dart';
+import 'package:star_app/core/theme/star_theme_extension.dart';
+import 'package:star_app/features/channels/domain/channel.dart';
+import 'package:star_app/features/mature_content/domain/mature_content_types.dart';
+import 'package:star_app/features/mature_content/presentation/mature_content_gate_copy.dart';
+import 'package:star_app/features/mature_content/providers/mature_content_agreements_provider.dart';
+import 'package:star_app/features/mature_content/utils/mature_access_utils.dart';
+import 'package:star_app/features/shell/navigation/invoke_shell_back.dart';
+import 'package:star_app/features/shell/presentation/responsive_layout.dart';
+import 'package:star_app/features/ui/button/star_button.dart';
+import 'package:star_app/features/ui/spinner/star_loading_spinner.dart';
+import 'package:star_app/l10n/generated/star_localizations.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:go_router/go_router.dart';
+
+class MatureContentChannelGate extends ConsumerWidget {
+  const MatureContentChannelGate({
+    required this.channelId,
+    this.channelType,
+    super.key,
+  });
+
+  final String channelId;
+  final ChannelType? channelType;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AsyncValue<MatureContentGateReason> reasonAsync = ref.watch(
+      matureContentGateReasonProvider(channelId),
+    );
+    final AsyncValue<ResolvedMatureGateContext?> contextAsync = ref.watch(
+      matureGateContextProvider(channelId),
+    );
+    return reasonAsync.when(
+      data: (MatureContentGateReason reason) {
+        if (reason == MatureContentGateReason.none) {
+          return const SizedBox.shrink();
+        }
+        return contextAsync.when(
+          data: (ResolvedMatureGateContext? gateContext) {
+            return _MatureContentChannelGateBody(
+              reason: reason,
+              gateContext: gateContext ?? groupDmMatureGateContext(channelId),
+              channelId: channelId,
+              channelType: channelType,
+            );
+          },
+          loading: () => const Center(child: StarLoadingSpinner()),
+          error: (_, _) => const SizedBox.shrink(),
+        );
+      },
+      loading: () => const Center(child: StarLoadingSpinner()),
+      error: (_, _) => const SizedBox.shrink(),
+    );
+  }
+}
+
+class _MatureContentChannelGateBody extends ConsumerWidget {
+  const _MatureContentChannelGateBody({
+    required this.reason,
+    required this.gateContext,
+    required this.channelId,
+    this.channelType,
+  });
+
+  final MatureContentGateReason reason;
+  final ResolvedMatureGateContext gateContext;
+  final String channelId;
+  final ChannelType? channelType;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final StarLocalizations l10n = StarLocalizations.of(context);
+    final MatureContentGateCopy copy = resolveMatureContentGateCopy(
+      l10n: l10n,
+      reason: reason,
+      context: gateContext,
+      webAppAddress: () => ref.watch(instanceWebAppAddressProvider),
+      channelType: channelType,
+    );
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(context.layout.s6),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                copy.title,
+                textAlign: TextAlign.center,
+                style: context.textStyles.heading.copyWith(
+                  color: context.colors.textPrimary,
+                ),
+              ),
+              SizedBox(height: context.layout.s3),
+              Text(
+                copy.body,
+                textAlign: TextAlign.center,
+                style: context.textStyles.bodyMedium.copyWith(
+                  color: context.colors.textSecondary,
+                  height: 1.4,
+                ),
+              ),
+              if (copy.canProceed && copy.primaryButtonLabel != null) ...[
+                SizedBox(height: context.layout.s4),
+                SizedBox(
+                  width: double.infinity,
+                  child: StarButton.primary(
+                    label: copy.primaryButtonLabel,
+                    onPressed: () async {
+                      final String scopeId = gateContext.scopeId ?? channelId;
+                      await ref
+                          .read(matureContentAgreementsProvider.notifier)
+                          .agreeForScope(
+                            scope: gateContext.scope,
+                            scopeId: scopeId,
+                          );
+                    },
+                  ),
+                ),
+              ],
+              if (!copy.canProceed) ...[
+                SizedBox(height: context.layout.s4),
+                SizedBox(
+                  width: double.infinity,
+                  child: StarButton.secondary(
+                    label: MaterialLocalizations.of(context).cancelButtonLabel,
+                    onPressed: () {
+                      if (isMobileLayout(context)) {
+                        invokeShellBack(context, ref);
+                      } else {
+                        context.pop();
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

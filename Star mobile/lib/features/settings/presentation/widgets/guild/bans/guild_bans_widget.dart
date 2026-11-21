@@ -1,0 +1,330 @@
+import 'dart:async';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:star_app/core/theme/star_theme_extension.dart';
+import 'package:star_app/features/chat/presentation/widgets/pickers/picker_search_input.dart';
+import 'package:star_app/features/members/presentation/widgets/member_list_shared_widgets.dart';
+import 'package:star_app/features/settings/domain/guild/guild_ban_entry.dart';
+import 'package:star_app/features/settings/domain/guild/guild_bans_state.dart';
+import 'package:star_app/features/settings/presentation/sheets/guild_ban_actions_sheet.dart';
+import 'package:star_app/features/settings/presentation/sheets/guild_ban_details_sheet.dart';
+import 'package:star_app/features/settings/presentation/widgets/desktop_settings_status_slate.dart';
+import 'package:star_app/features/settings/presentation/widgets/desktop_settings_text.dart';
+import 'package:star_app/features/settings/presentation/widgets/guild/bans/guild_bans_empty_state.dart';
+import 'package:star_app/features/settings/presentation/widgets/guild/bans/guild_bans_list_item.dart';
+import 'package:star_app/features/settings/presentation/widgets/wide_settings_content_layout.dart';
+import 'package:star_app/features/settings/providers/guild/guild_bans_provider.dart';
+import 'package:star_app/features/shell/presentation/responsive_layout.dart';
+import 'package:star_app/features/ui/action_menu/star_action_menu.dart';
+import 'package:star_app/features/ui/modal/star_modal.dart';
+import 'package:star_app/features/ui/spinner/star_loading_spinner.dart';
+import 'package:star_app/features/ui/toast/star_toast.dart';
+import 'package:star_app/features/ui/toast/toast_provider.dart';
+import 'package:star_app/l10n/generated/star_localizations.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:star_app/shared/icons/phosphor.dart';
+import 'package:star_app/shared/providers/input_modality_provider.dart';
+import 'package:star_app/shared/utils/api_error_presentation.dart';
+import 'package:star_app/shared/utils/display_name.dart';
+
+class GuildBansWidget extends ConsumerStatefulWidget {
+  const GuildBansWidget({
+    required this.guildId,
+    required this.state,
+    this.scrollController,
+    super.key,
+  });
+
+  final String guildId;
+  final GuildBansState state;
+  final ScrollController? scrollController;
+
+  @override
+  ConsumerState<GuildBansWidget> createState() => _GuildBansWidgetState();
+}
+
+class _GuildBansWidgetState extends ConsumerState<GuildBansWidget> {
+  late final TextEditingController _searchController;
+  ScrollController? _ownedScrollController;
+
+  ScrollController get _scrollController =>
+      widget.scrollController ?? _ownedScrollController!;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController = TextEditingController(text: widget.state.searchQuery);
+    if (widget.scrollController == null) {
+      _ownedScrollController = ScrollController();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant GuildBansWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.state.searchQuery != _searchController.text) {
+      _searchController.text = widget.state.searchQuery;
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _ownedScrollController?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final StarLocalizations l10n = StarLocalizations.of(context);
+    final GuildBansState state = widget.state;
+    final bool hasScrollableList = state.filteredIndices.isNotEmpty;
+    if (!hasScrollableList) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          _buildHeader(context, l10n),
+          Expanded(child: _buildStaticBody(context, l10n, state)),
+        ],
+      );
+    }
+    return CustomScrollView(
+      controller: _scrollController,
+      slivers: <Widget>[
+        SliverToBoxAdapter(child: _buildHeader(context, l10n)),
+        SliverPadding(
+          padding: EdgeInsets.only(
+            bottom: usesDesktopPointerUi(context)
+                ? 16 + kDesktopSettingsScrollBottomPadding
+                : kSettingsScrollBottomPadding,
+          ),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate((
+              BuildContext context,
+              int index,
+            ) {
+              final GuildBanEntry entry = state.banAtFilteredIndex(index);
+              final int itemCount = state.filteredIndices.length;
+              final bool isMobile = isMobileLayout(context);
+              return MemberListDetailsMemberShell(
+                isFirstInGroup: index == 0,
+                isLastInGroup: index == itemCount - 1,
+                child: GuildBansListItem(
+                  key: ValueKey<String>(entry.userId),
+                  entry: entry,
+                  isMobile: isMobile,
+                  onTap: isMobile ? () => _handleRowTap(context, entry) : null,
+                  onMenuPressed: (Offset position) =>
+                      _showBanMenu(context, entry, position),
+                ),
+              );
+            }, childCount: state.filteredIndices.length),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStaticBody(
+    BuildContext context,
+    StarLocalizations l10n,
+    GuildBansState state,
+  ) {
+    if (usesDesktopPointerUi(context) &&
+        (state.bans.isNotEmpty || state.hasSuccessfulEmptyLoad)) {
+      return Align(
+        alignment: Alignment.topCenter,
+        child: state.bans.isEmpty
+            ? DesktopSettingsStatusSlate(
+                icon: PhosphorIconsRegular.prohibit,
+                title: l10n.guildSettingsBansEmpty,
+                fullHeight: true,
+              )
+            : DesktopSettingsNotice(
+                text: l10n.guildSettingsBansNoSearchResults,
+              ),
+      );
+    }
+    if (state.bans.isEmpty && state.hasSuccessfulEmptyLoad) {
+      return GuildBansEmptyState(l10n: l10n);
+    }
+    if (state.bans.isEmpty) {
+      return const Center(child: StarLoadingSpinner());
+    }
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(context.layout.s4),
+        child: Text(
+          l10n.guildSettingsBansNoSearchResults,
+          style: context.textStyles.bodyMedium.copyWith(
+            color: context.colors.textPrimaryMuted,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context, StarLocalizations l10n) {
+    if (usesDesktopPointerUi(context)) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            DesktopSettingsPageTitle(
+              title: l10n.guildSettingsBannedUsersTitle,
+              description: l10n.guildSettingsBansDescription,
+            ),
+            const SizedBox(height: 16),
+            PickerSearchInput.inline(
+              controller: _searchController,
+              hintText: l10n.guildSettingsBansSearchHint,
+              onChanged: (String value) {
+                ref
+                    .read(guildBansProvider(widget.guildId).notifier)
+                    .setSearchQuery(value);
+              },
+            ),
+          ],
+        ),
+      );
+    }
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        context.layout.s4,
+        context.layout.s4,
+        context.layout.s4,
+        context.layout.s4,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            l10n.guildSettingsBannedUsersTitle,
+            style: context.textStyles.heading.copyWith(
+              fontSize: 18,
+              color: context.colors.textChat,
+            ),
+          ),
+          SizedBox(height: context.layout.s1),
+          Text(
+            l10n.guildSettingsBansDescription,
+            style: context.textStyles.bodyMedium.copyWith(
+              color: context.colors.textPrimaryMuted,
+            ),
+          ),
+          SizedBox(height: context.layout.s4),
+          PickerSearchInput.inline(
+            controller: _searchController,
+            hintText: l10n.guildSettingsBansSearchHint,
+            onChanged: (String value) {
+              ref
+                  .read(guildBansProvider(widget.guildId).notifier)
+                  .setSearchQuery(value);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _handleRowTap(BuildContext context, GuildBanEntry entry) {
+    unawaited(
+      GuildBanActionsSheet.show(
+        context,
+        ref,
+        entry: entry,
+        onViewDetails: () => unawaited(_showBanDetails(context, entry)),
+        onRevokeBan: () => unawaited(_confirmRevokeBan(context, entry)),
+      ),
+    );
+  }
+
+  Future<void> _showBanMenu(
+    BuildContext context,
+    GuildBanEntry entry,
+    Offset position,
+  ) async {
+    final StarLocalizations l10n = StarLocalizations.of(context);
+    await StarActionMenu.show(
+      context,
+      position: position,
+      builder: (BuildContext menuContext, VoidCallback close) => <Widget>[
+        StarMenuItem(
+          label: l10n.guildSettingsBanViewDetails,
+          icon: PhosphorIconsBold.eye,
+          onPressed: () {
+            close();
+            unawaited(_showBanDetails(context, entry));
+          },
+        ),
+        StarMenuItem(
+          label: l10n.guildSettingsRevokeBanTitle,
+          icon: PhosphorIconsBold.prohibit,
+          isDanger: true,
+          onPressed: () {
+            close();
+            unawaited(_confirmRevokeBan(context, entry));
+          },
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showBanDetails(BuildContext context, GuildBanEntry entry) {
+    return GuildBanDetailsSheet.show(
+      context,
+      ref,
+      entry: entry,
+      onRevokeBan: () => _revokeBan(context, entry),
+    );
+  }
+
+  Future<void> _confirmRevokeBan(
+    BuildContext context,
+    GuildBanEntry entry,
+  ) async {
+    final StarLocalizations l10n = StarLocalizations.of(context);
+    final String displayName = resolveDisplayName(
+      username: entry.ban.user.username,
+      globalName: entry.ban.user.globalName,
+    );
+    await StarConfirmModal.show(
+      context,
+      title: l10n.guildSettingsRevokeBanTitle,
+      description: l10n.guildSettingsRevokeBanDescription(displayName),
+      confirmLabel: l10n.guildSettingsRevokeBanTitle,
+      isDanger: true,
+      onConfirm: () => unawaited(_revokeBan(context, entry)),
+    );
+  }
+
+  Future<void> _revokeBan(BuildContext context, GuildBanEntry entry) async {
+    final StarLocalizations l10n = StarLocalizations.of(context);
+    final String displayName = resolveDisplayName(
+      username: entry.ban.user.username,
+      globalName: entry.ban.user.globalName,
+    );
+    try {
+      await ref
+          .read(guildBansProvider(widget.guildId).notifier)
+          .unban(entry.userId);
+      if (!context.mounted) {
+        return;
+      }
+      ref
+          .read(toastProvider.notifier)
+          .show(
+            StarToast(
+              message: l10n.guildSettingsRevokeBanSuccess(displayName),
+            ),
+          );
+    } on Object catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      await showApiError(context, ApiErrorAction.revokeBan, error);
+    }
+  }
+}

@@ -1,0 +1,112 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:star_app/core/router/star_router.dart';
+import 'package:star_app/core/theme/star_theme_extension.dart';
+import 'package:star_app/features/chat/domain/message.dart';
+import 'package:star_app/features/chat/presentation/widgets/messages/blocked_message_groups.dart';
+import 'package:star_app/features/chat/presentation/widgets/messages/message_item.dart';
+import 'package:star_app/features/chat/providers/messages/channel_message_stream_provider.dart';
+import 'package:star_app/features/chat/utils/messages/channel_message_stream.dart';
+import 'package:star_app/features/chat/utils/messages/message_grouping_utils.dart';
+import 'package:star_app/features/mature_content/providers/mature_content_agreements_provider.dart';
+import 'package:star_app/features/notifications/presentation/widgets/notification_row.dart';
+import 'package:star_app/l10n/generated/star_localizations.dart';
+import 'package:star_app/material_ui.dart';
+
+class UnreadInboxCardPreview extends ConsumerWidget {
+  const UnreadInboxCardPreview({
+    required this.preview,
+    required this.read,
+    required this.showViewAllUnread,
+    required this.previewRoleGuildId,
+    required this.onViewAllUnread,
+    super.key,
+  });
+
+  final List<Message> preview;
+  final bool read;
+  final bool showViewAllUnread;
+  final String? previewRoleGuildId;
+  final ValueChanged<Message> onViewAllUnread;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final List<Message> items = preview;
+    if (items.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        NotificationQuote(barGap: 0, child: _buildBody(context, ref, items)),
+        if (showViewAllUnread)
+          NotificationRowButton(
+            label: StarLocalizations.of(context).notificationsViewAllUnread,
+            onPressed: () => onViewAllUnread(items.first),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildBody(BuildContext context, WidgetRef ref, List<Message> items) {
+    final bool matureLocked = watchMatureChannelLocked(
+      ref,
+      items.first.channelId,
+    );
+    if (matureLocked) {
+      return Text(
+        StarLocalizations.of(context).matureMessageHiddenPreview,
+        style: notificationQuoteStyle(
+          context,
+          unread: false,
+        ).copyWith(color: context.colors.textSecondary),
+      );
+    }
+    final String? currentUserId = ref.watch(currentUserIdProvider);
+    final List<ChannelStreamItem> stream = createChannelStream(
+      messages: items,
+      oldestUnreadMessageId: null,
+      context: ref.watch(channelCollapseContextProvider),
+    );
+    final TextStyle previewTextStyle = notificationQuoteStyle(
+      context,
+      unread: !read,
+    );
+    Widget messageTile(Message message, Message? previousMessage) {
+      return MessageItem(
+        message: message,
+        isGrouped: shouldGroupMessages(message, previousMessage),
+        currentUserId: currentUserId,
+        inboxPreviewMode: true,
+        previewTextStyle: previewTextStyle,
+        previewRoleGuildId: previewRoleGuildId,
+      );
+    }
+
+    final List<Widget> children = <Widget>[];
+    Message? previousMessage;
+    for (final ChannelStreamItem item in stream) {
+      if (item.type.isCollapsedGroup) {
+        children.add(
+          BlockedMessageGroups(
+            item: item,
+            isRevealed: false,
+            onToggle: () {},
+            messageBuilder: messageTile,
+          ),
+        );
+        previousMessage = null;
+        continue;
+      }
+      final Message? message = item.singleMessage;
+      if (item.type != ChannelStreamType.message || message == null) {
+        continue;
+      }
+      children.add(messageTile(message, previousMessage));
+      previousMessage = message;
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: children,
+    );
+  }
+}

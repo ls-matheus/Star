@@ -1,0 +1,31 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:star_app/core/permissions/channel_effective_permissions.dart';
+import 'package:star_app/core/permissions/channel_permission_cache_provider.dart';
+import 'package:star_app/core/providers/app/account_user_id.dart';
+import 'package:star_app/core/providers/database_provider.dart';
+import 'package:star_app/features/channels/providers/channel_sidebar_icon_connect_bits_provider.dart';
+
+Future<void> evictInactiveGuildPermissionState(
+  ProviderContainer container,
+  String guildId,
+) async {
+  if (guildId.isEmpty) {
+    return;
+  }
+  final db = container.read(starDatabaseProvider);
+  final channels = await db.channelDao.getChannels(
+    guildId,
+    includeThreads: true,
+  );
+  await container
+      .read(
+        channelPermissionCacheProvider(readAccountUserId(container)).notifier,
+      )
+      .evictGuild(guildId);
+  for (final channel in channels) {
+    container
+      ..invalidate(effectiveGuildChannelPermissionBitsProvider(channel.id))
+      ..invalidate(channelLocalGuildChannelPermissionBitsProvider(channel.id))
+      ..invalidate(channelSidebarIconConnectBitsProvider(channel.id));
+  }
+}

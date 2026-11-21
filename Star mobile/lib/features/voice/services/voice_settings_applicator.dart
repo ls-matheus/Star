@@ -1,0 +1,722 @@
+// ignore_for_file: document_ignores, implementation_imports
+
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:star_app/core/audio/system_voice_call_guard.dart';
+import 'package:star_app/core/platform/star_platform.dart';
+import 'package:star_app/features/voice/domain/voice_output_route.dart';
+import 'package:star_app/features/voice/domain/voice_settings_state.dart';
+import 'package:star_app/features/voice/providers/voice_noise_filter_provider.dart';
+import 'package:star_app/features/voice/providers/voice_video_quality_provider.dart';
+import 'package:star_app/features/voice/utils/audio/audio_publish_options.dart';
+import 'package:star_app/features/voice/utils/audio/processing_profile.dart';
+import 'package:star_app/features/voice/utils/audio/speaker_route.dart';
+import 'package:star_app/features/voice/utils/audio/volume_utils.dart';
+import 'package:star_app/features/voice/utils/e2ee/p2p_mode.dart';
+import 'package:star_app/features/voice/utils/media/camera_platform.dart';
+import 'package:star_app/features/voice/utils/media/camera_resolution_presets.dart';
+import 'package:star_app/features/voice/utils/screen_share/screen_share_presets.dart';
+import 'package:livekit_client/livekit_client.dart';
+import 'package:livekit_client/src/managers/broadcast_manager.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+part 'voice_settings_applicator.g.dart';
+
+class VoiceSettingsApplicator {
+  const VoiceSettingsApplicator({
+    required this.noiseFilterSupported,
+    required this.videoQualityCaps,
+    required this.meshPhoneCap,
+  });
+
+  final bool noiseFilterSupported;
+  final VideoQualityCaps videoQualityCaps;
+  final bool meshPhoneCap;
+
+  VoiceSettingsApplicator forChannelMode(VoiceChannelMode mode) {
+    final bool isP2p = mode == VoiceChannelMode.p2p;
+    return VoiceSettingsApplicator(
+      noiseFilterSupported: noiseFilterSupported,
+      videoQualityCaps: isP2p ? VideoQualityCaps.full : videoQualityCaps,
+      meshPhoneCap: isStarMobileOs && isP2p,
+    );
+  }
+
+  VoiceSettingsState _clampVideo(VoiceSettingsState settings) {
+    return clampVoiceVideoSettings(
+      settings,
+      caps: videoQualityCaps,
+      meshPhoneCap: meshPhoneCap,
+      phoneScreenShareCap: isStarNativeMobileOs,
+    );
+  }
+
+  static Future<void> _cameraRefreshInFlight = Future<void>.value();
+  static VoidCallback? _pendingIosBroadcastListener;
+
+  RoomOptions buildRoomOptions(
+    VoiceSettingsState configured, {
+    int? channelBitrate,
+  }) {
+    final VoiceSettingsState settings = _clampVideo(configured);
+    final ResolvedVoiceProcessing processing = resolveVoiceProcessing(
+      settings: settings,
+      noiseFilterSupported: noiseFilterSupported,
+    );
+    final String? audioDeviceId = _resolveDeviceId(settings.inputDeviceId);
+    final AudioPublishOptions? audioPublish = buildMicrophonePublishOptions(
+      channelBitrate: channelBitrate,
+      processingMode: settings.voiceProcessingMode,
+    );
+    return RoomOptions(
+      dynacast: true,
+      defaultAudioCaptureOptions: AudioCaptureOptions(
+        deviceId: audioDeviceId,
+        echoCancellation: processing.echoCancellation,
+        noiseSuppression: processing.noiseSuppression,
+        autoGainControl: processing.autoGainControl,
+        voiceIsolation: false,
+      ),
+      defaultAudioPublishOptions: audioPublish ?? const AudioPublishOptions(),
+      defaultCameraCaptureOptions: cameraCaptureOptionsFor(
+        resolution: settings.cameraResolution,
+        deviceId: settings.videoDeviceId,
+        cameraFacing: settings.cameraFacing,
+      ),
+      defaultScreenShareCaptureOptions: screenShareCaptureOptionsFor(
+        resolution: settings.screenshareResolution,
+        frameRate: settings.videoFrameRate,
+      ),
+    );
+  }
+
+  AudioCaptureOptions buildAudioCaptureOptions(VoiceSettingsState settings) {
+    final ResolvedVoiceProcessing processing = resolveVoiceProcessing(
+      settings: settings,
+      noiseFilterSupported: noiseFilterSupported,
+    );
+    return AudioCaptureOptions(
+      deviceId: _resolveDeviceId(settings.inputDeviceId),
+      echoCancellation: processing.echoCancellation,
+      noiseSuppression: processing.noiseSuppression,
+      autoGainControl: processing.autoGainControl,
+      voiceIsolation: false,
+    );
+  }
+
+  Future<void> attachNoiseFilterToMicrophone({
+    required LocalParticipant participant,
+    required VoiceSettingsState settings,
+  }) async {
+    final LocalAudioTrack? track = _microphoneTrack(participant);
+    if (track == null) {
+      return;
+    }
+    await attachNoiseFilterToTrack(track: track, settings: settings);
+  }
+
+  Future<void> attachNoiseFilterToTrack({
+    required LocalAudioTrack track,
+    required VoiceSettingsState settings,
+  }) async {}
+
+  LocalAudioTrack? _microphoneTrack(LocalParticipant participant) {
+    final LocalTrackPublication? publication = participant
+        .getTrackPublicationBySource(TrackSource.microphone);
+    final LocalTrack? track = publication?.track;
+    return track is LocalAudioTrack ? track : null;
+  }
+
+  Future<void> applyInputVolumeToMicrophone({
+    required LocalParticipant participant,
+    required int inputVolumePercent,
+  }) async {
+    final LocalAudioTrack? track = _microphoneTrack(participant);
+    if (track == null) {
+      return;
+    }
+    try {
+      await Helper.setVolume(
+        inputVoiceVolumePercentToGain(inputVolumePercent),
+        track.mediaStreamTrack,
+      );
+    } on Object {
+      return;
+    }
+  }
+
+  Future<void> applyMicrophonePublishSettings({
+    required Room room,
+    required VoiceSettingsState settings,
+    int? channelBitrate,
+  }) async {
+    final LocalParticipant? participant = room.localParticipant;
+    if (participant == null) {
+      return;
+    }
+    final LocalAudioTrack? track = _microphoneTrack(participant);
+    final RTCRtpSender? sender = track?.sender;
+    if (sender == null) {
+      return;
+    }
+    final AudioPublishOptions? publishOptions = buildMicrophonePublishOptions(
+      channelBitrate: channelBitrate,
+      processingMode: settings.voiceProcessingMode,
+    );
+    final int? maxBitrate = publishOptions?.encoding?.maxBitrate;
+    if (maxBitrate == null) {
+      return;
+    }
+    final RTCRtpParameters parameters = sender.parameters;
+    final List<RTCRtpEncoding> encodings = List<RTCRtpEncoding>.from(
+      parameters.encodings ?? const <RTCRtpEncoding>[],
+    );
+    if (encodings.isEmpty) {
+      encodings.add(RTCRtpEncoding(maxBitrate: maxBitrate));
+    } else {
+      final bool alreadyApplied = encodings.every(
+        (RTCRtpEncoding encoding) => encoding.maxBitrate == maxBitrate,
+      );
+      if (alreadyApplied) {
+        return;
+      }
+      for (final RTCRtpEncoding encoding in encodings) {
+        encoding.maxBitrate = maxBitrate;
+      }
+    }
+    parameters.encodings = encodings;
+    try {
+      await sender.setParameters(parameters);
+    } on Object {
+      return;
+    }
+  }
+
+  Future<void> setMicrophoneEnabled({
+    required Room room,
+    required VoiceSettingsState settings,
+    required bool enabled,
+    int? channelBitrate,
+  }) async {
+    final LocalParticipant? participant = room.localParticipant;
+    if (participant == null) {
+      return;
+    }
+    final AudioCaptureOptions captureOptions = buildAudioCaptureOptions(
+      settings,
+    );
+    final AudioPublishOptions? publishOptions = enabled
+        ? buildMicrophonePublishOptions(
+            channelBitrate: channelBitrate,
+            processingMode: settings.voiceProcessingMode,
+          )
+        : null;
+    await _withAudioPublishOptions(
+      room: room,
+      publishOptions: publishOptions,
+      action: () => participant.setMicrophoneEnabled(
+        enabled,
+        audioCaptureOptions: captureOptions,
+      ),
+    );
+    if (!enabled) {
+      return;
+    }
+    await attachNoiseFilterToMicrophone(
+      participant: participant,
+      settings: settings,
+    );
+    await applyInputVolumeToMicrophone(
+      participant: participant,
+      inputVolumePercent: settings.inputVolume,
+    );
+    await applyMicrophonePublishSettings(
+      room: room,
+      settings: settings,
+      channelBitrate: channelBitrate,
+    );
+  }
+
+  Future<T> _withAudioPublishOptions<T>({
+    required Room room,
+    required AudioPublishOptions? publishOptions,
+    required Future<T> Function() action,
+  }) async {
+    if (publishOptions == null) {
+      return await action();
+    }
+    final RoomOptions roomOptions = room.roomOptions;
+    // setMicrophoneEnabled has no publishOptions param.
+    // ignore: invalid_use_of_internal_member
+    room.engine.roomOptions = roomOptions.copyWith(
+      defaultAudioPublishOptions: publishOptions,
+    );
+    try {
+      return await action();
+    } finally {
+      // LiveKit internal API.
+      // ignore: invalid_use_of_internal_member
+      room.engine.roomOptions = roomOptions;
+    }
+  }
+
+  CameraCaptureOptions buildCameraCaptureOptions(
+    VoiceSettingsState configured,
+  ) {
+    final VoiceSettingsState settings = _clampVideo(configured);
+    return cameraCaptureOptionsFor(
+      resolution: settings.cameraResolution,
+      deviceId: settings.videoDeviceId,
+      cameraFacing: settings.cameraFacing,
+    );
+  }
+
+  ScreenShareCaptureOptions buildScreenShareCaptureOptions(
+    VoiceSettingsState configured,
+  ) {
+    final VoiceSettingsState settings = _clampVideo(configured);
+    return screenShareCaptureOptionsFor(
+      resolution: settings.screenshareResolution,
+      frameRate: settings.videoFrameRate,
+    );
+  }
+
+  VideoPublishOptions buildScreenSharePublishOptions(
+    VoiceSettingsState configured,
+  ) {
+    final VoiceSettingsState settings = _clampVideo(configured);
+    return VideoPublishOptions(
+      videoCodec: preferredScreenShareVideoCodec(
+        settings.preferredScreenShareCodec,
+      ),
+      screenShareEncoding: screenShareVideoParameters(
+        resolution: settings.screenshareResolution,
+        frameRate: settings.videoFrameRate,
+      ).encoding,
+      simulcast: false,
+      degradationPreference: kScreenShareDegradationPreference,
+    );
+  }
+
+  Future<bool> setScreenShareEnabled({
+    required LocalParticipant participant,
+    required Room room,
+    required VoiceSettingsState settings,
+    required bool enabled,
+    bool captureScreenAudio = false,
+    void Function(Object? error)? onBroadcastSettled,
+  }) async {
+    if (!enabled) {
+      _clearPendingIosBroadcast();
+      await participant.setScreenShareEnabled(false);
+      return false;
+    }
+
+    final RoomOptions roomOptions = room.roomOptions;
+    final ScreenShareCaptureOptions captureOptions =
+        buildScreenShareCaptureOptions(settings);
+    final VideoPublishOptions publishOptions = buildScreenSharePublishOptions(
+      settings,
+    );
+
+    if (Platform.isIOS && !BroadcastManager().isBroadcasting) {
+      await _requestIosBroadcast(
+        participant: participant,
+        room: room,
+        captureOptions: captureOptions,
+        publishOptions: publishOptions,
+        onSettled: onBroadcastSettled,
+      );
+      return true;
+    }
+
+    // setScreenShareEnabled has no publishOptions param.
+    // ignore: invalid_use_of_internal_member
+    room.engine.roomOptions = roomOptions.copyWith(
+      defaultVideoPublishOptions: publishOptions,
+      defaultScreenShareCaptureOptions: captureOptions,
+      defaultAudioPublishOptions: captureScreenAudio
+          ? kScreenShareAudioPublishOptions
+          : roomOptions.defaultAudioPublishOptions,
+    );
+    try {
+      await participant.setScreenShareEnabled(
+        true,
+        captureScreenAudio: captureScreenAudio,
+        screenShareCaptureOptions: captureOptions,
+      );
+    } finally {
+      // LiveKit internal API.
+      // ignore: invalid_use_of_internal_member
+      room.engine.roomOptions = roomOptions;
+    }
+    await _applyMobileScreenShareScale(
+      participant: participant,
+      captureOptions: captureOptions,
+    );
+    return false;
+  }
+
+  Future<void> _applyMobileScreenShareScale({
+    required LocalParticipant participant,
+    required ScreenShareCaptureOptions captureOptions,
+  }) async {
+    final VideoDimensions? source = nativeMobileScreenCaptureDimensions();
+    if (source == null) {
+      return;
+    }
+    await applyScreenShareSenderScale(
+      participant: participant,
+      scaleResolutionDownBy: screenShareScaleDownBy(
+        source: source,
+        target: captureOptions.params.dimensions,
+      ),
+    );
+  }
+
+  Future<void> _requestIosBroadcast({
+    required LocalParticipant participant,
+    required Room room,
+    required ScreenShareCaptureOptions captureOptions,
+    required VideoPublishOptions publishOptions,
+    required void Function(Object? error)? onSettled,
+  }) async {
+    _clearPendingIosBroadcast();
+    final BroadcastManager broadcast = BroadcastManager();
+    void onBroadcastChanged() {
+      if (!broadcast.isBroadcasting) {
+        return;
+      }
+      _clearPendingIosBroadcast();
+      if (!identical(room.localParticipant, participant) ||
+          room.connectionState != ConnectionState.connected) {
+        return;
+      }
+      unawaited(
+        _publishIosBroadcast(
+          participant: participant,
+          captureOptions: captureOptions,
+          publishOptions: publishOptions,
+          onSettled: onSettled,
+        ),
+      );
+    }
+
+    _pendingIosBroadcastListener = onBroadcastChanged;
+    broadcast
+      ..shouldPublishTrack = false
+      ..addListener(onBroadcastChanged);
+    try {
+      await broadcast.requestActivation();
+    } on Object {
+      _clearPendingIosBroadcast();
+      rethrow;
+    }
+  }
+
+  Future<void> _publishIosBroadcast({
+    required LocalParticipant participant,
+    required ScreenShareCaptureOptions captureOptions,
+    required VideoPublishOptions publishOptions,
+    required void Function(Object? error)? onSettled,
+  }) async {
+    LocalVideoTrack? track;
+    try {
+      track = await LocalVideoTrack.createScreenShareTrack(captureOptions);
+      await participant.publishVideoTrack(
+        track,
+        publishOptions: publishOptions,
+      );
+      await _applyMobileScreenShareScale(
+        participant: participant,
+        captureOptions: captureOptions,
+      );
+      onSettled?.call(null);
+    } on Object catch (error) {
+      await track?.dispose();
+      unawaited(BroadcastManager().requestStop());
+      onSettled?.call(error);
+    }
+  }
+
+  static void clearPendingIosBroadcast() => _clearPendingIosBroadcast();
+
+  static void _clearPendingIosBroadcast() {
+    final VoidCallback? listener = _pendingIosBroadcastListener;
+    if (listener == null) {
+      return;
+    }
+    _pendingIosBroadcastListener = null;
+    BroadcastManager()
+      ..removeListener(listener)
+      ..shouldPublishTrack = true;
+  }
+
+  Future<void> applyScreenShareSenderScale({
+    required LocalParticipant participant,
+    required double scaleResolutionDownBy,
+  }) async {
+    final Track? track = participant
+        .getTrackPublicationBySource(TrackSource.screenShareVideo)
+        ?.track;
+    final RTCRtpSender? sender = track?.sender;
+    if (sender == null) {
+      return;
+    }
+    final RTCRtpParameters parameters = sender.parameters;
+    final List<RTCRtpEncoding>? encodings = parameters.encodings;
+    if (encodings == null || encodings.isEmpty) {
+      return;
+    }
+    for (final RTCRtpEncoding encoding in encodings) {
+      encoding.scaleResolutionDownBy = scaleResolutionDownBy;
+    }
+    try {
+      await sender.setParameters(parameters);
+    } on Object {
+      return;
+    }
+  }
+
+  Future<void> refreshScreenShare({
+    required Room room,
+    required VoiceSettingsState settings,
+  }) async {
+    final LocalParticipant? participant = room.localParticipant;
+    if (participant == null) {
+      return;
+    }
+    final bool isSharing =
+        participant.getTrackPublicationBySource(TrackSource.screenShareVideo) !=
+        null;
+    if (!isSharing) {
+      return;
+    }
+    final bool captureScreenAudio =
+        participant.getTrackPublicationBySource(TrackSource.screenShareAudio) !=
+        null;
+    await setScreenShareEnabled(
+      participant: participant,
+      room: room,
+      settings: settings,
+      enabled: false,
+    );
+    await setScreenShareEnabled(
+      participant: participant,
+      room: room,
+      settings: settings,
+      enabled: true,
+      captureScreenAudio: captureScreenAudio,
+    );
+  }
+
+  Future<void> applyNoiseFilterBypass(VoiceSettingsState settings) async {}
+
+  Future<void> refreshMicrophoneAfterRouteChange({
+    required Room room,
+    required VoiceSettingsState settings,
+    int? channelBitrate,
+  }) async {
+    final LocalParticipant? participant = room.localParticipant;
+    if (participant == null) {
+      return;
+    }
+    await applyNoiseFilterBypass(settings);
+    final LocalAudioTrack? track = _microphoneTrack(participant);
+    final AudioCaptureOptions options = buildAudioCaptureOptions(settings);
+    if (track != null) {
+      await track.restartTrack(options);
+      await attachNoiseFilterToMicrophone(
+        participant: participant,
+        settings: settings,
+      );
+      await applyInputVolumeToMicrophone(
+        participant: participant,
+        inputVolumePercent: settings.inputVolume,
+      );
+      await applyMicrophonePublishSettings(
+        room: room,
+        settings: settings,
+        channelBitrate: channelBitrate,
+      );
+      return;
+    }
+    await refreshMicrophone(
+      room: room,
+      settings: settings,
+      microphoneEnabled: true,
+      channelBitrate: channelBitrate,
+    );
+  }
+
+  Future<void> refreshMicrophone({
+    required Room room,
+    required VoiceSettingsState settings,
+    required bool microphoneEnabled,
+    int? channelBitrate,
+  }) async {
+    final LocalParticipant? participant = room.localParticipant;
+    if (participant == null) {
+      return;
+    }
+    await applyNoiseFilterBypass(settings);
+    if (!microphoneEnabled) {
+      return;
+    }
+    await setMicrophoneEnabled(
+      room: room,
+      settings: settings,
+      enabled: false,
+      channelBitrate: channelBitrate,
+    );
+    await setMicrophoneEnabled(
+      room: room,
+      settings: settings,
+      enabled: true,
+      channelBitrate: channelBitrate,
+    );
+  }
+
+  Future<void> refreshCamera({
+    required Room room,
+    required VoiceSettingsState settings,
+    required bool cameraEnabled,
+  }) async {
+    final Completer<void> done = Completer<void>();
+    final Future<void> previous = _cameraRefreshInFlight;
+    _cameraRefreshInFlight = done.future;
+    try {
+      await previous;
+      await _applyCameraRefresh(
+        room: room,
+        settings: settings,
+        cameraEnabled: cameraEnabled,
+      );
+    } finally {
+      if (!done.isCompleted) {
+        done.complete();
+      }
+    }
+  }
+
+  Future<void> _applyCameraRefresh({
+    required Room room,
+    required VoiceSettingsState settings,
+    required bool cameraEnabled,
+  }) async {
+    final LocalParticipant? participant = room.localParticipant;
+    if (participant == null) {
+      return;
+    }
+    final CameraCaptureOptions options = buildCameraCaptureOptions(settings);
+    if (!cameraEnabled) {
+      await participant.setCameraEnabled(false, cameraCaptureOptions: options);
+      return;
+    }
+    final LocalTrackPublication? publication = participant
+        .getTrackPublicationBySource(TrackSource.camera);
+    final LocalVideoTrack? track = publication?.track is LocalVideoTrack
+        ? publication!.track! as LocalVideoTrack
+        : null;
+    if (track != null) {
+      await _applyCameraOptionsToTrack(track: track, options: options);
+      return;
+    }
+    await participant.setCameraEnabled(true, cameraCaptureOptions: options);
+  }
+
+  Future<void> _applyCameraOptionsToTrack({
+    required LocalVideoTrack track,
+    required CameraCaptureOptions options,
+  }) async {
+    final VideoCaptureOptions current = track.currentOptions;
+    if (current is CameraCaptureOptions) {
+      if (cameraCaptureOptionsMatch(current, options)) {
+        return;
+      }
+      if (isNativeMobileVoiceCameraPlatform() &&
+          isCameraFacingOnlyChange(current: current, next: options)) {
+        try {
+          await Helper.switchCamera(track.mediaStreamTrack);
+          track.currentOptions = current.copyWith(
+            cameraPosition: options.cameraPosition,
+          );
+          return;
+        } on Object catch (_) {}
+      }
+    }
+    if (isMobileVoiceCameraPlatform()) {
+      await track.setCameraPosition(options.cameraPosition);
+      return;
+    }
+    await track.restartTrack(options);
+  }
+
+  Future<void> _applyLiveKitOutputRoutePreference(
+    VoiceOutputRoute route,
+  ) async {
+    try {
+      await AudioManager.instance.setSpeakerOutputPreferred(
+        liveKitPrefersSpeaker(route),
+      );
+    } on Object catch (_) {}
+  }
+
+  Future<void> applySpeakerOutput({
+    required VoiceSettingsState settings,
+  }) async {
+    if (await isExternalSystemVoiceCallActive()) {
+      return;
+    }
+    if (!AudioManager.instance.canSwitchSpeakerphone) {
+      return;
+    }
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      await _applyLiveKitOutputRoutePreference(settings.outputRoute);
+      return;
+    }
+    final Set<VoiceOutputRoute> available =
+        await readAvailableVoiceOutputRoutes();
+    final VoiceOutputRoute route = resolveVoiceCallOutputRoute(
+      preference: settings.outputRoute,
+      override: settings.outputRouteOverride,
+      available: available,
+    );
+    await applyNativeVoiceOutputRoute(
+      route,
+      deviceId: settings.outputRouteOverride == route
+          ? settings.outputDeviceOverride
+          : null,
+      explicit: isExplicitVoiceOutputRoute(
+        route: route,
+        preference: settings.outputRoute,
+        override: settings.outputRouteOverride,
+      ),
+    );
+  }
+
+  String? _resolveDeviceId(String deviceId) {
+    if (deviceId == kDefaultVoiceDeviceId || deviceId.isEmpty) {
+      return null;
+    }
+    return deviceId;
+  }
+}
+
+@Riverpod(keepAlive: true)
+VoiceSettingsApplicator voiceSettingsApplicator(Ref ref) {
+  final bool noiseFilterSupported = ref
+      .watch(voiceNoiseFilterProvider)
+      .maybeWhen(
+        data: (VoiceNoiseFilterState value) => value.isSupported,
+        orElse: () => false,
+      );
+  return VoiceSettingsApplicator(
+    noiseFilterSupported: noiseFilterSupported,
+    videoQualityCaps: ref.watch(instanceVideoQualityCapsProvider),
+    meshPhoneCap: false,
+  );
+}

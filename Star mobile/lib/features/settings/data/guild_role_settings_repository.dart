@@ -1,0 +1,142 @@
+import 'package:dio/dio.dart';
+import 'package:star_app/core/api/dio_error_message.dart';
+import 'package:star_app/features/settings/domain/guild/roles/guild_role_icon_field_update.dart';
+import 'package:star_app/features/settings/domain/guild/roles/guild_role_order.dart';
+import 'package:star_dart/export.dart';
+
+class GuildRoleSettingsRepository {
+  const GuildRoleSettingsRepository(this._client);
+
+  final StarClient _client;
+
+  Future<GuildRoleResponse> createRole({
+    required String guildId,
+    required String name,
+  }) async {
+    try {
+      return await _client.guilds.createGuildRole(
+        guildId: guildId,
+        body: GuildRoleCreateRequest(name: name),
+      );
+    } on DioException catch (error) {
+      throw Exception(_messageFromDio(error, "Couldn't create role"));
+    }
+  }
+
+  Future<GuildRoleResponse> updateRole({
+    required String guildId,
+    required String roleId,
+    String? name,
+    int? color,
+    bool? hoist,
+    bool? mentionable,
+    int? permissions,
+    GuildRoleIconFieldUpdate? iconField,
+  }) async {
+    JsonNullable<Base64ImageType> icon =
+        const JsonNullable<Base64ImageType>.undefined();
+    JsonNullable<String> unicodeEmoji = const JsonNullable<String>.undefined();
+    if (iconField != null) {
+      if (iconField.isImage) {
+        icon = JsonNullable<Base64ImageType>.of(iconField.icon);
+        unicodeEmoji = const JsonNullable<String>.of(null);
+      } else if (iconField.isUnicodeEmoji) {
+        icon = const JsonNullable<Base64ImageType>.of(null);
+        unicodeEmoji = JsonNullable<String>.of(iconField.unicodeEmoji);
+      } else if (iconField.isClear) {
+        icon = const JsonNullable<Base64ImageType>.of(null);
+        unicodeEmoji = const JsonNullable<String>.of(null);
+      }
+    }
+    try {
+      return await _client.guilds.updateGuildRole(
+        guildId: guildId,
+        roleId: roleId,
+        body: GuildRoleUpdateRequest(
+          name: name,
+          color: color,
+          hoist: hoist,
+          mentionable: mentionable,
+          permissions: permissions?.toString(),
+          icon: icon,
+          unicodeEmoji: unicodeEmoji,
+        ),
+      );
+    } on DioException catch (error) {
+      throw Exception(_messageFromDio(error, "Couldn't update roles"));
+    }
+  }
+
+  Future<void> deleteRole({
+    required String guildId,
+    required String roleId,
+  }) async {
+    try {
+      await _client.guilds.deleteGuildRole(guildId: guildId, roleId: roleId);
+    } on DioException catch (error) {
+      throw Exception(_messageFromDio(error, "Couldn't delete role"));
+    }
+  }
+
+  Future<void> updateRolePositions({
+    required String guildId,
+    required List<GuildRolePositionPayloadItem> items,
+  }) async {
+    if (items.isEmpty) {
+      return;
+    }
+    try {
+      await _client.guilds.updateGuildRolePositions(
+        guildId: guildId,
+        body: items
+            .map(
+              (GuildRolePositionPayloadItem item) =>
+                  GuildRolePositionsRequestItem(
+                    id: item.id,
+                    position: item.position,
+                  ),
+            )
+            .toList(),
+      );
+    } on DioException catch (error) {
+      throw Exception(_messageFromDio(error, "Couldn't update roles"));
+    }
+  }
+
+  Future<void> updateRoleHoistPositions({
+    required String guildId,
+    required List<GuildRoleHoistPositionPayloadItem> items,
+  }) async {
+    if (items.isEmpty) {
+      return;
+    }
+    try {
+      await _client.guilds.updateRoleHoistPositions(
+        guildId: guildId,
+        body: items
+            .map(
+              (GuildRoleHoistPositionPayloadItem item) =>
+                  GuildRoleHoistPositionsRequestItem(
+                    id: item.id,
+                    hoistPosition: item.hoistPosition,
+                  ),
+            )
+            .toList(),
+      );
+    } on DioException catch (error) {
+      throw Exception(_messageFromDio(error, "Couldn't update roles"));
+    }
+  }
+
+  Future<void> resetRoleHoistPositions({required String guildId}) async {
+    try {
+      await _client.guilds.resetRoleHoistPositions(guildId: guildId);
+    } on DioException catch (error) {
+      throw Exception(_messageFromDio(error, "Couldn't reset hoist order"));
+    }
+  }
+
+  String _messageFromDio(DioException error, String fallback) {
+    return userFacingErrorMessage(error, fallback);
+  }
+}

@@ -1,0 +1,720 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:star_app/core/build/app_build_config.dart';
+import 'package:star_app/core/instance/instance_constants.dart';
+import 'package:star_app/core/instance/instance_runtime_config.dart';
+import 'package:star_app/core/platform/alternate_app_icon_settings.dart';
+import 'package:star_app/core/platform/star_platform.dart';
+import 'package:star_app/core/premium/external_purchase_links_provider.dart';
+import 'package:star_app/core/providers/instance/active_instance_provider.dart';
+import 'package:star_app/core/providers/instance/instance_runtime_config_provider.dart';
+import 'package:star_app/features/settings/domain/user_settings_nav_group.dart';
+import 'package:star_app/features/settings/domain/user_settings_section.dart';
+import 'package:star_app/features/settings/presentation/widgets/settings_star_logo_icon.dart';
+import 'package:star_app/features/settings/presentation/widgets/settings_sidebar.dart';
+import 'package:star_app/features/settings/utils/commerce/user_settings_billing_utils.dart';
+import 'package:star_app/features/settings/utils/user_settings/user_settings_nav_l10n.dart';
+import 'package:star_app/features/settings/utils/user_settings/user_settings_search.dart';
+import 'package:star_app/features/settings/utils/user_settings/user_settings_staff_only_utils.dart';
+import 'package:star_app/features/ui/icons/plutonium_product_icon.dart';
+import 'package:star_app/features/ui/ui.dart';
+import 'package:star_app/l10n/generated/star_localizations.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:star_app/shared/icons/phosphor.dart';
+
+const String kStarLabsInviteUrl = 'https://star.gg/star-labs';
+const String kStarFeedbackUrl = 'https://feedback.star.invalid';
+
+bool userSettingsIsMainStarInstance(WidgetRef ref) {
+  return ref.watch(starBaseUrlProvider) ==
+      InstanceConstants.defaultApiBaseUrl;
+}
+
+bool userSettingsShowGiveFeedbackNav(WidgetRef ref) {
+  return userSettingsIsMainStarInstance(ref);
+}
+
+bool userSettingsShowHelpNav(WidgetRef ref) {
+  return !ref.watch(
+    instanceRuntimeConfigProvider.select(
+      (InstanceRuntimeConfig config) => config.selfHosted,
+    ),
+  );
+}
+
+bool userSettingsShowStarAppPrivacyNav(WidgetRef ref) {
+  return !userSettingsShowHelpNav(ref);
+}
+
+bool userSettingsShowWhatsNewNav(WidgetRef ref) {
+  return ref.watch(externalPurchaseLinksAllowedProvider);
+}
+
+bool userSettingsShowJoinStarLabsNav(WidgetRef ref) {
+  if (!(AppBuildConfig.isBeta || AppBuildConfig.isCanary)) {
+    return false;
+  }
+  return userSettingsIsMainStarInstance(ref);
+}
+
+class UserSettingsDesktopNavEntry {
+  const UserSettingsDesktopNavEntry._({
+    this.group,
+    this.section,
+    this.icon,
+    this.leading,
+    this.isSeparator = false,
+    this.isLogout = false,
+    this.isAppLogs = false,
+    this.isJoinStarLabs = false,
+    this.isGiveFeedback = false,
+    this.isHelp = false,
+    this.isWhatsNew = false,
+    this.isPrivacyPolicy = false,
+    this.isStarAppPrivacyPolicy = false,
+    this.isTermsOfService = false,
+  });
+
+  const UserSettingsDesktopNavEntry.separator([UserSettingsNavGroup? group])
+    : this._(group: group, isSeparator: true);
+
+  const UserSettingsDesktopNavEntry.link(
+    UserSettingsSection section, {
+    required IconData icon,
+  }) : this._(section: section, icon: icon);
+
+  const UserSettingsDesktopNavEntry.linkWithLeading(
+    UserSettingsSection section, {
+    required Widget leading,
+  }) : this._(section: section, leading: leading);
+
+  const UserSettingsDesktopNavEntry.logout()
+    : this._(icon: PhosphorIconsFill.signOut, isLogout: true);
+
+  const UserSettingsDesktopNavEntry.appLogs()
+    : this._(icon: PhosphorIconsFill.list, isAppLogs: true);
+
+  const UserSettingsDesktopNavEntry.joinStarLabs()
+    : this._(icon: PhosphorIconsFill.testTube, isJoinStarLabs: true);
+
+  const UserSettingsDesktopNavEntry.giveFeedback()
+    : this._(icon: PhosphorIconsFill.chatTeardropText, isGiveFeedback: true);
+
+  const UserSettingsDesktopNavEntry.help()
+    : this._(icon: PhosphorIconsFill.question, isHelp: true);
+
+  const UserSettingsDesktopNavEntry.whatsNew()
+    : this._(icon: PhosphorIconsFill.megaphone, isWhatsNew: true);
+
+  const UserSettingsDesktopNavEntry.privacyPolicy()
+    : this._(icon: PhosphorIconsFill.lockKey, isPrivacyPolicy: true);
+
+  const UserSettingsDesktopNavEntry.starAppPrivacyPolicy()
+    : this._(icon: PhosphorIconsFill.lockKey, isStarAppPrivacyPolicy: true);
+
+  const UserSettingsDesktopNavEntry.termsOfService()
+    : this._(icon: PhosphorIconsFill.fileText, isTermsOfService: true);
+
+  final UserSettingsNavGroup? group;
+  final UserSettingsSection? section;
+  final IconData? icon;
+  final Widget? leading;
+  final bool isSeparator;
+  final bool isLogout;
+  final bool isAppLogs;
+  final bool isJoinStarLabs;
+  final bool isGiveFeedback;
+  final bool isHelp;
+  final bool isWhatsNew;
+  final bool isPrivacyPolicy;
+  final bool isStarAppPrivacyPolicy;
+  final bool isTermsOfService;
+
+  SettingsSidebarItem toSidebarItem(StarLocalizations l10n) {
+    if (isSeparator) {
+      if (group == null) {
+        return const SettingsSidebarItem.separator();
+      }
+      return SettingsSidebarItem.separator(
+        userSettingsNavGroupLabel(l10n, group!),
+      );
+    }
+    if (isLogout) {
+      return SettingsSidebarItem(
+        l10n.userSettingsNavLogOut,
+        icon: icon,
+        isDestructive: true,
+      );
+    }
+    if (isAppLogs) {
+      return SettingsSidebarItem(l10n.userSettingsNavAppLogs, icon: icon);
+    }
+    if (isJoinStarLabs) {
+      return SettingsSidebarItem(l10n.userSettingsJoinStarLabs, icon: icon);
+    }
+    if (isGiveFeedback) {
+      return SettingsSidebarItem(l10n.userSettingsGiveFeedback, icon: icon);
+    }
+    if (isHelp) {
+      return SettingsSidebarItem(l10n.userSettingsNavHelp, icon: icon);
+    }
+    if (isWhatsNew) {
+      return SettingsSidebarItem(l10n.userSettingsNavWhatsNew, icon: icon);
+    }
+    if (isPrivacyPolicy) {
+      return SettingsSidebarItem(l10n.premiumPrivacyPolicy, icon: icon);
+    }
+    if (isStarAppPrivacyPolicy) {
+      return SettingsSidebarItem(
+        l10n.userSettingsNavStarAppPrivacyPolicy,
+        icon: icon,
+      );
+    }
+    if (isTermsOfService) {
+      return SettingsSidebarItem(l10n.premiumTermsOfService, icon: icon);
+    }
+    return SettingsSidebarItem(
+      userSettingsSectionLabel(l10n, section!),
+      icon: icon,
+      leading: leading,
+    );
+  }
+
+  String displayLabel(StarLocalizations l10n) {
+    if (isLogout) {
+      return l10n.userSettingsNavLogOut;
+    }
+    if (isAppLogs) {
+      return l10n.userSettingsNavAppLogs;
+    }
+    if (isJoinStarLabs) {
+      return l10n.userSettingsJoinStarLabs;
+    }
+    if (isGiveFeedback) {
+      return l10n.userSettingsGiveFeedback;
+    }
+    if (isHelp) {
+      return l10n.userSettingsNavHelp;
+    }
+    if (isWhatsNew) {
+      return l10n.userSettingsNavWhatsNew;
+    }
+    if (isPrivacyPolicy) {
+      return l10n.premiumPrivacyPolicy;
+    }
+    if (isStarAppPrivacyPolicy) {
+      return l10n.userSettingsNavStarAppPrivacyPolicy;
+    }
+    if (isTermsOfService) {
+      return l10n.premiumTermsOfService;
+    }
+    return userSettingsSectionLabel(l10n, section!);
+  }
+}
+
+const _userSettingsDesktopNavYourAccount = [
+  UserSettingsDesktopNavEntry.separator(UserSettingsNavGroup.yourAccount),
+  UserSettingsDesktopNavEntry.link(
+    UserSettingsSection.profile,
+    icon: PhosphorIconsFill.user,
+  ),
+  UserSettingsDesktopNavEntry.link(
+    UserSettingsSection.securityLogin,
+    icon: PhosphorIconsFill.shieldCheck,
+  ),
+  UserSettingsDesktopNavEntry.link(
+    UserSettingsSection.privacyDashboard,
+    icon: PhosphorIconsFill.eyeSlash,
+  ),
+  UserSettingsDesktopNavEntry.link(
+    UserSettingsSection.authorizedApps,
+    icon: PhosphorIconsFill.robot,
+  ),
+  UserSettingsDesktopNavEntry.link(
+    UserSettingsSection.blockedUsers,
+    icon: PhosphorIconsFill.prohibit,
+  ),
+  UserSettingsDesktopNavEntry.link(
+    UserSettingsSection.linkedDevices,
+    icon: PhosphorIconsFill.devices,
+  ),
+  UserSettingsDesktopNavEntry.link(
+    UserSettingsSection.connections,
+    icon: PhosphorIconsFill.userList,
+  ),
+];
+
+const _userSettingsDesktopNavBilling = [
+  UserSettingsDesktopNavEntry.separator(UserSettingsNavGroup.billing),
+  UserSettingsDesktopNavEntry.link(
+    UserSettingsSection.starPlutonium,
+    icon: kPlutoniumProductIcon,
+  ),
+  UserSettingsDesktopNavEntry.link(
+    UserSettingsSection.giftsAndCodes,
+    icon: PhosphorIconsFill.gift,
+  ),
+];
+
+const _userSettingsDesktopNavApplicationStart = [
+  UserSettingsDesktopNavEntry.separator(UserSettingsNavGroup.application),
+  UserSettingsDesktopNavEntry.link(
+    UserSettingsSection.lookAndFeel,
+    icon: PhosphorIconsFill.paintBrush,
+  ),
+  UserSettingsDesktopNavEntry.link(
+    UserSettingsSection.notifications,
+    icon: PhosphorIconsFill.bell,
+  ),
+  UserSettingsDesktopNavEntry.link(
+    UserSettingsSection.accessibility,
+    icon: PhosphorIconsFill.personSimpleCircle,
+  ),
+  UserSettingsDesktopNavEntry.link(
+    UserSettingsSection.chat,
+    icon: PhosphorIconsFill.chatCircle,
+  ),
+  UserSettingsDesktopNavEntry.link(
+    UserSettingsSection.audioAndVideo,
+    icon: PhosphorIconsFill.microphone,
+  ),
+];
+
+const _userSettingsDesktopNavApplicationShortcuts = [
+  UserSettingsDesktopNavEntry.link(
+    UserSettingsSection.shortcuts,
+    icon: PhosphorIconsFill.keyboard,
+  ),
+];
+
+const _userSettingsDesktopNavApplicationEnd = [
+  UserSettingsDesktopNavEntry.link(
+    UserSettingsSection.languageAndTime,
+    icon: PhosphorIconsBold.translate,
+  ),
+];
+
+const _userSettingsDesktopNavAfterLanguageAndTime = [
+  UserSettingsDesktopNavEntry.link(
+    UserSettingsSection.advanced,
+    icon: PhosphorIconsFill.gear,
+  ),
+  UserSettingsDesktopNavEntry.separator(UserSettingsNavGroup.developer),
+  UserSettingsDesktopNavEntry.link(
+    UserSettingsSection.applications,
+    icon: PhosphorIconsBold.code,
+  ),
+];
+
+const _userSettingsDesktopNavStaffOnly = [
+  UserSettingsDesktopNavEntry.separator(UserSettingsNavGroup.staffOnly),
+  UserSettingsDesktopNavEntry.link(
+    UserSettingsSection.developerTools,
+    icon: PhosphorIconsFill.code,
+  ),
+  UserSettingsDesktopNavEntry.link(
+    UserSettingsSection.limitsConfig,
+    icon: PhosphorIconsFill.flag,
+  ),
+  UserSettingsDesktopNavEntry.link(
+    UserSettingsSection.featureFlags,
+    icon: PhosphorIconsFill.flag,
+  ),
+];
+
+const _userSettingsDesktopNavAppLicenses = [
+  UserSettingsDesktopNavEntry.link(
+    UserSettingsSection.appLicenses,
+    icon: PhosphorIconsFill.scroll,
+  ),
+];
+
+const _userSettingsDesktopNavLogout = [UserSettingsDesktopNavEntry.logout()];
+
+List<UserSettingsDesktopNavEntry> buildUserSettingsDesktopNav({
+  required bool showBilling,
+  required bool showGiveFeedback,
+  required bool showHelp,
+  required bool showJoinStarLabs,
+  required bool isTouchPrimary,
+  bool showAppLogs = false,
+  bool showGifts = true,
+  bool showPrivacyPolicy = false,
+  bool showStarAppPrivacyPolicy = false,
+  bool showTerms = false,
+  bool showWhatsNew = true,
+}) => [
+  ..._userSettingsDesktopNavYourAccount,
+  if (showBilling)
+    ..._userSettingsDesktopNavBilling.where(
+      (UserSettingsDesktopNavEntry entry) =>
+          showGifts || entry.section != UserSettingsSection.giftsAndCodes,
+    ),
+  ..._userSettingsDesktopNavApplicationStart,
+  if (!isTouchPrimary) ..._userSettingsDesktopNavApplicationShortcuts,
+  ..._userSettingsDesktopNavApplicationEnd,
+  if (isStarNativeMobileOs)
+    const UserSettingsDesktopNavEntry.link(
+      UserSettingsSection.defaultApps,
+      icon: PhosphorIconsFill.squaresFour,
+    ),
+  if (isAlternateAppIconSettingsAvailable)
+    const UserSettingsDesktopNavEntry.linkWithLeading(
+      UserSettingsSection.appIcon,
+      leading: SettingsStarLogoIcon(),
+    ),
+  if (isStarDesktopOs)
+    const UserSettingsDesktopNavEntry.link(
+      UserSettingsSection.desktop,
+      icon: PhosphorIconsFill.desktop,
+    ),
+  ..._userSettingsDesktopNavAfterLanguageAndTime,
+  if (showAppLogs) const UserSettingsDesktopNavEntry.appLogs(),
+  if (AppBuildConfig.isCanary) ..._userSettingsDesktopNavStaffOnly,
+  if (showHelp) const UserSettingsDesktopNavEntry.help(),
+  if (showWhatsNew) const UserSettingsDesktopNavEntry.whatsNew(),
+  if (showGiveFeedback) const UserSettingsDesktopNavEntry.giveFeedback(),
+  if (showJoinStarLabs) const UserSettingsDesktopNavEntry.joinStarLabs(),
+  ..._userSettingsDesktopNavAppLicenses,
+  if (showPrivacyPolicy) const UserSettingsDesktopNavEntry.privacyPolicy(),
+  if (showStarAppPrivacyPolicy)
+    const UserSettingsDesktopNavEntry.starAppPrivacyPolicy(),
+  if (showTerms) const UserSettingsDesktopNavEntry.termsOfService(),
+  ..._userSettingsDesktopNavLogout,
+];
+
+int? indexForUserSettingsSection(
+  UserSettingsSection section, {
+  required bool showBilling,
+  required bool showGiveFeedback,
+  required bool showHelp,
+  required bool showJoinStarLabs,
+  required bool isTouchPrimary,
+  bool showAppLogs = false,
+  bool showGifts = true,
+  bool showWhatsNew = true,
+}) {
+  if (!isUserSettingsStaffOnlySectionAvailable(section)) {
+    return null;
+  }
+  if (!isUserSettingsBillingSectionAvailable(
+    section,
+    showBilling: showBilling,
+    showGifts: showGifts,
+  )) {
+    return null;
+  }
+  final List<UserSettingsDesktopNavEntry> nav = buildUserSettingsDesktopNav(
+    showBilling: showBilling,
+    showGifts: showGifts,
+    showWhatsNew: showWhatsNew,
+    showGiveFeedback: showGiveFeedback,
+    showHelp: showHelp,
+    showJoinStarLabs: showJoinStarLabs,
+    isTouchPrimary: isTouchPrimary,
+    showAppLogs: showAppLogs,
+  );
+  for (var i = 0; i < nav.length; i++) {
+    if (nav[i].section == section) {
+      return i;
+    }
+  }
+  return null;
+}
+
+IconData? iconForUserSettingsSection(
+  UserSettingsSection section, {
+  required bool showBilling,
+  required bool showGiveFeedback,
+  required bool showJoinStarLabs,
+  required bool isTouchPrimary,
+  bool showGifts = true,
+}) {
+  if (section == UserSettingsSection.themeColors) {
+    return PhosphorIconsFill.palette;
+  }
+  for (final UserSettingsDesktopNavEntry entry in buildUserSettingsDesktopNav(
+    showBilling: showBilling,
+    showGifts: showGifts,
+    showGiveFeedback: showGiveFeedback,
+    showHelp: false,
+    showJoinStarLabs: showJoinStarLabs,
+    isTouchPrimary: isTouchPrimary,
+  )) {
+    if (entry.section == section) {
+      return entry.icon;
+    }
+  }
+  return null;
+}
+
+Widget? leadingForUserSettingsSection(UserSettingsSection section) {
+  if (section == UserSettingsSection.appIcon &&
+      isAlternateAppIconSettingsAvailable) {
+    return const SettingsStarLogoIcon();
+  }
+  return null;
+}
+
+List<StarSettingsNavGroup> buildUserSettingsMobileNavGroups({
+  required StarLocalizations l10n,
+  required void Function(UserSettingsSection section) onOpenSection,
+  required VoidCallback onOpenAppLogs,
+  required bool showAppLogs,
+  required VoidCallback onOpenWhatsNew,
+  required VoidCallback onJoinStarLabs,
+  required VoidCallback onGiveFeedback,
+  required VoidCallback onOpenHelp,
+  required VoidCallback onLogout,
+  required bool showBilling,
+  required bool showGiveFeedback,
+  required bool showHelp,
+  required bool showJoinStarLabs,
+  required bool isTouchPrimary,
+  bool showGifts = true,
+  VoidCallback? onOpenPrivacyPolicy,
+  VoidCallback? onOpenStarAppPrivacyPolicy,
+  VoidCallback? onOpenTerms,
+  bool showWhatsNew = true,
+}) {
+  StarSettingsNavItem link(UserSettingsSection section, IconData icon) {
+    return StarSettingsNavItem(
+      label: userSettingsSectionLabel(l10n, section),
+      icon: icon,
+      onTap: () => onOpenSection(section),
+    );
+  }
+
+  return [
+    StarSettingsNavGroup(
+      label: userSettingsNavGroupLabel(l10n, UserSettingsNavGroup.yourAccount),
+      items: [
+        link(UserSettingsSection.securityLogin, PhosphorIconsFill.shieldCheck),
+        link(UserSettingsSection.privacyDashboard, PhosphorIconsFill.eyeSlash),
+        link(UserSettingsSection.authorizedApps, PhosphorIconsFill.robot),
+        link(UserSettingsSection.blockedUsers, PhosphorIconsFill.prohibit),
+        link(UserSettingsSection.linkedDevices, PhosphorIconsFill.devices),
+        link(UserSettingsSection.connections, PhosphorIconsFill.userList),
+      ],
+    ),
+    if (showBilling)
+      StarSettingsNavGroup(
+        label: userSettingsNavGroupLabel(l10n, UserSettingsNavGroup.billing),
+        items: [
+          link(UserSettingsSection.starPlutonium, kPlutoniumProductIcon),
+          if (showGifts)
+            link(UserSettingsSection.giftsAndCodes, PhosphorIconsFill.gift),
+        ],
+      ),
+    StarSettingsNavGroup(
+      label: userSettingsNavGroupLabel(l10n, UserSettingsNavGroup.application),
+      items: [
+        link(UserSettingsSection.lookAndFeel, PhosphorIconsFill.paintBrush),
+        link(UserSettingsSection.notifications, PhosphorIconsFill.bell),
+        link(
+          UserSettingsSection.accessibility,
+          PhosphorIconsFill.personSimpleCircle,
+        ),
+        link(UserSettingsSection.chat, PhosphorIconsFill.chatCircle),
+        link(UserSettingsSection.audioAndVideo, PhosphorIconsFill.microphone),
+        if (!isTouchPrimary)
+          link(UserSettingsSection.shortcuts, PhosphorIconsFill.keyboard),
+        link(UserSettingsSection.languageAndTime, PhosphorIconsBold.translate),
+        if (isStarNativeMobileOs)
+          link(UserSettingsSection.defaultApps, PhosphorIconsFill.squaresFour),
+        if (isAlternateAppIconSettingsAvailable)
+          StarSettingsNavItem(
+            label: userSettingsSectionLabel(l10n, UserSettingsSection.appIcon),
+            leading: leadingForUserSettingsSection(UserSettingsSection.appIcon),
+            onTap: () => onOpenSection(UserSettingsSection.appIcon),
+          ),
+        if (isStarDesktopOs)
+          link(UserSettingsSection.desktop, PhosphorIconsFill.desktop),
+        link(UserSettingsSection.advanced, PhosphorIconsFill.gear),
+      ],
+    ),
+    StarSettingsNavGroup(
+      label: userSettingsNavGroupLabel(l10n, UserSettingsNavGroup.developer),
+      items: [
+        link(UserSettingsSection.applications, PhosphorIconsBold.code),
+        if (showAppLogs)
+          StarSettingsNavItem(
+            label: l10n.userSettingsNavAppLogs,
+            icon: PhosphorIconsFill.list,
+            onTap: onOpenAppLogs,
+          ),
+      ],
+    ),
+    if (AppBuildConfig.isCanary)
+      StarSettingsNavGroup(
+        label: userSettingsNavGroupLabel(l10n, UserSettingsNavGroup.staffOnly),
+        items: [
+          link(UserSettingsSection.developerTools, PhosphorIconsFill.code),
+          link(UserSettingsSection.limitsConfig, PhosphorIconsFill.flag),
+          link(UserSettingsSection.featureFlags, PhosphorIconsFill.flag),
+        ],
+      ),
+    StarSettingsNavGroup(
+      items: [
+        if (showHelp)
+          StarSettingsNavItem(
+            label: l10n.userSettingsNavHelp,
+            icon: PhosphorIconsFill.question,
+            onTap: onOpenHelp,
+          ),
+        if (showWhatsNew)
+          StarSettingsNavItem(
+            label: l10n.userSettingsNavWhatsNew,
+            icon: PhosphorIconsFill.megaphone,
+            onTap: onOpenWhatsNew,
+          ),
+        if (showGiveFeedback)
+          StarSettingsNavItem(
+            label: l10n.userSettingsGiveFeedback,
+            icon: PhosphorIconsFill.chatTeardropText,
+            onTap: onGiveFeedback,
+          ),
+        if (showJoinStarLabs)
+          StarSettingsNavItem(
+            label: l10n.userSettingsJoinStarLabs,
+            icon: PhosphorIconsFill.testTube,
+            onTap: onJoinStarLabs,
+          ),
+        link(UserSettingsSection.appLicenses, PhosphorIconsFill.scroll),
+        if (onOpenPrivacyPolicy != null)
+          StarSettingsNavItem(
+            label: l10n.premiumPrivacyPolicy,
+            icon: PhosphorIconsFill.lockKey,
+            onTap: onOpenPrivacyPolicy,
+          ),
+        if (onOpenStarAppPrivacyPolicy != null)
+          StarSettingsNavItem(
+            label: l10n.userSettingsNavStarAppPrivacyPolicy,
+            icon: PhosphorIconsFill.lockKey,
+            onTap: onOpenStarAppPrivacyPolicy,
+          ),
+        if (onOpenTerms != null)
+          StarSettingsNavItem(
+            label: l10n.premiumTermsOfService,
+            icon: PhosphorIconsFill.fileText,
+            onTap: onOpenTerms,
+          ),
+        StarSettingsNavItem(
+          label: l10n.userSettingsNavLogOut,
+          icon: PhosphorIconsFill.signOut,
+          isDanger: true,
+          onTap: onLogout,
+        ),
+      ],
+    ),
+  ];
+}
+
+IconData _searchSectionIcon(
+  UserSettingsSection section, {
+  required bool showBilling,
+  required bool showGiveFeedback,
+  required bool showJoinStarLabs,
+  required bool isTouchPrimary,
+}) {
+  return iconForUserSettingsSection(
+        section,
+        showBilling: showBilling,
+        showGiveFeedback: showGiveFeedback,
+        showJoinStarLabs: showJoinStarLabs,
+        isTouchPrimary: isTouchPrimary,
+      ) ??
+      PhosphorIconsFill.gear;
+}
+
+final class UserSettingsSearchSidebar {
+  const UserSettingsSearchSidebar({
+    required this.items,
+    required this.hitAtIndex,
+  });
+
+  final List<SettingsSidebarItem> items;
+  final List<UserSettingsSearchHit?> hitAtIndex;
+}
+
+UserSettingsSearchSidebar buildUserSettingsSearchSidebar({
+  required StarLocalizations l10n,
+  required List<UserSettingsSearchHit> hits,
+  required bool showBilling,
+  required bool isTouchPrimary,
+}) {
+  final List<SettingsSidebarItem> items = [];
+  final List<UserSettingsSearchHit?> hitAtIndex = [];
+  for (final MapEntry<UserSettingsSection, List<UserSettingsSearchHit>> entry
+      in groupUserSettingsSearchHits(hits)) {
+    final UserSettingsSection section = entry.key;
+    final List<UserSettingsSearchHit> sectionHits = entry.value;
+    final bool onlySectionHit =
+        sectionHits.length == 1 && sectionHits.first.fieldId == null;
+    if (!onlySectionHit) {
+      items.add(
+        SettingsSidebarItem.separator(userSettingsSectionLabel(l10n, section)),
+      );
+      hitAtIndex.add(null);
+    }
+    final Widget? leading = leadingForUserSettingsSection(section);
+    final IconData? icon = leading == null
+        ? _searchSectionIcon(
+            section,
+            showBilling: showBilling,
+            showGiveFeedback: false,
+            showJoinStarLabs: false,
+            isTouchPrimary: isTouchPrimary,
+          )
+        : null;
+    for (final UserSettingsSearchHit hit in sectionHits) {
+      items.add(SettingsSidebarItem(hit.label, icon: icon, leading: leading));
+      hitAtIndex.add(hit);
+    }
+  }
+  return UserSettingsSearchSidebar(items: items, hitAtIndex: hitAtIndex);
+}
+
+List<StarSettingsNavGroup> buildUserSettingsSearchNavGroups({
+  required StarLocalizations l10n,
+  required List<UserSettingsSearchHit> hits,
+  required void Function(UserSettingsSection section, {String? initialFieldId})
+  onOpen,
+  required bool showBilling,
+  required bool isTouchPrimary,
+}) {
+  StarSettingsNavItem searchHitItem(
+    UserSettingsSection section,
+    UserSettingsSearchHit hit,
+  ) {
+    final Widget? leading = leadingForUserSettingsSection(section);
+    return StarSettingsNavItem(
+      label: hit.label,
+      hint: hit.fieldId == null
+          ? null
+          : userSettingsSectionLabel(l10n, section),
+      icon: leading == null
+          ? _searchSectionIcon(
+              section,
+              showBilling: showBilling,
+              showGiveFeedback: false,
+              showJoinStarLabs: false,
+              isTouchPrimary: isTouchPrimary,
+            )
+          : null,
+      leading: leading,
+      onTap: () => onOpen(section, initialFieldId: hit.fieldId),
+    );
+  }
+
+  return [
+    for (final MapEntry<UserSettingsSection, List<UserSettingsSearchHit>> entry
+        in groupUserSettingsSearchHits(hits))
+      StarSettingsNavGroup(
+        label: userSettingsSectionLabel(l10n, entry.key),
+        items: [
+          for (final UserSettingsSearchHit hit in entry.value)
+            searchHitItem(entry.key, hit),
+        ],
+      ),
+  ];
+}

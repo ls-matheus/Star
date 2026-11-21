@@ -1,0 +1,37 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
+import 'package:star_app/core/api/star_client_provider.dart';
+import 'package:star_app/core/providers/database_provider.dart';
+import 'package:star_app/features/friends/data/friend_repository.dart';
+import 'package:star_app/features/friends/domain/friend.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+part 'friend_providers.g.dart';
+
+@Riverpod(keepAlive: true)
+FriendRepository friendRepository(Ref ref) {
+  final client = ref.watch(starClientProvider);
+  final db = ref.watch(starDatabaseProvider);
+  return FriendRepository(client, db);
+}
+
+final friendsListProvider = StreamProvider<List<Friend>>((ref) {
+  return ref.watch(friendRepositoryProvider).watchRelationships();
+});
+
+final StreamProviderFamily<String?, String> friendNicknameProvider =
+    StreamProvider.autoDispose.family<String?, String>((ref, userId) {
+      final db = ref.watch(starDatabaseProvider);
+      return db.relationshipDao.watchRelationship(userId).map((row) {
+        final String? nick = row?.nickname?.trim();
+        return nick == null || nick.isEmpty ? null : nick;
+      });
+    });
+
+final pendingFriendRequestCountProvider = StreamProvider<int>((ref) {
+  final db = ref.watch(starDatabaseProvider);
+  return db.relationshipDao
+      .watchRelationships()
+      .map((rows) => rows.where((r) => r.type == 3).length)
+      .distinct();
+});

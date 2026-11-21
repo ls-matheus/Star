@@ -1,0 +1,214 @@
+import 'dart:typed_data';
+
+import 'package:star_app/core/theme/star_theme_extension.dart';
+import 'package:star_app/features/chat/data/attachment_gallery_source.dart';
+import 'package:star_app/features/chat/utils/attachments/gallery_attachment_selection.dart';
+import 'package:star_app/features/ui/selected_check/star_selected_check.dart';
+import 'package:star_app/features/ui/spinner/star_loading_spinner.dart';
+import 'package:star_app/features/ui/tappable/star_tappable.dart';
+import 'package:star_app/l10n/generated/star_localizations.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:star_app/shared/icons/phosphor.dart';
+
+class AttachmentGalleryGrid extends StatelessWidget {
+  const AttachmentGalleryGrid({
+    required this.items,
+    required this.selectedAssetIds,
+    required this.thumbnailLoader,
+    required this.onCameraPressed,
+    required this.onAssetPressed,
+    required this.scrollController,
+    this.isLoadingMore = false,
+    super.key,
+  });
+
+  final List<AttachmentGalleryItem> items;
+  final Set<String> selectedAssetIds;
+  final Future<Uint8List?> Function(String id) thumbnailLoader;
+  final VoidCallback onCameraPressed;
+  final ValueChanged<AttachmentGalleryItem> onAssetPressed;
+  final ScrollController scrollController;
+  final bool isLoadingMore;
+
+  @override
+  Widget build(BuildContext context) {
+    final layout = context.layout;
+    final int extra = isLoadingMore ? 1 : 0;
+    return GridView.builder(
+      controller: scrollController,
+      padding: EdgeInsets.symmetric(horizontal: layout.s1_5),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 4,
+        mainAxisSpacing: layout.s1,
+        crossAxisSpacing: layout.s1,
+      ),
+      itemCount: 1 + items.length + extra,
+      itemBuilder: (BuildContext context, int index) {
+        if (index == 0) {
+          return _CameraCell(onPressed: onCameraPressed);
+        }
+        final int assetIndex = index - 1;
+        if (assetIndex >= items.length) {
+          return const Center(child: StarLoadingSpinner());
+        }
+        final AttachmentGalleryItem item = items[assetIndex];
+        return _AssetCell(
+          key: ValueKey<String>(item.id),
+          item: item,
+          selected: selectedAssetIds.contains(item.id),
+          thumbnailLoader: thumbnailLoader,
+          onPressed: () => onAssetPressed(item),
+        );
+      },
+    );
+  }
+}
+
+class _CameraCell extends StatelessWidget {
+  const _CameraCell({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final layout = context.layout;
+    final StarLocalizations l10n = StarLocalizations.of(context);
+    return StarTappable(
+      onTap: onPressed,
+      semanticLabel: l10n.chatAttachmentSourceCamera,
+      excludeChildSemantics: true,
+      builder: (BuildContext context, Set<WidgetState> states) {
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: colors.backgroundTertiary,
+            borderRadius: layout.radiusLg,
+          ),
+          child: Center(
+            child: PhosphorIcon(
+              PhosphorIconsFill.camera,
+              color: colors.textPrimary,
+              size: 28,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _AssetCell extends StatefulWidget {
+  const _AssetCell({
+    required this.item,
+    required this.selected,
+    required this.thumbnailLoader,
+    required this.onPressed,
+    super.key,
+  });
+
+  final AttachmentGalleryItem item;
+  final bool selected;
+  final Future<Uint8List?> Function(String id) thumbnailLoader;
+  final VoidCallback onPressed;
+
+  @override
+  State<_AssetCell> createState() => _AssetCellState();
+}
+
+class _AssetCellState extends State<_AssetCell> {
+  late Future<Uint8List?> _thumbnail;
+
+  @override
+  void initState() {
+    super.initState();
+    _thumbnail = widget.thumbnailLoader(widget.item.id);
+  }
+
+  @override
+  void didUpdateWidget(covariant _AssetCell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.item.id != widget.item.id) {
+      _thumbnail = widget.thumbnailLoader(widget.item.id);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final layout = context.layout;
+    return StarTappable(
+      onTap: widget.onPressed,
+      selected: widget.selected,
+      excludeChildSemantics: true,
+      builder: (BuildContext context, Set<WidgetState> states) {
+        return ClipRRect(
+          borderRadius: layout.radiusLg,
+          child: ColoredBox(
+            color: colors.backgroundTertiary,
+            child: Stack(
+              fit: StackFit.expand,
+              children: <Widget>[
+                FutureBuilder<Uint8List?>(
+                  future: _thumbnail,
+                  builder:
+                      (
+                        BuildContext context,
+                        AsyncSnapshot<Uint8List?> snapshot,
+                      ) {
+                        final Uint8List? bytes = snapshot.data;
+                        if (bytes == null || bytes.isEmpty) {
+                          return ColoredBox(color: colors.backgroundTertiary);
+                        }
+                        return Image.memory(bytes, fit: BoxFit.cover);
+                      },
+                ),
+                if (widget.item.isVideo && widget.item.duration != null)
+                  PositionedDirectional(
+                    start: layout.s1_5,
+                    bottom: layout.s1_5,
+                    child: Text(
+                      formatGalleryVideoDuration(widget.item.duration!),
+                      style: context.textStyles.smallText.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                if (widget.selected)
+                  const ColoredBox(color: Color.fromRGBO(0, 0, 0, 0.4)),
+                PositionedDirectional(
+                  top: layout.s1_5,
+                  end: layout.s1_5,
+                  child: _SelectionMark(selected: widget.selected),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _SelectionMark extends StatelessWidget {
+  const _SelectionMark({required this.selected});
+
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    const double size = 22;
+    if (!selected) {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 2),
+          color: const Color.fromRGBO(0, 0, 0, 0.26),
+        ),
+      );
+    }
+    return const StarSelectedCheck();
+  }
+}

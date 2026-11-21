@@ -1,0 +1,182 @@
+import 'package:star_app/core/theme/star_theme_extension.dart';
+import 'package:star_app/features/ui/preview/star_widget_preview.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:star_app/shared/icons/phosphor.dart';
+import 'package:star_app/shared/providers/input_modality_provider.dart';
+
+class StarSwitchControl extends StatelessWidget {
+  const StarSwitchControl({
+    required this.value,
+    this.enabled = true,
+    super.key,
+  });
+
+  final bool value;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final layout = context.layout;
+    final motion = context.motion;
+    final trackWidth = layout.switchTrackWidth;
+    final trackHeight = layout.switchTrackHeight;
+    final thumbSize = layout.switchThumbSize;
+    final thumbInset = layout.switchThumbInset;
+    final iconSize = layout.switchIconSize;
+    final thumbOffset = value
+        ? trackWidth - thumbSize - thumbInset
+        : thumbInset;
+    final trackColor = value ? colors.brandPrimary : colors.switchTrackInactive;
+
+    if (usesDesktopPointerUi(context)) {
+      return _buildDesktop(context, trackColor, thumbOffset);
+    }
+
+    return ExcludeSemantics(
+      child: AnimatedOpacity(
+        duration: motion.fast,
+        curve: motion.curve,
+        opacity: enabled ? 1 : 0.5,
+        child: SizedBox(
+          width: trackWidth,
+          height: trackHeight,
+          child: AnimatedContainer(
+            duration: motion.fast,
+            curve: motion.curve,
+            decoration: BoxDecoration(
+              color: trackColor,
+              borderRadius: layout.radiusFull,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: value ? 0.10 : 0.15),
+                  blurRadius: 4,
+                  offset: const Offset(0, 1),
+                  spreadRadius: -1,
+                ),
+              ],
+            ),
+            child: Stack(
+              children: [
+                AnimatedPositionedDirectional(
+                  duration: motion.fast,
+                  curve: motion.curve,
+                  start: thumbOffset,
+                  top: thumbInset,
+                  child: Container(
+                    width: thumbSize,
+                    height: thumbSize,
+                    decoration: BoxDecoration(
+                      color: colors.switchThumb,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.20),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                    child: AnimatedSwitcher(
+                      duration: motion.fast,
+                      switchInCurve: motion.curve,
+                      switchOutCurve: motion.curve,
+                      child: Icon(
+                        value ? Icons.check_rounded : Icons.close_rounded,
+                        key: ValueKey(value),
+                        size: value ? iconSize : iconSize - 2,
+                        color: value
+                            ? colors.switchThumbCheckedIcon
+                            : colors.switchThumbUncheckedIcon,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktop(
+    BuildContext context,
+    Color trackColor,
+    double thumbOffset,
+  ) {
+    final colors = context.colors;
+    final Duration duration = context.motion.normal;
+    const Curve curve = Curves.fastOutSlowIn;
+    const Color uncheckedIcon = Color(0xFF6B7280);
+    return ExcludeSemantics(
+      child: Opacity(
+        opacity: enabled ? 1 : 0.5,
+        child: SizedBox(
+          width: 44,
+          height: 24,
+          child: AnimatedContainer(
+            duration: duration,
+            curve: curve,
+            decoration: BoxDecoration(
+              color: trackColor,
+              borderRadius: BorderRadius.circular(9999),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.white.withValues(alpha: value ? 0.15 : 0.1),
+                  offset: const Offset(0, 1),
+                ),
+              ],
+            ),
+            child: Stack(
+              children: [
+                AnimatedPositionedDirectional(
+                  duration: duration,
+                  curve: curve,
+                  start: value ? 22 : 2,
+                  top: 2,
+                  child: Container(
+                    width: 20,
+                    height: 20,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: value ? colors.brandPrimaryFill : Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.15),
+                          offset: const Offset(0, 1),
+                        ),
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.2),
+                          offset: const Offset(0, 2),
+                          blurRadius: 4,
+                          spreadRadius: -1,
+                        ),
+                      ],
+                    ),
+                    child: PhosphorIcon(
+                      value ? PhosphorIconsBold.check : PhosphorIconsBold.x,
+                      size: value ? 12 : 10,
+                      color: value ? colors.brandPrimary : uncheckedIcon,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+@StarWidgetPreview(name: 'Off', group: 'StarSwitchControl')
+Widget starSwitchControlOffPreview() {
+  return const StarSwitchControl(value: false);
+}
+
+@StarWidgetPreview(name: 'On', group: 'StarSwitchControl')
+Widget starSwitchControlOnPreview() {
+  return const StarSwitchControl(value: true);
+}

@@ -1,0 +1,159 @@
+import 'dart:async';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:star_app/core/providers/app/account_user_id.dart';
+import 'package:star_app/features/guilds/providers/guild_list_view_model.dart';
+import 'package:star_app/features/settings/domain/privacy_permission.dart';
+import 'package:star_app/features/settings/presentation/sheets/privacy_dm_confirmation_sheet.dart';
+import 'package:star_app/features/settings/providers/view_models/privacy_dashboard_view_model.dart';
+import 'package:star_app/features/ui/ui.dart';
+import 'package:star_app/l10n/generated/star_localizations.dart';
+import 'package:star_app/material_ui.dart';
+
+class PrivacyConnectionsSection extends ConsumerWidget {
+  const PrivacyConnectionsSection({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(
+      privacyDashboardViewModelProvider(watchAccountUserId(ref)),
+    );
+    final l10n = StarLocalizations.of(context);
+    final vm = ref.read(
+      privacyDashboardViewModelProvider(readAccountUserId(ref)).notifier,
+    );
+
+    return StarSettingsSection(
+      sectionId: 'connections',
+      title: l10n.privacyDashboardFriendsAndDirectMessagesSection,
+      children: [
+        StarSettingsSubsection(
+          title: l10n.privacyDashboardFriendRequestsTitle,
+          children: [
+            StarSettingsSwitchGroup(
+              children: [
+                StarSettingsSwitchItem.grouped(
+                  label: l10n.privacyDashboardFriendRequestsEveryone,
+                  value: state.everyoneCanFriendRequest,
+                  onChanged: (value) => unawaited(
+                    vm.updateFriendSourceFlag(
+                      FriendSourceFlag.noRelation,
+                      enabled: value,
+                    ),
+                  ),
+                ),
+                StarSettingsSwitchItem.grouped(
+                  label: l10n.privacyDashboardFriendRequestsFriendsOfFriends,
+                  value:
+                      state.everyoneCanFriendRequest ||
+                      state.friendsOfFriendsCanFriend,
+                  enabled: !state.everyoneCanFriendRequest,
+                  onChanged: (value) => unawaited(
+                    vm.updateFriendSourceFlag(
+                      FriendSourceFlag.mutualFriends,
+                      enabled: value,
+                    ),
+                  ),
+                ),
+                StarSettingsSwitchItem.grouped(
+                  label: l10n.privacyDashboardFriendRequestsCommunityMembers,
+                  value:
+                      state.everyoneCanFriendRequest ||
+                      state.communityMembersCanFriend,
+                  enabled: !state.everyoneCanFriendRequest,
+                  onChanged: (value) => unawaited(
+                    vm.updateFriendSourceFlag(
+                      FriendSourceFlag.mutualGuilds,
+                      enabled: value,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        StarSettingsSubsection(
+          title: l10n.privacyDashboardDirectMessagesTitle,
+          children: [
+            StarSettingsSwitchGroup(
+              children: [
+                StarSettingsSwitchItem.grouped(
+                  label: l10n.privacyDashboardDirectMessagesMembers,
+                  value: !state.defaultGuildsRestricted,
+                  onChanged: (value) => unawaited(
+                    _handleDmToggle(
+                      context,
+                      ref,
+                      allowing: value,
+                      isBots: false,
+                    ),
+                  ),
+                ),
+                StarSettingsSwitchItem.grouped(
+                  label: l10n.privacyDashboardDirectMessagesBots,
+                  value: !state.botDefaultGuildsRestricted,
+                  onChanged: (value) => unawaited(
+                    _handleDmToggle(
+                      context,
+                      ref,
+                      allowing: value,
+                      isBots: true,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _handleDmToggle(
+    BuildContext context,
+    WidgetRef ref, {
+    required bool allowing,
+    required bool isBots,
+  }) async {
+    final guildIds = ref
+        .read(guildListViewModelProvider)
+        .guilds
+        .map((guild) => guild.id)
+        .toList();
+    final vm = ref.read(
+      privacyDashboardViewModelProvider(readAccountUserId(ref)).notifier,
+    );
+
+    if (guildIds.isEmpty) {
+      if (isBots) {
+        await vm.updateBotDefaultGuildsRestricted(restricted: !allowing);
+      } else {
+        await vm.updateDefaultGuildsRestricted(restricted: !allowing);
+      }
+      return;
+    }
+
+    final bool? applyToAll = await PrivacyDmConfirmationSheet.show(
+      context,
+      allowing: allowing,
+      isBots: isBots,
+    );
+    if (applyToAll == null) {
+      return;
+    }
+
+    if (isBots) {
+      await vm.updateBotDefaultGuildsRestricted(
+        restricted: !allowing,
+        applyToAll: applyToAll,
+        guildIds: allowing ? const <String>[] : guildIds,
+      );
+    } else {
+      await vm.updateDefaultGuildsRestricted(
+        restricted: !allowing,
+        applyToAll: applyToAll,
+        guildIds: allowing ? const <String>[] : guildIds,
+      );
+    }
+  }
+}

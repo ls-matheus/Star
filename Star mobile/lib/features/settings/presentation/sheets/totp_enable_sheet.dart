@@ -1,0 +1,201 @@
+import 'package:dio/dio.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:star_app/core/api/dio_error_message.dart';
+import 'package:star_app/core/api/star_client_provider.dart';
+import 'package:star_app/core/providers/instance/instance_runtime_config_provider.dart';
+import 'package:star_app/core/theme/star_theme_extension.dart';
+import 'package:star_app/features/settings/presentation/sheets/backup_codes_sheet.dart';
+import 'package:star_app/features/settings/presentation/widgets/wide_settings_content_layout.dart';
+import 'package:star_app/features/settings/providers/view_models/user_settings_view_model.dart';
+import 'package:star_app/features/settings/utils/totp_secret.dart';
+import 'package:star_app/features/ui/bottom_sheet/star_bottom_sheet.dart';
+import 'package:star_app/features/ui/button/star_button.dart';
+import 'package:star_app/features/ui/input/star_input.dart';
+import 'package:star_app/features/ui/qr_code/star_qr_code.dart';
+import 'package:star_app/features/ui/toast/star_toast.dart';
+import 'package:star_app/features/ui/toast/toast_provider.dart';
+import 'package:star_app/l10n/generated/star_localizations.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:star_dart/export.dart';
+
+class TotpEnableSheet extends ConsumerStatefulWidget {
+  const TotpEnableSheet({super.key});
+
+  static Future<void> show(BuildContext context, WidgetRef ref) {
+    return StarBottomSheet.show<void>(
+      context,
+      title: StarLocalizations.of(context).totpEnableTitle,
+      useRootNavigator: true,
+      builder: (_, _) => const TotpEnableSheet(),
+    );
+  }
+
+  @override
+  ConsumerState<TotpEnableSheet> createState() => _TotpEnableSheetState();
+}
+
+class _TotpEnableSheetState extends ConsumerState<TotpEnableSheet> {
+  final String _secret = generateTotpSecret();
+  late final String _encodedSecret;
+  late final String _otpauthUrl;
+  final _codeController = TextEditingController();
+  bool _loading = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    final UserSettingsViewState settings = ref.read(
+      userSettingsViewModelProvider,
+    );
+    final String productName = ref
+        .read(instanceRuntimeConfigProvider)
+        .productName;
+    _encodedSecret = encodeTotpSecret(_secret);
+    _otpauthUrl = encodeTotpSecretAsUrl(
+      accountName: settings.email ?? settings.username,
+      secret: _secret,
+      issuer: productName,
+    );
+  }
+
+  @override
+  void dispose() {
+    _codeController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleSubmit() async {
+    final code = _codeController.text.replaceAll(' ', '').trim();
+    if (code.isEmpty) {
+      return;
+    }
+
+    final l10n = StarLocalizations.of(context);
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final client = ref.read(starClientProvider);
+      final response = await client.users.enableTotpMfa(
+        body: EnableMfaTotpRequest(secret: _encodedSecret, code: code),
+      );
+
+      ref
+          .read(toastProvider.notifier)
+          .show(
+            StarToast(
+              message: l10n.totpEnableSuccess,
+              variant: StarToastVariant.success,
+            ),
+          );
+
+      await ref.read(userSettingsViewModelProvider.notifier).loadProfile();
+
+      if (mounted) {
+        Navigator.of(context).pop();
+        await BackupCodesSheet.showWithCodes(
+          context,
+          ref,
+          codes: response.backupCodes,
+        );
+      }
+    } on DioException catch (e) {
+      setState(() {
+        _loading = false;
+        _error = userFacingErrorMessage(e, l10n.invalidCode);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = StarLocalizations.of(context);
+    final colors = context.colors;
+    final layout = context.layout;
+    return SingleChildScrollView(
+      padding: settingsSheetScrollPadding(context),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            l10n.totpEnableDescription,
+            style: context.textStyles.bodySmall.copyWith(
+              color: colors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          Center(
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: StarQrCode(
+                data: _otpauthUrl,
+                semanticLabel: l10n.totpEnableDescription,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          Center(
+            child: SelectableText(
+              _encodedSecret,
+              style: context.textStyles.codeText.copyWith(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: colors.textPrimary,
+                letterSpacing: 1.5,
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          StarInput(
+            controller: _codeController,
+            label: l10n.totpEnableCodeLabel,
+            hint: l10n.totpEnableCodeHint,
+            autofocus: true,
+            maxLength: 6,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            autofillHints: const [AutofillHints.oneTimeCode],
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _handleSubmit(),
+            errorText: _error,
+          ),
+          SizedBox(height: layout.s4),
+
+          Row(
+            children: [
+              Expanded(
+                child: StarButton.secondary(
+                  onPressed: _loading
+                      ? null
+                      : () => Navigator.of(context).pop(),
+                  label: l10n.cancel,
+                  fitContent: true,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: StarButton.primary(
+                  onPressed: _loading ? null : _handleSubmit,
+                  label: l10n.continueAction,
+                  isLoading: _loading,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}

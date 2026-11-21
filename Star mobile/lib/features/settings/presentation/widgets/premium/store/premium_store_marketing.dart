@@ -1,0 +1,77 @@
+import 'package:flutter/foundation.dart';
+import 'package:star_app/core/instance/instance_legal_links.dart';
+import 'package:star_app/core/theme/star_theme_extension.dart';
+import 'package:star_app/features/settings/presentation/widgets/premium/store/premium_store_comparison.dart';
+import 'package:star_app/features/settings/presentation/widgets/premium/store/premium_store_showcase.dart';
+import 'package:star_app/features/settings/presentation/widgets/premium/store/premium_store_style.dart';
+import 'package:star_app/features/ui/text_link/star_text_link.dart';
+import 'package:star_app/l10n/generated/star_localizations.dart';
+import 'package:star_app/material_ui.dart';
+
+const String kPremiumVisionaryHelpUrl = 'https://star.invalid/help/visionary';
+
+class PremiumStoreMarketingSections extends StatelessWidget {
+  const PremiumStoreMarketingSections({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const PremiumStoreShowcase(),
+          const SizedBox(height: 56),
+          const PremiumStoreComparison(),
+          const SizedBox(height: 24),
+          const _TagFootnote(),
+          const SizedBox(height: 24),
+          InstanceLegalLinks(
+            linkStyle: context.textStyles.timestamp.copyWith(
+              color: PremiumStoreStyle.of(context).accent,
+            ),
+            baseStyle: context.textStyles.timestamp.copyWith(
+              color: PremiumStoreStyle.of(context).inkMuted,
+            ),
+          ),
+          SizedBox(height: MediaQuery.paddingOf(context).bottom + 8),
+        ],
+      ),
+    );
+  }
+}
+
+class _TagFootnote extends StatelessWidget {
+  const _TagFootnote();
+
+  @override
+  Widget build(BuildContext context) {
+    final PremiumStoreStyle style = PremiumStoreStyle.of(context);
+    final StarLocalizations l10n = StarLocalizations.of(context);
+    final TextStyle muted = context.textStyles.timestamp.copyWith(
+      color: style.inkMuted,
+    );
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      return Text(l10n.storePlutoniumTagFootnoteIos, style: muted);
+    }
+    return Text.rich(
+      TextSpan(
+        style: muted,
+        children: [
+          TextSpan(text: '${l10n.storePlutoniumTagFootnote} '),
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: MediaQuery.withNoTextScaling(
+              child: StarTextLink(
+                text: l10n.storePlutoniumLearnVisionary,
+                url: kPremiumVisionaryHelpUrl,
+                style: muted.copyWith(color: style.accent),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

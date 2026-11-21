@@ -1,0 +1,87 @@
+import 'package:flutter/foundation.dart';
+import 'package:star_app/features/chat/domain/chat_fullscreen_video_launch_context.dart';
+import 'package:star_app/features/chat/domain/message.dart';
+import 'package:star_app/features/chat/utils/attachments/attachment_display_utils.dart';
+import 'package:star_app/features/ui/media_viewer/attachment_media_viewer.dart';
+
+class MediaOptionsLaunchContext {
+  const MediaOptionsLaunchContext({
+    required this.fallbackUrl,
+    this.actionScope,
+    this.attachmentId,
+    this.embedIndex,
+    this.filename,
+    this.downloadUrl,
+    this.contentHash,
+    this.reverseImageSearchUrl,
+    this.downloadsHidden = false,
+    this.onViewPost,
+  });
+
+  factory MediaOptionsLaunchContext.fromVideoLaunchContext(
+    ChatFullscreenVideoLaunchContext context,
+  ) {
+    final Attachment? attachment = context.attachment;
+    return MediaOptionsLaunchContext(
+      fallbackUrl: context.source.fallbackUrl,
+      actionScope: context.actionScope,
+      attachmentId: attachment?.id,
+      embedIndex: context.embedIndex,
+      filename: attachment?.filename,
+      downloadUrl: _videoDownloadUrl(context),
+      contentHash: attachment?.contentHash,
+      downloadsHidden: context.downloadsHidden,
+      onViewPost: context.onViewPost,
+    );
+  }
+
+  factory MediaOptionsLaunchContext.fromImageViewerItem(
+    AttachmentMediaViewerItem item, {
+    MessageMediaActionScope? actionScope,
+    bool downloadsHidden = false,
+    VoidCallback? onViewPost,
+  }) {
+    return MediaOptionsLaunchContext(
+      fallbackUrl: item.shareableUrl,
+      actionScope: actionScope,
+      attachmentId: item.attachmentId,
+      embedIndex: item.embedIndex,
+      filename: item.filename,
+      downloadUrl: item.downloadUrl,
+      contentHash: item.contentHash,
+      reverseImageSearchUrl: item.downloadUrl ?? item.url,
+      downloadsHidden: downloadsHidden,
+      onViewPost: onViewPost,
+    );
+  }
+
+  final String fallbackUrl;
+  final MessageMediaActionScope? actionScope;
+  final String? attachmentId;
+  final int? embedIndex;
+  final String? filename;
+  final String? downloadUrl;
+  final String? contentHash;
+  final String? reverseImageSearchUrl;
+  final bool downloadsHidden;
+  final VoidCallback? onViewPost;
+
+  String? get downloadFilename => attachmentId == null ? null : filename;
+
+  bool get hasOptionsMenu =>
+      fallbackUrl.trim().isNotEmpty ||
+      actionScope != null ||
+      onViewPost != null;
+}
+
+String? _videoDownloadUrl(ChatFullscreenVideoLaunchContext context) {
+  final Attachment? attachment = context.attachment;
+  if (attachment == null) {
+    return null;
+  }
+  return attachmentEffectiveDownloadUrl(
+    url: attachment.url,
+    isExpired: attachment.expired ?? false,
+    proxyUrl: attachment.proxyUrl,
+  );
+}
