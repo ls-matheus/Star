@@ -1,0 +1,63 @@
+# Server builds are intentionally isolated from APK/DMG/EXE and frontend CI.
+# Trigger on Server changes or by hand; publish to the same GHCR/Release scheme.
+name: Server Docker Image (GHCR)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Star Server/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: server-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prepare-release:
+    name: Create or reuse release for server
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Validate Server Dockerfile and create shared release
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Ensure prerelease exists
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          test -s 'Star Server/packaging/monolith/Dockerfile'
+          tag="star-build-${GITHUB_SHA:0:8}"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --target "$GITHUB_SHA" \
+              --title "Star Build ${GITHUB_SHA:0:8}" --prerelease \
+              --notes 'Star Server publicado independentemente no GHCR. Um manifesto JSON com tag e digest sera anexado quando a compilacao terminar. O deploy na VM, configuracao TLS, backups e homologacao para producao continuam separados.' ||
+              gh release view "$tag" >/dev/null
+          fi
+
+  publish-server:
+    name: Publish Server OCI image
+    needs: prepare-release
+    permissions:
+      contents: write
+      packages: write
+    uses: ./.github/workflows/docker-component.yml
+    with:
+      component: server
+      context: './Star Server'
+      dockerfile: './Star Server/packaging/monolith/Dockerfile'
+      target: runtime
+      build_args: |
+        SOURCE=export
+        PROFILE=release-fast
+        CARGO_BUILD_JOBS=2

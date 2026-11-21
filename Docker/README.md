@@ -104,9 +104,17 @@ AGPL e licencas de arte/terceiros.
 
 O workflow
 [`Docker Images and Apps (GHCR)`](https://github.com/ls-matheus/Star/actions/workflows/docker-publish.yml)
-valida a configuracao e cria a prerelease `star-build-<SHA>` para o commit.
+valida os builds de Web, Desktop e Mobile e cria a prerelease
+`star-build-<SHA>` para o commit.
 
-Em seguida, quatro builds Docker **independentes** iniciam em paralelo:
+O Server tem seu proprio workflow,
+[`Server Docker Image (GHCR)`](https://github.com/ls-matheus/Star/actions/workflows/docker-server.yml),
+acionado em mudancas de `Star Server/**` ou manualmente. Assim, corrigir
+Flutter, Electron ou frontend **nao recompila o Server** e nao ocupa um runner
+adicional com o seu build demorado.
+
+As quatro imagens GHCR sao independentes; as tres imagens de aplicativos
+sao construidas em paralelo no workflow de Apps:
 
 | Imagem GHCR | Conteudo | Dependente |
 | --- | --- | --- |
@@ -115,7 +123,7 @@ Em seguida, quatro builds Docker **independentes** iniciam em paralelo:
 | `ghcr.io/ls-matheus/star-desktop-renderer` | Renderer Electron compilado no Docker | DMG macOS e EXE Windows |
 | `ghcr.io/ls-matheus/star-mobile-builder` | Toolchain Flutter/Rust/Android | APK Android debug |
 
-**O job lento do Server nao bloqueia Web, Mobile nem Desktop.**
+**O Server nao bloqueia nem reinicia por alteracoes de Web, Mobile ou Desktop.**
 Cada imagem publica um JSON (`star-<componente>-<SHA>.json`) com tag e digest
 SHA-256 na Release assim que o respectivo build termina. O corpo da imagem
 fica no GHCR, nao como arquivo enorme dentro da Release.

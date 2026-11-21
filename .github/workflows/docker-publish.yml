@@ -1,5 +1,5 @@
 # Star CI: independent Docker images followed by native installers.
-# The long server build does not block Web, Mobile, APK, DMG or EXE.
+# The Server image has its own workflow, so it never uses app CI runners.
 name: Docker Images and Apps (GHCR)
 
 on:
@@ -12,7 +12,6 @@ on:
       - '.github/workflows/windows.yml'
       - '.github/workflows/star-electron-builder.cjs'
       - 'Docker/**'
-      - 'Star Server/**'
       - 'Star web/**'
       - 'Star mobile/**'
   pull_request:
@@ -24,7 +23,6 @@ on:
       - '.github/workflows/windows.yml'
       - '.github/workflows/star-electron-builder.cjs'
       - 'Docker/**'
-      - 'Star Server/**'
       - 'Star web/**'
       - 'Star mobile/**'
   workflow_dispatch:
@@ -50,7 +48,6 @@ jobs:
         run: |
           set -euo pipefail
           bash -n Docker/star.sh Docker/INICIAR-STAR.command Docker/scripts/build-android.sh
-          test -f 'Star Server/packaging/monolith/Dockerfile'
           grep -q 'AS desktop-renderer' 'Star web/star_app_proxy/Dockerfile'
           test -f 'Star mobile/pubspec.yaml'
           if git ls-files --error-unmatch Docker/.env >/dev/null 2>&1; then
@@ -84,29 +81,11 @@ jobs:
           if ! gh release view "$tag" >/dev/null 2>&1; then
             gh release create "$tag" --target "$GITHUB_SHA" \
               --title "$title" --prerelease \
-              --notes 'Os resultados sao anexados individualmente quando terminam. Server, Web, Mobile Builder e Desktop Renderer sao imagens independentes no GHCR. O APK debug usa a imagem Mobile Builder; os instaladores DMG e EXE usam o Desktop Renderer compilado no Docker e finalizam nos sistemas operacionais nativos. O Server nao bloqueia os outros artefatos. Aplicativos nao assinados para distribuicao comercial.' ||
+              --notes 'Os resultados sao anexados individualmente quando terminam. Server usa workflow independente; Web, Mobile Builder e Desktop Renderer sao imagens independentes no GHCR. O APK debug usa a imagem Mobile Builder; os instaladores DMG e EXE usam o Desktop Renderer compilado no Docker e finalizam nos sistemas operacionais nativos. O Server nao bloqueia os outros artefatos. Aplicativos nao assinados para distribuicao comercial.' ||
               gh release view "$tag" >/dev/null
           fi
 
   # All four image jobs depend ONLY on the release preparation, never each other.
-  server-image:
-    name: Server image (independent)
-    if: github.event_name != 'pull_request'
-    needs: prepare-release
-    permissions:
-      contents: write
-      packages: write
-    uses: ./.github/workflows/docker-component.yml
-    with:
-      component: server
-      context: './Star Server'
-      dockerfile: './Star Server/packaging/monolith/Dockerfile'
-      target: runtime
-      build_args: |
-        SOURCE=export
-        PROFILE=release-fast
-        CARGO_BUILD_JOBS=2
-
   web-image:
     name: Web assets image (independent)
     if: github.event_name != 'pull_request'

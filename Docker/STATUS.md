@@ -1,12 +1,12 @@
 # Estado da integracao Docker / GitHub Actions
 
 ## Preparado no repositorio
-- Quatro imagens GHCR independentes: server, web-assets, desktop-renderer e mobile-builder.
+- Quatro imagens GHCR: server em workflow proprio, web-assets/desktop-renderer/mobile-builder no workflow de Apps.
 - Uma prerelease por commit, criada antes dos builds.
 - Cada imagem inclui um manifesto JSON com digest imutavel na mesma Release assim que seu proprio job termina.
 - APK debug produzido dentro da imagem mobile-builder, a partir dos fontes montados somente para leitura.
 - DMG e EXE produzidos nos runners macOS/Windows usando assets extraidos da imagem desktop-renderer.
-- O Server nao e pre-requisito dos demais builds.
+- O Server so recompila quando fontes de Star Server mudam, ou manualmente, e nao e pre-requisito dos demais builds.
 - Workflows nativos de Mac e Windows mantem execucao manual.
 - Configuracao local Docker/Compose nao contem segredos em arquivos versionados.
 
