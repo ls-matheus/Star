@@ -29,7 +29,12 @@ on:
         required: true
         type: choice
         default: apps
-        options: [apps, server, all, backfill]
+        options: [apps, server, all, backfill, plan]
+      force_rebuild:
+        description: "Ignore cache and rebuild selected components"
+        required: false
+        type: boolean
+        default: false
       release_sha:
         description: "Existing release commit SHA for backfill (first 8 hex chars)"
         required: false
@@ -40,55 +45,41 @@ permissions:
 
 jobs:
   detect:
-    name: CI / select build scope
+    name: CI / incremental plan
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
+    permissions:
+      contents: read
     outputs:
       apps: ${{ steps.flags.outputs.apps }}
       server: ${{ steps.flags.outputs.server }}
+      base_tag: ${{ steps.flags.outputs.base_tag }}
+      build_web: ${{ steps.flags.outputs.build_web }}
+      build_desktop: ${{ steps.flags.outputs.build_desktop }}
+      build_mobile: ${{ steps.flags.outputs.build_mobile }}
+      build_server: ${{ steps.flags.outputs.build_server }}
+      build_apk: ${{ steps.flags.outputs.build_apk }}
+      build_mac: ${{ steps.flags.outputs.build_mac }}
+      build_windows: ${{ steps.flags.outputs.build_windows }}
+      desktop_cache: ${{ steps.flags.outputs.desktop_cache }}
+      mobile_image_ref: ${{ steps.flags.outputs.mobile_image_ref }}
+      desktop_image_ref: ${{ steps.flags.outputs.desktop_image_ref }}
     steps:
-      - name: Checkout full history for changed-file detection
+      - name: Checkout full history for content fingerprints
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
           fetch-depth: 0
-
-      - name: Choose build targets
+      - name: Compare with published immutable build cache
         id: flags
         shell: bash
         env:
-          EVENT: ${{ github.event_name }}
-          BEFORE: ${{ github.event.before }}
-          SELECTED: ${{ inputs.target || 'apps' }}
-        run: |
-          set -euo pipefail
-          apps=false
-          server=false
-          if [[ "$EVENT" == 'workflow_dispatch' ]]; then
-            case "$SELECTED" in
-              apps) apps=true ;;
-              server) server=true ;;
-              all) apps=true; server=true ;;
-              backfill) : ;;
-              *) echo "Invalid build target: $SELECTED" >&2; exit 2 ;;
-            esac
-          elif [[ "$EVENT" == 'push' ]]; then
-            if [[ -n "$BEFORE" && "$BEFORE" != "0000000000000000000000000000000000000000" ]]; then
-              changes="$(git diff --name-only "$BEFORE" "$GITHUB_SHA")"
-            else
-              changes="$(git ls-tree -r --name-only "$GITHUB_SHA")"
-            fi
-            while IFS= read -r file; do
-              case "$file" in
-                "Star Server/"*) server=true ;;
-                "Star web/"*|"Star mobile/"*|"Docker/"*|".github/workflows/"*)
-                  apps=true ;;
-              esac
-            done <<< "$changes"
-          fi
-          echo "apps=$apps" >> "$GITHUB_OUTPUT"
-          echo "server=$server" >> "$GITHUB_OUTPUT"
-          printf "## Escopo da execucao\n\n- Apps: %s\n- Server: %s\n" "$apps" "$server" >> "$GITHUB_STEP_SUMMARY"
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          STAR_TARGET: ${{ inputs.target || 'apps' }}
+          STAR_BEFORE: ${{ github.event.before }}
+          STAR_FORCE_REBUILD: ${{ inputs.force_rebuild || false }}
+        run: python3 Docker/scripts/star-incremental.py plan
 
   validate:
     name: CI / validate source and packaging
@@ -106,6 +97,8 @@ jobs:
           set -euo pipefail
           bash -n Docker/star.sh Docker/INICIAR-STAR.command Docker/scripts/build-android.sh
           bash -n Docker/scripts/publish-docker-release.sh Docker/scripts/prepare-releases.sh
+          python3 -m py_compile Docker/scripts/star-incremental.py
+          python3 -m unittest discover -s Docker/tests -p 'test_incremental.py' -v
           grep -q 'AS desktop-renderer' 'Star web/star_app_proxy/Dockerfile'
           test -f 'Star mobile/pubspec.yaml'
           test -f 'Star Server/packaging/monolith/Dockerfile'
@@ -121,24 +114,27 @@ jobs:
 
   prepare-release:
     name: Release / create artifacts and metadata
-    if: github.event_name != 'pull_request' && inputs.target != 'backfill'
+    if: github.event_name != 'pull_request' && inputs.target != 'backfill' && inputs.target != 'plan'
     needs: [validate, detect]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write
     steps:
+      - name: Checkout release preparation scripts
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
       - name: Prepare artifact and metadata Releases
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         shell: bash
         run: bash Docker/scripts/prepare-releases.sh
-          fi
 
   web-image:
     name: GHCR / web assets
-    if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.apps == 'true' }}
+    if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.build_web == 'true' }}
     needs: [prepare-release, detect]
     runs-on: ubuntu-24.04
     timeout-minutes: 240
@@ -189,7 +185,7 @@ jobs:
             PUBLIC_ASSET_BASE_URL=
             BUILD_VERSION=0.0.${{ github.run_number }}
           cache-from: type=gha,scope=web-assets
-          cache-to: type=gha,scope=web-assets,mode=min
+          cache-to: type=gha,scope=web-assets,mode=max
           provenance: true
 
       - name: Attach this image to the release immediately
@@ -236,7 +232,7 @@ jobs:
 
   desktop-image:
     name: GHCR / desktop renderer
-    if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.apps == 'true' }}
+    if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.build_desktop == 'true' }}
     needs: [prepare-release, detect]
     runs-on: ubuntu-24.04
     timeout-minutes: 240
@@ -285,7 +281,7 @@ jobs:
           build-args: |
             BUILD_VERSION=0.0.${{ github.run_number }}
           cache-from: type=gha,scope=desktop-renderer
-          cache-to: type=gha,scope=desktop-renderer,mode=min
+          cache-to: type=gha,scope=desktop-renderer,mode=max
           provenance: true
 
       - name: Attach this image to the release immediately
@@ -358,9 +354,54 @@ jobs:
           retention-days: 7
           compression-level: 0
 
+  desktop-cache:
+    name: Cache / reuse unchanged desktop renderer
+    if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.desktop_cache == 'true' && needs.prepare-release.result == 'success' }}
+    needs: [detect, prepare-release]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Extract renderer from cached immutable OCI image
+        env:
+          DESKTOP_IMAGE_REF: ${{ needs.detect.outputs.desktop_image_ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="$DESKTOP_IMAGE_REF"
+          [[ "$image" =~ ^ghcr\.io/[a-z0-9_.-]+/star-desktop-renderer@sha256:[[:xdigit:]]{64}$ ]] || {
+            echo "Invalid cached image reference: $image" >&2
+            exit 2
+          }
+          docker pull --platform linux/amd64 "$image"
+          cid="$(docker create "$image")"
+          trap 'docker rm "$cid" >/dev/null 2>&1 || true' EXIT
+          mkdir -p "$RUNNER_TEMP/desktop-renderer"
+          docker cp "$cid:/renderer/." "$RUNNER_TEMP/desktop-renderer/"
+          test -s "$RUNNER_TEMP/desktop-renderer/index.html"
+          test -s "$RUNNER_TEMP/desktop-renderer/version.json"
+          test -d "$RUNNER_TEMP/desktop-renderer/assets"
+          tar -czf "$RUNNER_TEMP/desktop-renderer.tar.gz" -C "$RUNNER_TEMP/desktop-renderer" .
+      - name: Make cached renderer available to native packaging
+        uses: actions/upload-artifact@v4
+        with:
+          name: star-desktop-renderer
+          path: ${{ runner.temp }}/desktop-renderer.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
   mobile-image:
     name: GHCR / Android builder
-    if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.apps == 'true' }}
+    if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.build_mobile == 'true' }}
     needs: [prepare-release, detect]
     runs-on: ubuntu-24.04
     timeout-minutes: 240
@@ -409,7 +450,7 @@ jobs:
           build-args: |
             BUILD_VERSION=0.0.${{ github.run_number }}
           cache-from: type=gha,scope=mobile-builder
-          cache-to: type=gha,scope=mobile-builder,mode=min
+          cache-to: type=gha,scope=mobile-builder,mode=max
           provenance: true
 
       - name: Attach this image to the release immediately
@@ -456,7 +497,7 @@ jobs:
 
   server-image:
     name: GHCR / server
-    if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.server == 'true' }}
+    if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.build_server == 'true' }}
     needs: [prepare-release, detect]
     runs-on: ubuntu-24.04
     timeout-minutes: 240
@@ -508,7 +549,7 @@ jobs:
             CARGO_BUILD_JOBS=2
             BUILD_VERSION=0.0.${{ github.run_number }}
           cache-from: type=gha,scope=server
-          cache-to: type=gha,scope=server,mode=min
+          cache-to: type=gha,scope=server,mode=max
           provenance: true
 
       - name: Attach this image to the release immediately
@@ -555,8 +596,8 @@ jobs:
 
   apk:
     name: Package / Android APK (ARM64)
-    if: github.event_name != 'pull_request'
-    needs: mobile-image
+    if: ${{ always() && github.event_name != 'pull_request' && needs.detect.outputs.build_apk == 'true' && needs.prepare-release.result == 'success' && (needs.mobile-image.result == 'success' || needs.mobile-image.result == 'skipped') }}
+    needs: [detect, prepare-release, mobile-image]
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     permissions:
@@ -568,6 +609,15 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Restore Gradle, Dart and Cargo build caches
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/star-apk-cache
+          key: star-android-v1-${{ runner.os }}-${{ hashFiles('Star mobile/pubspec.lock', 'Star web/Cargo.lock') }}-${{ github.run_id }}
+          restore-keys: |
+            star-android-v1-${{ runner.os }}-${{ hashFiles('Star mobile/pubspec.lock', 'Star web/Cargo.lock') }}-
+            star-android-v1-${{ runner.os }}-
+
       - name: Authenticate to GHCR
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
         with:
@@ -576,19 +626,33 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Compile Android APK inside published image
+        env:
+          MOBILE_IMAGE_REF: ${{ needs.detect.outputs.mobile_image_ref }}
         shell: bash
         run: |
           set -euo pipefail
-          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/star-mobile-builder:sha-${GITHUB_SHA:0:7}"
+          image="$MOBILE_IMAGE_REF"
+          [[ "$image" == ghcr.io/*/star-mobile-builder:* || "$image" == ghcr.io/*/star-mobile-builder@sha256:* ]] || exit 2
           docker pull "$image"
-          mkdir -p "$RUNNER_TEMP/star-apk"
+          mkdir -p "$RUNNER_TEMP/star-apk" "$RUNNER_TEMP/star-apk-cache"
           docker run --rm --platform linux/amd64 \
             -e CI=true -e FLUTTER_SUPPRESS_ANALYTICS=true \
+            -e PUB_CACHE=/cache/pub -e GRADLE_USER_HOME=/cache/gradle \
+            -e CARGO_TARGET_DIR=/cache/cargo \
             -v "$GITHUB_WORKSPACE/Star mobile:/source:ro" \
             -v "$GITHUB_WORKSPACE/Star web:/source-web:ro" \
+            -v "$RUNNER_TEMP/star-apk-cache:/cache" \
             -v "$RUNNER_TEMP/star-apk:/output" \
             "$image"
           test -s "$RUNNER_TEMP/star-apk/Star-Android-ARM64-DEBUG.apk"
+
+      - name: Save Gradle, Dart and Cargo caches for future changes
+        if: success()
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/star-apk-cache
+          key: star-android-v1-${{ runner.os }}-${{ hashFiles('Star mobile/pubspec.lock', 'Star web/Cargo.lock') }}-${{ github.run_id }}
 
       - name: Save downloadable APK artifact
         uses: actions/upload-artifact@v4
@@ -614,7 +678,7 @@ jobs:
 
   archive-web-assets:
     name: Release / Docker image - web
-    if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.apps == 'true' }}
+    if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.build_web == 'true' }}
     needs: [web-image, detect]
     runs-on: ubuntu-24.04
     timeout-minutes: 180
@@ -642,7 +706,7 @@ jobs:
 
   archive-desktop-renderer:
     name: Release / Docker image - desktop
-    if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.apps == 'true' }}
+    if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.build_desktop == 'true' }}
     needs: [desktop-image, detect]
     runs-on: ubuntu-24.04
     timeout-minutes: 180
@@ -670,7 +734,7 @@ jobs:
 
   archive-mobile-builder:
     name: Release / Docker image - Android
-    if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.apps == 'true' }}
+    if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.build_mobile == 'true' }}
     needs: [mobile-image, detect]
     runs-on: ubuntu-24.04
     timeout-minutes: 180
@@ -698,7 +762,7 @@ jobs:
 
   archive-server:
     name: Release / Docker image - server
-    if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.server == 'true' }}
+    if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.build_server == 'true' }}
     needs: [server-image, detect]
     runs-on: ubuntu-24.04
     timeout-minutes: 180
@@ -769,8 +833,8 @@ jobs:
         run: bash Docker/scripts/publish-docker-release.sh
 
   dmg:
-    if: github.event_name != 'pull_request'
-    needs: desktop-image
+    if: ${{ always() && github.event_name != 'pull_request' && needs.detect.outputs.build_mac == 'true' && needs.prepare-release.result == 'success' && (needs.desktop-image.result == 'success' || needs.desktop-cache.result == 'success') }}
+    needs: [detect, prepare-release, desktop-image, desktop-cache]
     name: Package / macOS DMG and ZIP (x64)
     runs-on: macos-15-intel
     timeout-minutes: 180
@@ -895,8 +959,8 @@ jobs:
           echo "Verificado na GitHub Release: https://github.com/$GH_REPO/releases/tag/$tag"
 
   exe:
-    if: github.event_name != 'pull_request'
-    needs: desktop-image
+    if: ${{ always() && github.event_name != 'pull_request' && needs.detect.outputs.build_windows == 'true' && needs.prepare-release.result == 'success' && (needs.desktop-image.result == 'success' || needs.desktop-cache.result == 'success') }}
+    needs: [detect, prepare-release, desktop-image, desktop-cache]
     name: Package / Windows EXE (x64)
     runs-on: windows-2025
     timeout-minutes: 180
@@ -1024,3 +1088,48 @@ jobs:
             grep -Fxq "$(basename "$asset")" <<< "$published"
           done
           echo "Verificado na GitHub Release: https://github.com/$GH_REPO/releases/tag/$tag"
+
+  finalize-cache:
+    name: Cache / record immutable baseline and reused downloads
+    if: ${{ always() && github.event_name != 'pull_request' && inputs.target != 'backfill' && inputs.target != 'plan' && needs.prepare-release.result == 'success' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    needs:
+      - detect
+      - prepare-release
+      - web-image
+      - desktop-image
+      - mobile-image
+      - server-image
+      - desktop-cache
+      - apk
+      - dmg
+      - exe
+      - archive-web-assets
+      - archive-desktop-renderer
+      - archive-mobile-builder
+      - archive-server
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout commit and history for cache provenance
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Record output fingerprints, digests and immutable download links
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          STAR_BASE_TAG: ${{ needs.detect.outputs.base_tag }}
+          STAR_BUILT_WEB: ${{ needs.detect.outputs.build_web }}
+          STAR_BUILT_DESKTOP: ${{ needs.detect.outputs.build_desktop }}
+          STAR_BUILT_MOBILE: ${{ needs.detect.outputs.build_mobile }}
+          STAR_BUILT_SERVER: ${{ needs.detect.outputs.build_server }}
+          STAR_BUILT_APK: ${{ needs.detect.outputs.build_apk }}
+          STAR_BUILT_MAC: ${{ needs.detect.outputs.build_mac }}
+          STAR_BUILT_WINDOWS: ${{ needs.detect.outputs.build_windows }}
+          STAR_SCOPE_APPS: ${{ needs.detect.outputs.apps }}
+          STAR_SCOPE_SERVER: ${{ needs.detect.outputs.server }}
+        run: python3 Docker/scripts/star-incremental.py finalize

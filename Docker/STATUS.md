@@ -8,6 +8,12 @@
 - Upload direto de APK, DMG, ZIP e EXE na Release com verificacao de presenca.
 - Manifestos JSON e digests na Release de metadados; imagem Docker exportada para a Release de artefatos
   em .docker.tar.zst (dividida em partes de ate 1400 MiB se necessario).
+- Cache incremental por 7 componentes (Web, renderer, Mobile Builder, Server,
+  APK, macOS e Windows) com baseline JSON versionado na Release de metadados.
+- Fingerprints de codigo evitam builds de componentes inalterados; artefatos
+  reaproveitados permanecem no release de origem, com links na Release nova.
+- GHA caches Buildx mode=max, Rust/pnpm desktop e Gradle/Dart/Cargo Android.
+- Suite de testes de escopo incremental e finalizacao integrada a validacao.
 - Modo manual backfill para preencher Releases anteriores sem recompilar imagens.
 - Nao ha segredos em arquivos versionados.
 

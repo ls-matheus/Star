@@ -130,6 +130,49 @@ a essa separacao. Cada resultado e anexado a sua propria Release
 O GitHub Container Registry (GHCR) tambem recebe as imagens originais com
 tags associadas ao commit e seus digests SHA-256.
 
+### Compilacao incremental (a partir de v0.0.8)
+
+O workflow unico **Star | Build & Release** tem um planejador de cache por
+componente. O arquivo **star-incremental-base.json**, na Release de JSONs
+e metadados, guarda as impressoes digitais Git (hashes) e as referencias
+imutaveis GHCR dos ultimos builds aprovados. A primeira base ja foi criada
+usando os artefatos existentes da compilacao df8b6e0e (o Server, da
+compilacao e7d1bebf). A base nao duplica arquivos grandes.
+
+| Mudanca | Builds necessarios |
+| --- | --- |
+| Apenas codigo Mobile | APK Android, reaproveitando imagem Mobile Builder |
+| Dockerfile ou script do builder Android | Mobile Builder e APK |
+| Codigo Star Web | Web Assets, Desktop Renderer, APK, DMG e EXE |
+| Apenas Star Server | Imagem Server, sem recompilar apps |
+| Somente documentacao Docker/CI | Nenhum build de aplicativo, se fontes inalterados |
+| Configuracao Electron de empacotamento | DMG e EXE, usando renderer imutavel anterior |
+
+Quando nao ha mudancas, o job de instalador e ignorado. Os artefatos
+existentes **nao sao recompilados nem duplicados**: a nova Release aponta
+explicitamente para os arquivos originais na secao **Reutilizacao incremental**.
+O mesmo vale para JSONs de imagens reutilizadas, sempre com links e digest
+do objeto original. Somente novos arquivos sao anexados como Assets na
+Release atual. Nao delete Releases antigas que servem de base.
+
+Quando um build alterado passa, o job final grava outro
+**star-incremental-base.json** na Release de metadados correspondente,
+sem sobrescrever a base antiga; essa nova referencia sera considerada no
+proximo commit. Se a base estiver ausente ou for incompativel com o historico
+Git, o planejador usa rebuild seguro para os componentes selecionados.
+
+Cache intermediario: Docker Buildx usa GHA cache por imagem em mode=max,
+macOS/Windows reaproveitam Rust e pnpm, e Android tenta restaurar caches de
+Flutter/Dart, Gradle e Cargo (falha de armazenamento de cache nao invalida
+um APK ja compilado). A integridade dos instaladores continua dependendo
+de build real e dos testes da plataforma.
+
+No botao **Run workflow**: escolha apps, server ou all; marque
+**force_rebuild=true** para ignorar a base e recompilar o escopo selecionado.
+A opcao backfill continua disponivel para exportar imagens existentes sem build.
+Escolha **plan** para executar somente o planejador e os testes de validacao,
+sem criar Releases nem iniciar compilacoes.
+
 ### Como baixar as imagens Docker
 
 Cada imagem gera um arquivo **.docker.tar.zst** diretamente na Release.
