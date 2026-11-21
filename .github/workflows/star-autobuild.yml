@@ -49,7 +49,18 @@ jobs:
         with:
           packages: platform-tools
       - name: Android SDK API 37
-        run: sdkmanager --install 'platforms;android-37' 'build-tools;37.0.0'
+        run: |
+          set -euo pipefail
+          if ! sdkmanager --channel=3 --install 'platforms;android-37.0' 'build-tools;37.0.0'; then
+            sdkmanager --channel=3 --install 'platforms;android-37.2' 'build-tools;37.0.0'
+          fi
+          platform_dir="$(find "$ANDROID_HOME/platforms" -maxdepth 1 -type d -name 'android-37.*' | sort -V | head -1)"
+          test -n "$platform_dir"
+          test -s "$platform_dir/android.jar"
+          if [ ! -e "$ANDROID_HOME/platforms/android-37" ]; then
+            ln -s "$(basename "$platform_dir")" "$ANDROID_HOME/platforms/android-37"
+          fi
+          test -s "$ANDROID_HOME/platforms/android-37/android.jar"
       - name: Flutter 3.50.0
         uses: subosito/flutter-action@v2
         with:
