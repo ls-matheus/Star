@@ -10,7 +10,7 @@ Star Docker (perfil local)
   ./star.sh doctor       - checa Docker, Compose e ambiente
   ./star.sh up           - compila e inicia Web + Server
   ./star.sh up-image     - baixa imagem GHCR e inicia Star sem compilar
-  ./star.sh build        - compila as 3 imagens (Web, Server, builder Android)
+  ./star.sh build        - compila 4 imagens (Server, Web, Desktop, Mobile)
   ./star.sh images       - compila apenas Web assets + builder Android
   ./star.sh mobile-apk   - tenta gerar APK Android debug em output/mobile/
   ./star.sh status       - mostra servicos
@@ -96,12 +96,12 @@ case "$action" in
   build)
     need_docker
     need_config
-    docker compose -f compose.yaml --profile build-only build star web-assets mobile-builder
+    docker compose -f compose.yaml --profile build-only build star web-assets desktop-renderer mobile-builder
     ;;
   images)
     need_docker
     need_config
-    docker compose -f compose.yaml --profile build-only build web-assets mobile-builder
+    docker compose -f compose.yaml --profile build-only build web-assets desktop-renderer mobile-builder
     ;;
   mobile-apk)
     need_docker

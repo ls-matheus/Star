@@ -1,12 +1,16 @@
-# Star GHCR: publish executable server, compiled web assets and Android builder.
-# Build jobs use the existing Dockerfiles. A green build is not E2E production approval.
-name: Docker Images (GHCR)
+# Star CI: independent Docker images followed by native installers.
+# The long server build does not block Web, Mobile, APK, DMG or EXE.
+name: Docker Images and Apps (GHCR)
 
 on:
   push:
     branches: [main]
     paths:
       - '.github/workflows/docker-publish.yml'
+      - '.github/workflows/docker-component.yml'
+      - '.github/workflows/mac.yml'
+      - '.github/workflows/windows.yml'
+      - '.github/workflows/star-electron-builder.cjs'
       - 'Docker/**'
       - 'Star Server/**'
       - 'Star web/**'
@@ -15,6 +19,10 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/docker-publish.yml'
+      - '.github/workflows/docker-component.yml'
+      - '.github/workflows/mac.yml'
+      - '.github/workflows/windows.yml'
+      - '.github/workflows/star-electron-builder.cjs'
       - 'Docker/**'
       - 'Star Server/**'
       - 'Star web/**'
@@ -24,114 +32,203 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: docker-publish-${{ github.ref }}
-  cancel-in-progress: true
+# Do not cancel/serialize older long-running server builds on subsequent pushes.
 
 jobs:
   validate:
-    name: Validate Docker files
+    name: Validate Docker and packaging inputs
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
-      - name: Validate scripts and Compose
+      - name: Validate source and Compose
         shell: bash
         run: |
           set -euo pipefail
           bash -n Docker/star.sh Docker/INICIAR-STAR.command Docker/scripts/build-android.sh
           test -f 'Star Server/packaging/monolith/Dockerfile'
-          test -f 'Star web/star_app_proxy/Dockerfile'
+          grep -q 'AS desktop-renderer' 'Star web/star_app_proxy/Dockerfile'
           test -f 'Star mobile/pubspec.yaml'
           if git ls-files --error-unmatch Docker/.env >/dev/null 2>&1; then
-            echo 'ERROR: local Docker/.env must never be committed' >&2
+            echo 'Do not commit private Docker/.env' >&2
             exit 1
           fi
           cp Docker/.env.example Docker/.env
           docker compose -f Docker/compose.yaml config --quiet
           docker compose -f Docker/compose.ghcr.yaml config --quiet
           rm Docker/.env
-          echo 'Static validation passed. Actual image builds run in publish jobs.'
+          echo 'Configuration and syntax verified.'
 
-  publish:
-    name: Publish ${{ matrix.component }} (amd64)
+  prepare-release:
+    name: Create versioned prerelease
     if: github.event_name != 'pull_request'
     needs: validate
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Create the release early, before any image builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="star-build-${GITHUB_SHA:0:8}"
+          title="Star Build ${GITHUB_SHA:0:8}"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --target "$GITHUB_SHA" \
+              --title "$title" --prerelease \
+              --notes 'Os resultados sao anexados individualmente quando terminam. Server, Web, Mobile Builder e Desktop Renderer sao imagens independentes no GHCR. O APK debug usa a imagem Mobile Builder; os instaladores DMG e EXE usam o Desktop Renderer compilado no Docker e finalizam nos sistemas operacionais nativos. O Server nao bloqueia os outros artefatos. Aplicativos nao assinados para distribuicao comercial.' ||
+              gh release view "$tag" >/dev/null
+          fi
+
+  # All four image jobs depend ONLY on the release preparation, never each other.
+  server-image:
+    name: Server image (independent)
+    if: github.event_name != 'pull_request'
+    needs: prepare-release
+    permissions:
+      contents: write
+      packages: write
+    uses: ./.github/workflows/docker-component.yml
+    with:
+      component: server
+      context: './Star Server'
+      dockerfile: './Star Server/packaging/monolith/Dockerfile'
+      target: runtime
+      build_args: |
+        SOURCE=export
+        PROFILE=release-fast
+        CARGO_BUILD_JOBS=2
+
+  web-image:
+    name: Web assets image (independent)
+    if: github.event_name != 'pull_request'
+    needs: prepare-release
+    permissions:
+      contents: write
+      packages: write
+    uses: ./.github/workflows/docker-component.yml
+    with:
+      component: web-assets
+      context: './Star web'
+      dockerfile: './Star web/star_app_proxy/Dockerfile'
+      target: app-assets
+      build_args: |
+        BUNDLE_LOCAL_ASSETS=true
+        PUBLIC_ASSET_BASE_URL=
+
+  desktop-image:
+    name: Desktop renderer image (independent)
+    if: github.event_name != 'pull_request'
+    needs: prepare-release
+    permissions:
+      contents: write
+      packages: write
+    uses: ./.github/workflows/docker-component.yml
+    with:
+      component: desktop-renderer
+      context: './Star web'
+      dockerfile: './Star web/star_app_proxy/Dockerfile'
+      target: desktop-renderer
+
+  mobile-image:
+    name: Android builder image (independent)
+    if: github.event_name != 'pull_request'
+    needs: prepare-release
+    permissions:
+      contents: write
+      packages: write
+    uses: ./.github/workflows/docker-component.yml
+    with:
+      component: mobile-builder
+      context: './Docker'
+      dockerfile: './Docker/Dockerfile.mobile'
+      target: ''
+
+  # Uses the exact just-built GHCR image, rather than installing Flutter again
+  # on a different runner. A *debug* test APK is published, not store-signed.
+  apk:
+    name: APK from Mobile Builder image
+    if: github.event_name != 'pull_request'
+    needs: mobile-image
+    runs-on: ubuntu-24.04
     timeout-minutes: 240
     permissions:
-      contents: read
-      packages: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - component: server
-            context: './Star Server'
-            dockerfile: './Star Server/packaging/monolith/Dockerfile'
-            target: runtime
-            build_args: |
-              SOURCE=export
-              PROFILE=release-fast
-              CARGO_BUILD_JOBS=2
-          - component: web-assets
-            context: './Star web'
-            dockerfile: './Star web/star_app_proxy/Dockerfile'
-            target: app-assets
-            build_args: |
-              BUNDLE_LOCAL_ASSETS=true
-              PUBLIC_ASSET_BASE_URL=
-          - component: mobile-builder
-            context: './Docker'
-            dockerfile: './Docker/Dockerfile.mobile'
-            target: ''
-            build_args: ''
-
+      contents: write
+      packages: read
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
-
-      - name: Login to GitHub Container Registry
+      - name: Authenticate to GHCR
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Generate image tags
-        id: meta
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/star-${{ matrix.component }}
-          tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=sha,format=short,prefix=sha-
-          labels: |
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.licenses=AGPL-3.0-or-later
+      - name: Compile Android APK inside published image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/star-mobile-builder:sha-${GITHUB_SHA:0:7}"
+          docker pull "$image"
+          mkdir -p "$RUNNER_TEMP/star-apk"
+          docker run --rm --platform linux/amd64 \
+            -e CI=true -e FLUTTER_SUPPRESS_ANALYTICS=true \
+            -v "$GITHUB_WORKSPACE/Star mobile:/source:ro" \
+            -v "$GITHUB_WORKSPACE/Star web:/source-web:ro" \
+            -v "$RUNNER_TEMP/star-apk:/output" \
+            "$image"
+          test -s "$RUNNER_TEMP/star-apk/Star-Android-ARM64-DEBUG.apk"
 
-      - name: Build and push to GHCR
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+      - name: Save downloadable APK artifact
+        uses: actions/upload-artifact@v4
         with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
-          target: ${{ matrix.target }}
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            ${{ matrix.build_args }}
-            BUILD_VERSION=${{ github.sha }}
-          cache-from: type=gha,scope=${{ matrix.component }}
-          cache-to: type=gha,scope=${{ matrix.component }},mode=min
-          provenance: true
+          name: Star-Android-ARM64-DEBUG
+          path: ${{ runner.temp }}/star-apk/*.apk
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+      - name: Add APK to same GitHub Release immediately
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="star-build-${GITHUB_SHA:0:8}"
+          gh release upload "$tag" "$RUNNER_TEMP/star-apk/Star-Android-ARM64-DEBUG.apk" --clobber
+          echo "Debug APK attached to $tag" >> "$GITHUB_STEP_SUMMARY"
+
+  # Native Electron addons and installer wrappers must be built on their own OS.
+  # The renderer asset comes from the published desktop-renderer OCI image.
+  dmg:
+    name: DMG from Desktop Renderer image
+    if: github.event_name != 'pull_request'
+    needs: desktop-image
+    permissions:
+      contents: write
+    uses: ./.github/workflows/mac.yml
+    with:
+      use_renderer_image: true
+
+  exe:
+    name: EXE from Desktop Renderer image
+    if: github.event_name != 'pull_request'
+    needs: desktop-image
+    permissions:
+      contents: write
+    uses: ./.github/workflows/windows.yml
+    with:
+      use_renderer_image: true

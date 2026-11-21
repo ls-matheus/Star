@@ -54,6 +54,19 @@ services:
     entrypoint: ["/bin/true"]
     restart: "no"
 
+  # Desktop-specific renderer image, consumed by native DMG/EXE packaging jobs.
+  desktop-renderer:
+    profiles: ["build-only"]
+    image: star/desktop-renderer:local
+    build:
+      context: "../Star web"
+      dockerfile: star_app_proxy/Dockerfile
+      target: desktop-renderer
+      args:
+        BUILD_VERSION: "${STAR_DESKTOP_BUILD_VERSION:-0.0.0}"
+    entrypoint: ["/bin/true"]
+    restart: "no"
+
   # Tool image for Android builds. Flutter is a compiler here, not an always-on
   # containerized mobile app. Sources are mounted read-only and copied to tmp.
   mobile-builder:
@@ -66,6 +79,10 @@ services:
       - type: bind
         source: "../Star mobile"
         target: /source
+        read_only: true
+      - type: bind
+        source: "../Star web"
+        target: /source-web
         read_only: true
       - type: bind
         source: ./output/mobile

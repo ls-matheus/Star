@@ -1,69 +1,86 @@
 #!/usr/bin/env bash
-# Android debug build, in an ephemeral copy, never touching Star mobile originals.
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Build a test APK inside a temporary container; source mounts are read-only.
 set -euo pipefail
 
-if [ ! -f /source/pubspec.yaml ]; then
-  echo "ERRO: Star mobile nao foi montado em /source" >&2
-  exit 2
-fi
-if [ ! -d /output ]; then
-  echo "ERRO: diretorio de saida /output nao esta disponivel" >&2
-  exit 2
-fi
-echo "Star mobile: preparando copia descartavel (sem segredos de distribuicao)..."
-mkdir -p /work /output
+for f in /source/pubspec.yaml /source-web/Cargo.toml; do
+  test -f "$f" || { echo "Missing required mounted source: $f" >&2; exit 2; }
+done
+test -d /output || { echo "Missing /output bind mount" >&2; exit 2; }
+
+mkdir -p /work /work/shared-star /output
+echo "Copying Star Mobile source to disposable build directory ..."
 tar -C /source \
-  --exclude='./.git' \
-  --exclude='./build' \
-  --exclude='./.dart_tool' \
-  --exclude='./.gradle' \
-  --exclude='./.env' \
-  --exclude='./.env.*' \
-  --exclude='./android/key.properties' \
-  --exclude='./android/measure.properties' \
+  --exclude='./.git' --exclude='./build' --exclude='./.dart_tool' \
+  --exclude='./.gradle' --exclude='./.env' --exclude='./.env.*' \
+  --exclude='./android/key.properties' --exclude='./android/measure.properties' \
   --exclude='./android/app/google-services.json' \
   --exclude='./ios/Runner/GoogleService-Info.plist' \
-  --exclude='*.jks' \
-  --exclude='*.p12' \
-  --exclude='*.mobileprovision' \
-  -cf - . | tar -C /work -xf -
+  --exclude='*.jks' --exclude='*.p12' --exclude='*.mobileprovision' \
+  --exclude='*.keystore' -cf - . | tar -C /work -xf -
+
+echo "Copying shared Star Web/Rust sources needed by mobile ..."
+tar -C /source-web \
+  --exclude='./.git' --exclude='./node_modules' --exclude='./target' \
+  --exclude='./dist' --exclude='./.env' --exclude='./.env.*' \
+  --exclude='./.pnpm-store' --exclude='./build' \
+  --exclude='*.jks' --exclude='*.p12' --exclude='*.key' \
+  --exclude='*.keystore' -cf - . | tar -C /work/shared-star -xf -
+ln -s /work/shared-star /work/star
 
 cd /work
-echo "Toolchain Flutter:"
-flutter --version
+# The publicly tracked debug key is only used for test APKs, not release signing.
+if [ -f /source/android/app/debug.keystore ]; then
+  cp /source/android/app/debug.keystore android/app/debug.keystore
+fi
 
-# O snapshot Star mobile nao traz os arquivos Gradle Wrapper executaveis.
-# Gera os arquivos do wrapper em projeto descartavel, sem alterar Gradle do Star.
 if [ ! -f android/gradlew ] || [ ! -f android/gradle/wrapper/gradle-wrapper.jar ]; then
-  echo "Gerando somente o Gradle Wrapper ausente em copia temporaria..."
-  mkdir -p /tmp/star-gradle-wrapper
+  echo "Generating missing Gradle wrapper in a disposable Flutter project ..."
   flutter create --platforms=android --no-pub /tmp/star-gradle-wrapper
-  test -f /tmp/star-gradle-wrapper/android/gradlew
-  test -f /tmp/star-gradle-wrapper/android/gradle/wrapper/gradle-wrapper.jar
-  cp /tmp/star-gradle-wrapper/android/gradlew android/gradlew
   mkdir -p android/gradle/wrapper
+  cp /tmp/star-gradle-wrapper/android/gradlew android/gradlew
   cp /tmp/star-gradle-wrapper/android/gradle/wrapper/gradle-wrapper.jar android/gradle/wrapper/gradle-wrapper.jar
   chmod 0755 android/gradlew
 fi
-echo "Configurando variante OSS/UnifiedPush..."
+
+echo "Checking toolchains ..."
+flutter --version
+rustc --version
+java -version
+flutter config --enable-native-assets
+if command -v sdkmanager >/dev/null 2>&1; then
+  sdkmanager --channel=3 --install 'platforms;android-37.0' 'build-tools;37.0.0' ||
+    sdkmanager --channel=3 --install 'platforms;android-37.2' 'build-tools;37.0.0'
+  if [ -n "${ANDROID_HOME:-}" ] && [ ! -e "$ANDROID_HOME/platforms/android-37" ]; then
+    sdk_dir="$(find "$ANDROID_HOME/platforms" -maxdepth 1 -type d -name 'android-37.*' | sort -V | head -1)"
+    test -n "$sdk_dir"
+    ln -s "$(basename "$sdk_dir")" "$ANDROID_HOME/platforms/android-37"
+  fi
+fi
+
+echo "Configuring open-source UnifiedPush test build ..."
 dart tool/configure_build.dart --profile=oss
 flutter pub get
 bash tool/pub_get_packages.sh
 dart run build_runner build --delete-conflicting-outputs
-echo "Compilando APK debug (sem assinatura de publicacao)..."
+
+echo "Building Android ARM64 debug APK (not store-signed) ..."
 flutter build apk --debug \
-  --flavor canaryUnifiedpush \
-  --dart-define-from-file=tool/dart_defines/canary.json \
+  --flavor stableUnifiedpush \
+  --target-platform android-arm64 \
+  --dart-define-from-file=tool/dart_defines/stable.json \
   --dart-define=PUSH_PROVIDER=unifiedpush
 
 shopt -s nullglob
 apks=(build/app/outputs/flutter-apk/*.apk)
 if [ "${#apks[@]}" -eq 0 ]; then
-  echo "ERRO: compilacao terminou mas nao gerou APK." >&2
+  echo "Android build produced no APK" >&2
   exit 1
 fi
 for apk in "${apks[@]}"; do
-  cp -f "$apk" "/output/$(basename "$apk")"
-  echo "APK gerado: /output/$(basename "$apk")"
+  output="/output/Star-Android-ARM64-DEBUG.apk"
+  cp -f "$apk" "$output"
+  sha256sum "$output"
+  echo "Output: $output"
 done
-echo "Apenas build de teste. iOS usa Xcode no Mac; distribuicao exige assinatura propria."
+echo "WARNING: debug APK only; production signing and acceptance tests are separate."

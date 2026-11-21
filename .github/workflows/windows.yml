@@ -3,6 +3,13 @@ name: 'Windows'
 
 on:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      use_renderer_image:
+        description: Use renderer compiled and exported from Star desktop Docker image.
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
@@ -74,11 +81,35 @@ jobs:
 
       - name: Instalar dependencias do frontend
         run: pnpm install --frozen-lockfile --filter 'star_desktop...' --filter 'star_app...'
+      - name: Download renderer exported from published Docker image
+        if: inputs.use_renderer_image
+        uses: actions/download-artifact@v4
+        with:
+          name: star-desktop-renderer
+          path: ${{ runner.temp }}/star-desktop-renderer
+
+      - name: Install shared renderer from OCI image
+        if: inputs.use_renderer_image
+        run: |
+          set -euo pipefail
+          mkdir -p star_desktop/dist/renderer
+          tar -xzf "$RUNNER_TEMP/star-desktop-renderer/desktop-renderer.tar.gz" -C star_desktop/dist/renderer
+          test -s star_desktop/dist/renderer/index.html
+          test -s star_desktop/dist/renderer/version.json
+          test -d star_desktop/dist/renderer/assets
+
       - name: Compilar frontend, WASM e Electron
         env:
           NODE_ENV: production
           PNPM_CONFIG_SHELL_EMULATOR: 'true'
-        run: pnpm --filter star_desktop build
+        run: |
+          set -euo pipefail
+          if [[ "${{ inputs.use_renderer_image }}" == "true" ]]; then
+            echo "Building native Electron shell from Docker-built renderer..."
+            pnpm --filter star_desktop build --use-shared-renderer
+          else
+            pnpm --filter star_desktop build
+          fi
       - name: Empacotar EXE Windows
         env:
           NODE_ENV: production

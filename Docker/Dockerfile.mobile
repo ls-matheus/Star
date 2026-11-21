@@ -1,9 +1,23 @@
-# Build tool only. Does not package or deploy an iOS app.
-# This upstream image stopped receiving updates in May 2026; pinning this
-# known tag gives a reproducible baseline, not a long-term security guarantee.
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Linux Android build environment only; DMG/EXE require native OS runners.
+# Flutter 3.44 is currently the published Cirrus image baseline used here.
 FROM ghcr.io/cirruslabs/flutter:3.44.0@sha256:46691e311715845de03a3ba4753a475476936805b29431b1f00f1816981033f8
 
 USER root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential ca-certificates clang cmake curl file git libssl-dev \
+      ninja-build perl pkg-config python3 rsync unzip wget zip \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV CARGO_HOME=/usr/local/cargo
+ENV PATH=/usr/local/cargo/bin:$PATH
+RUN curl --retry 3 --retry-all-errors --proto '=https' --tlsv1.2 -fsSL https://sh.rustup.rs \
+    | sh -s -- -y --no-modify-path --profile minimal --default-toolchain 1.98.1 \
+      --target aarch64-linux-android --target armv7-linux-androideabi \
+      --target x86_64-linux-android
+RUN rustc --version && cargo --version && flutter --version
+
 WORKDIR /work
 COPY scripts/build-android.sh /usr/local/bin/star-build-android
 RUN chmod 0755 /usr/local/bin/star-build-android

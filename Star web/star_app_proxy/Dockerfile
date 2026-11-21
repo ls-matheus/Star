@@ -131,6 +131,20 @@ RUN --mount=type=bind,from=app-dist,source=/dist,target=/dist \
 	&& find /assets/assets -type f -name '*.map' -delete \
 	&& /usr/local/bin/precompress_assets.sh /assets
 
+# Compiled desktop renderer, reused by native macOS and Windows installer jobs.
+# This target extends the same source+dependencies as the web asset build,
+# but builds the desktop-specific renderer with no Electron native modules.
+FROM app-build AS desktop-app-build
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    cd star_app && pnpm build:desktop
+
+FROM alpine:3.24 AS desktop-renderer
+COPY --from=desktop-app-build /usr/src/app/star_app/dist/ /renderer/
+RUN test -s /renderer/index.html \
+    && test -d /renderer/assets \
+    && test -s /renderer/version.json
+
 FROM --platform=${APP_ASSETS_PLATFORM} ${APP_ASSETS_REF} AS app-static
 
 # ---------- Stage 3: Build the Rust proxy binary ----------
