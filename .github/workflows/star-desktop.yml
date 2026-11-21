@@ -1,0 +1,154 @@
+# CI de desktop Star: instaladores de teste sem assinatura comercial.
+name: Star Desktop - macOS e Windows
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/star-desktop.yml'
+      - 'star_desktop/**'
+      - 'star_app/**'
+      - 'star_native/**'
+      - 'packages/**'
+      - 'tools/ci/**'
+      - 'patches/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: star-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS Intel x64
+            os: macos-15-intel
+            platform: mac
+          - name: Windows x64
+            os: windows-2025
+            platform: win
+
+    env:
+      BUILD_CHANNEL: stable
+      BUILD_VERSION: 0.0.${{ github.run_number }}
+      NODE_ENV: production
+      STAR_OFFLINE: '1'
+      ELECTRON_ARCH: x64
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      CI: 'true'
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Obter codigo do GitHub
+        uses: actions/checkout@v4
+
+      - name: Conferir estrutura do Star
+        run: |
+          set -euo pipefail
+          test -f package.json
+          test -f pnpm-lock.yaml
+          test -f Cargo.lock
+          test -f star_app/package.json
+          test -f star_desktop/package.json
+          test -f star_desktop/electron-builder.star-ci.cjs
+
+      - name: Node.js 26
+        uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+
+      - name: pnpm 11.27.0
+        uses: pnpm/action-setup@v4
+        with:
+          version: '11.27.0'
+          run_install: false
+
+      - name: Rust 1.98.1 e WASM
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.98.1'
+          targets: wasm32-unknown-unknown
+
+      - name: LLVM WebAssembly para macOS
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          brew list --versions llvm >/dev/null 2>&1 || brew install llvm
+          llvm_bin="$(brew --prefix llvm)/bin"
+          echo "$llvm_bin" >> "$GITHUB_PATH"
+          echo "CC_wasm32_unknown_unknown=$llvm_bin/clang" >> "$GITHUB_ENV"
+          echo "AR_wasm32_unknown_unknown=$llvm_bin/llvm-ar" >> "$GITHUB_ENV"
+
+      - name: LLVM WebAssembly para Windows
+        if: runner.os == 'Windows'
+        run: |
+          set -euo pipefail
+          if ! command -v clang.exe >/dev/null 2>&1; then
+            choco install llvm -y --no-progress
+          fi
+          llvm_bin='C:\Program Files\LLVM\bin'
+          echo "$llvm_bin" >> "$GITHUB_PATH"
+          echo "CC_wasm32_unknown_unknown=$llvm_bin\clang.exe" >> "$GITHUB_ENV"
+          echo "AR_wasm32_unknown_unknown=$llvm_bin\llvm-ar.exe" >> "$GITHUB_ENV"
+
+      - name: Instalar pacotes web e desktop
+        run: |
+          pnpm install --frozen-lockfile --filter 'star_desktop...' --filter 'star_app...'
+
+      - name: Compilar frontend, WebAssembly e modulos nativos
+        run: |
+          pnpm --filter star_desktop build
+
+      - name: Criar DMG e ZIP para macOS Intel
+        if: matrix.platform == 'mac'
+        run: |
+          pnpm --filter star_desktop exec electron-builder \
+            --config electron-builder.star-ci.cjs \
+            --mac dmg zip --x64 --publish never
+
+      - name: Criar instaladores EXE Windows
+        if: matrix.platform == 'win'
+        run: |
+          pnpm --filter star_desktop exec electron-builder \
+            --config electron-builder.star-ci.cjs \
+            --win nsis portable --x64 --publish never
+
+      - name: Disponibilizar arquivos macOS
+        if: matrix.platform == 'mac'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Star-macOS-Intel-${{ github.run_number }}
+          path: |
+            star_desktop/dist-electron/*.dmg
+            star_desktop/dist-electron/*.zip
+          retention-days: 14
+          compression-level: 0
+          if-no-files-found: error
+
+      - name: Disponibilizar arquivos Windows
+        if: matrix.platform == 'win'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Star-Windows-x64-${{ github.run_number }}
+          path: star_desktop/dist-electron/*.exe
+          retention-days: 14
+          compression-level: 0
+          if-no-files-found: error
