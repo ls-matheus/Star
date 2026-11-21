@@ -20,10 +20,10 @@ import FocusRing from '@app/features/ui/focus_ring/FocusRing';
 import {ArrowRightIcon} from '@app/features/ui/icons/DirectionalIcons';
 import {flxElementClassName} from '@app/lib/react';
 import StarLogoAsset from '@app/media/images/star-logo-color.svg?react';
-import {OFFICIAL_INSTANCE_DISPLAY_HOST, OFFICIAL_INSTANCE_NAME} from '@star/instance_bootstrap/src/OfficialInstance';
 import {msg} from '@lingui/core/macro';
 import {Trans, useLingui} from '@lingui/react/macro';
-import {PlusIcon, TrashIcon} from '@phosphor-icons/react';
+import {CodeIcon, TrashIcon} from '@phosphor-icons/react';
+import {OFFICIAL_INSTANCE_DISPLAY_HOST, OFFICIAL_INSTANCE_NAME} from '@star/instance_bootstrap/src/OfficialInstance';
 import {type MouseEvent, type ReactNode, useCallback} from 'react';
 
 const USE_OFFICIAL_INSTANCE_DESCRIPTOR = msg({
@@ -36,8 +36,8 @@ const USE_INSTANCE_DESCRIPTOR = msg({
 		'Accessible label for a known authentication instance option. Preserve {name} and {domain}. Code inserts them.',
 });
 const ADD_INSTANCE_DESCRIPTOR = msg({
-	message: 'Add another instance',
-	comment: 'Button label that opens the self-hosted instance URL step.',
+	message: 'Dev',
+	comment: 'Button label that enters a local-only development workspace without login.',
 });
 const REMOVE_FROM_RECENT_INSTANCES_DESCRIPTOR = msg({
 	message: 'Remove from recent instances',
@@ -257,7 +257,7 @@ export function InstancePickerRows({
 								className={styles.instanceLogo}
 								data-flx="auth.flow.instance-selector.instance-picker-rows.instance-logo--2"
 							>
-								<PlusIcon
+								<CodeIcon
 									size={remFromPx(20)}
 									weight="bold"
 									data-flx="auth.flow.instance-selector.instance-picker-rows.plus-icon"
@@ -271,13 +271,13 @@ export function InstancePickerRows({
 									className={styles.instanceName}
 									data-flx="auth.flow.instance-selector.instance-picker-rows.instance-name--2"
 								>
-									<Trans>Add another instance</Trans>
+									<Trans>Dev</Trans>
 								</span>
 								<span
 									className={styles.instanceDomain}
 									data-flx="auth.flow.instance-selector.instance-picker-rows.instance-domain--2"
 								>
-									<Trans>Use a self-hosted instance URL</Trans>
+									Sem login · cache apenas durante esta sessão
 								</span>
 							</span>
 							<ArrowRightIcon
