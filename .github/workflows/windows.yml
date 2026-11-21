@@ -1,17 +1,17 @@
 # Star desktop: release (instalador) ou debug (app sem modulo nativo).
-name: 'Star | Windows x64 | Debug rapido'
+name: 'Windows'
 
 on:
-  pull_request:
+  push:
     branches: [main]
     paths:
       - 'Star web/**'
-      - '.github/workflows/star-windows-debug.yml'
+      - '.github/workflows/star-windows-release.yml'
       - '.github/workflows/star-electron-builder.cjs'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -19,19 +19,19 @@ concurrency:
 
 jobs:
   desktop:
-    name: 'Windows x64 | app de teste'
+    name: 'Windows'
     runs-on: windows-2025
-    timeout-minutes: 90
+    timeout-minutes: 180
     permissions:
-      contents: read
+      contents: write
     env:
       CI: 'true'
-      BUILD_CHANNEL: development
+      BUILD_CHANNEL: stable
       BUILD_VERSION: '0.0.${{ github.run_number }}'
       STAR_OFFLINE: '1'
       ELECTRON_ARCH: x64
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-      STAR_SKIP_NATIVE: 'true'
+      STAR_SKIP_NATIVE: 'false'
     defaults:
       run:
         shell: bash
@@ -66,7 +66,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: starweb -> target
-          key: windows-debug
+          key: windows-release
       - name: Preparar LLVM WebAssembly no Windows
         run: |
           set -euo pipefail
@@ -85,23 +85,40 @@ jobs:
           NODE_ENV: production
           PNPM_CONFIG_SHELL_EMULATOR: 'true'
         run: pnpm --filter star_desktop build
-      - name: Empacotar aplicativo de teste Windows sem instalador
+      - name: Empacotar EXE Windows
         env:
           NODE_ENV: production
           PNPM_CONFIG_SHELL_EMULATOR: 'true'
         run: |
           set -euo pipefail
-          pnpm --filter star_desktop exec electron-builder             --config ../../.github/workflows/star-electron-builder.cjs             --win --x64 --dir --publish never
-          test -d star_desktop/dist-electron/win-unpacked
-          test -n "$(find star_desktop/dist-electron/win-unpacked -maxdepth 1 -name '*.exe' -print -quit)"
-          powershell.exe -NoProfile -NonInteractive -Command 'Compress-Archive -Path "star_desktop/dist-electron/win-unpacked/*" -DestinationPath ("star_desktop/dist-electron/Star-Windows-Dev-" + $env:GITHUB_RUN_NUMBER + ".zip") -Force'
-          test -s "star_desktop/dist-electron/Star-Windows-Dev-${GITHUB_RUN_NUMBER}.zip"
-      - name: Baixar teste Windows ZIP com EXE
+          pnpm --filter star_desktop exec electron-builder             --config ../../.github/workflows/star-electron-builder.cjs             --win nsis portable --x64 --publish never
+      - name: Disponibilizar EXE Windows
         uses: actions/upload-artifact@v4
         with:
-          name: Star-Windows-Debug-App-${{ github.run_number }}
-          path: starweb/star_desktop/dist-electron/Star-Windows-Dev-*.zip
+          name: Star-Windows-EXE-${{ github.run_number }}
+          path: starweb/star_desktop/dist-electron/*.exe
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 30
           compression-level: 0
+      - name: Publicar em Releases sem README nem notas
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          assets=(star_desktop/dist-electron/*.exe)
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo 'Instaladores ausentes. Release nao criada.' >&2
+            exit 1
+          fi
+          tag="star-build-${GITHUB_SHA:0:8}"
+          title="Star Build ${GITHUB_SHA:0:8}"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --target "$GITHUB_SHA" --title "$title" --notes '' --prerelease ||
+              gh release view "$tag" >/dev/null
+          fi
+          gh release upload "$tag" "${assets[@]}" --clobber
+          echo "Publicado: https://github.com/$GH_REPO/releases/tag/$tag"
 

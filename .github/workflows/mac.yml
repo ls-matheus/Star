@@ -1,5 +1,5 @@
 # Star desktop: release (instalador) ou debug (app sem modulo nativo).
-name: 'Star | macOS Intel | Release'
+name: 'Mac'
 
 on:
   push:
@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   desktop:
-    name: 'Mac Intel | instalador'
+    name: 'Mac'
     runs-on: macos-15-intel
     timeout-minutes: 180
     permissions:

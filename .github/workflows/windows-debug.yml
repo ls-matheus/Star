@@ -1,12 +1,12 @@
 # Star desktop: release (instalador) ou debug (app sem modulo nativo).
-name: 'Star | macOS Intel | Debug rapido'
+name: 'Windows Debug'
 
 on:
   pull_request:
     branches: [main]
     paths:
       - 'Star web/**'
-      - '.github/workflows/star-macos-debug.yml'
+      - '.github/workflows/star-windows-debug.yml'
       - '.github/workflows/star-electron-builder.cjs'
   workflow_dispatch:
 
@@ -19,8 +19,8 @@ concurrency:
 
 jobs:
   desktop:
-    name: 'Mac Intel | app de teste'
-    runs-on: macos-15-intel
+    name: 'Windows Debug'
+    runs-on: windows-2025
     timeout-minutes: 90
     permissions:
       contents: read
@@ -66,39 +66,41 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: starweb -> target
-          key: macos-debug
-      - name: Preparar LLVM WebAssembly no macOS
+          key: windows-debug
+      - name: Preparar LLVM WebAssembly no Windows
         run: |
           set -euo pipefail
-          brew list --versions llvm >/dev/null 2>&1 || brew install llvm
-          llvm_bin="$(brew --prefix llvm)/bin"
-          echo "$llvm_bin" >> "$GITHUB_PATH"
-          echo "CC_wasm32_unknown_unknown=$llvm_bin/clang" >> "$GITHUB_ENV"
-          echo "AR_wasm32_unknown_unknown=$llvm_bin/llvm-ar" >> "$GITHUB_ENV"
+          if [ ! -x '/c/Program Files/LLVM/bin/clang.exe' ]; then
+            choco install llvm -y --no-progress
+          fi
+          llvm_dir='C:\Program Files\LLVM\bin'
+          echo "$llvm_dir" >> "$GITHUB_PATH"
+          echo "CC_wasm32_unknown_unknown=$llvm_dir\clang.exe" >> "$GITHUB_ENV"
+          echo "AR_wasm32_unknown_unknown=$llvm_dir\llvm-ar.exe" >> "$GITHUB_ENV"
 
       - name: Instalar dependencias do frontend
         run: pnpm install --frozen-lockfile --filter 'star_desktop...' --filter 'star_app...'
       - name: Compilar frontend, WASM e Electron
         env:
           NODE_ENV: production
-          PNPM_CONFIG_SHELL_EMULATOR: 'false'
+          PNPM_CONFIG_SHELL_EMULATOR: 'true'
         run: pnpm --filter star_desktop build
-      - name: Empacotar app de teste Mac sem DMG
+      - name: Empacotar aplicativo de teste Windows sem instalador
         env:
           NODE_ENV: production
+          PNPM_CONFIG_SHELL_EMULATOR: 'true'
         run: |
           set -euo pipefail
-          pnpm --filter star_desktop exec electron-builder             --config ../../.github/workflows/star-electron-builder.cjs             --mac --x64 --dir --publish never
-          app="$(find star_desktop/dist-electron -maxdepth 3 -type d -name '*.app' -print -quit)"
-          test -n "$app"
-          test -d "$app/Contents"
-          ditto -c -k --sequesterRsrc --keepParent "$app" "star_desktop/dist-electron/Star-macOS-Dev-${GITHUB_RUN_NUMBER}.zip"
-          test -s "star_desktop/dist-electron/Star-macOS-Dev-${GITHUB_RUN_NUMBER}.zip"
-      - name: Baixar teste Mac ZIP
+          pnpm --filter star_desktop exec electron-builder             --config ../../.github/workflows/star-electron-builder.cjs             --win --x64 --dir --publish never
+          test -d star_desktop/dist-electron/win-unpacked
+          test -n "$(find star_desktop/dist-electron/win-unpacked -maxdepth 1 -name '*.exe' -print -quit)"
+          powershell.exe -NoProfile -NonInteractive -Command 'Compress-Archive -Path "star_desktop/dist-electron/win-unpacked/*" -DestinationPath ("star_desktop/dist-electron/Star-Windows-Dev-" + $env:GITHUB_RUN_NUMBER + ".zip") -Force'
+          test -s "star_desktop/dist-electron/Star-Windows-Dev-${GITHUB_RUN_NUMBER}.zip"
+      - name: Baixar teste Windows ZIP com EXE
         uses: actions/upload-artifact@v4
         with:
-          name: Star-macOS-Debug-App-${{ github.run_number }}
-          path: starweb/star_desktop/dist-electron/Star-macOS-Dev-*.zip
+          name: Star-Windows-Debug-App-${{ github.run_number }}
+          path: starweb/star_desktop/dist-electron/Star-Windows-Dev-*.zip
           if-no-files-found: error
           retention-days: 7
           compression-level: 0

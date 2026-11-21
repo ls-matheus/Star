@@ -1,0 +1,105 @@
+# Star desktop: release (instalador) ou debug (app sem modulo nativo).
+name: 'Mac Debug'
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Star web/**'
+      - '.github/workflows/star-macos-debug.yml'
+      - '.github/workflows/star-electron-builder.cjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  desktop:
+    name: 'Mac Debug'
+    runs-on: macos-15-intel
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      CI: 'true'
+      BUILD_CHANNEL: development
+      BUILD_VERSION: '0.0.${{ github.run_number }}'
+      STAR_OFFLINE: '1'
+      ELECTRON_ARCH: x64
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      STAR_SKIP_NATIVE: 'true'
+    defaults:
+      run:
+        shell: bash
+        working-directory: starweb
+    steps:
+      - name: Checkout Star
+        uses: actions/checkout@v4
+      - name: Normalizar o caminho sem espacos
+        working-directory: .
+        run: |
+          set -euo pipefail
+          test -f 'Star web/Cargo.toml'
+          mv 'Star web' starweb
+          test -f starweb/star_desktop/package.json
+      - name: pnpm 11.27.0
+        uses: pnpm/action-setup@v4
+        with:
+          version: '11.27.0'
+          run_install: false
+      - name: Node.js 26 e cache pnpm
+        uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+          cache: pnpm
+          cache-dependency-path: starweb/pnpm-lock.yaml
+      - name: Rust 1.98.1 e WebAssembly
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.98.1'
+          targets: wasm32-unknown-unknown
+      - name: Cache Rust e WebAssembly
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: starweb -> target
+          key: macos-debug
+      - name: Preparar LLVM WebAssembly no macOS
+        run: |
+          set -euo pipefail
+          brew list --versions llvm >/dev/null 2>&1 || brew install llvm
+          llvm_bin="$(brew --prefix llvm)/bin"
+          echo "$llvm_bin" >> "$GITHUB_PATH"
+          echo "CC_wasm32_unknown_unknown=$llvm_bin/clang" >> "$GITHUB_ENV"
+          echo "AR_wasm32_unknown_unknown=$llvm_bin/llvm-ar" >> "$GITHUB_ENV"
+
+      - name: Instalar dependencias do frontend
+        run: pnpm install --frozen-lockfile --filter 'star_desktop...' --filter 'star_app...'
+      - name: Compilar frontend, WASM e Electron
+        env:
+          NODE_ENV: production
+          PNPM_CONFIG_SHELL_EMULATOR: 'false'
+        run: pnpm --filter star_desktop build
+      - name: Empacotar app de teste Mac sem DMG
+        env:
+          NODE_ENV: production
+        run: |
+          set -euo pipefail
+          pnpm --filter star_desktop exec electron-builder             --config ../../.github/workflows/star-electron-builder.cjs             --mac --x64 --dir --publish never
+          app="$(find star_desktop/dist-electron -maxdepth 3 -type d -name '*.app' -print -quit)"
+          test -n "$app"
+          test -d "$app/Contents"
+          ditto -c -k --sequesterRsrc --keepParent "$app" "star_desktop/dist-electron/Star-macOS-Dev-${GITHUB_RUN_NUMBER}.zip"
+          test -s "star_desktop/dist-electron/Star-macOS-Dev-${GITHUB_RUN_NUMBER}.zip"
+      - name: Baixar teste Mac ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: Star-macOS-Debug-App-${{ github.run_number }}
+          path: starweb/star_desktop/dist-electron/Star-macOS-Dev-*.zip
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
