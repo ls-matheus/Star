@@ -1,0 +1,207 @@
+name: 'Star | Builds automaticos (APK, DMG, EXE)'
+
+# Qualquer atualizacao da main dispara os 3 builds, sem servidor.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: star-autobuild-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: 'Android | APK ARM64'
+    runs-on: macos-26
+    timeout-minutes: 150
+    env:
+      CI: 'true'
+      FLUTTER_SUPPRESS_ANALYTICS: 'true'
+    defaults:
+      run:
+        shell: bash
+        working-directory: 'Star mobile'
+    steps:
+      - name: Checkout Star
+        uses: actions/checkout@v4
+      - name: Conectar fontes Rust compartilhadas
+        run: |
+          set -euo pipefail
+          test -f pubspec.yaml
+          test -f star_dart_sdk/pubspec.yaml
+          test -f '../Star web/packages/markdown_parser/rust/Cargo.toml'
+          if [ -e star ] || [ -L star ]; then
+            mv star "$RUNNER_TEMP/star-placeholder"
+          fi
+          ln -s '../Star web' star
+          test -f star/Cargo.toml
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Android SDK API 37
+        run: sdkmanager --install 'platforms;android-37' 'build-tools;37.0.0'
+      - name: Flutter 3.50.0
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.50.0'
+          channel: stable
+          cache: true
+      - name: Rust 1.98.1 e Android targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.98.1'
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+      - name: Preparar Flutter e codigo nativo
+        run: |
+          set -euo pipefail
+          (cd star && rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android)
+          flutter config --enable-native-assets
+          dart tool/configure_build.dart --profile=oss
+          bash tool/apply_macos_pub_overrides.sh
+          flutter pub get
+          dart run build_runner build --delete-conflicting-outputs
+      - name: Certificados HTTPS
+        run: |
+          bash tool/update_root_certificates.sh
+          test -s assets/certificates/root_certificates.pem
+      - name: Compilar APK Star ARM64
+        run: |
+          set -euo pipefail
+          flutter build apk --release \
+            --flavor stableUnifiedpush \
+            --target-platform android-arm64 \
+            --build-number "$GITHUB_RUN_NUMBER" \
+            --dart-define-from-file=tool/dart_defines/stable.json \
+            --dart-define=PUSH_PROVIDER=unifiedpush
+          ls -lh build/app/outputs/flutter-apk/*.apk
+      - name: Disponibilizar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Star-Android-APK-${{ github.run_number }}
+          path: 'Star mobile/build/app/outputs/flutter-apk/*.apk'
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+  desktop:
+    name: '${{ matrix.name }}'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: 'Mac Intel | DMG'
+            os: macos-15-intel
+            platform: mac
+          - name: 'Windows x64 | EXE'
+            os: windows-2025
+            platform: win
+    env:
+      CI: 'true'
+      BUILD_CHANNEL: stable
+      BUILD_VERSION: '0.0.${{ github.run_number }}'
+      STAR_OFFLINE: '1'
+      ELECTRON_ARCH: x64
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    defaults:
+      run:
+        shell: bash
+        working-directory: 'Star web'
+    steps:
+      - name: Checkout Star
+        uses: actions/checkout@v4
+      - name: Conferir fontes do frontend e desktop
+        run: |
+          set -euo pipefail
+          test -f package.json
+          test -f pnpm-lock.yaml
+          test -f Cargo.lock
+          test -f star_app/package.json
+          test -f star_desktop/package.json
+          test -f ../.github/workflows/star-electron-builder.cjs
+      - name: Node.js 26
+        uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+      - name: pnpm 11.27.0
+        uses: pnpm/action-setup@v4
+        with:
+          version: '11.27.0'
+          run_install: false
+      - name: Rust 1.98.1 e WebAssembly
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.98.1'
+          targets: wasm32-unknown-unknown
+      - name: LLVM WASM macOS
+        if: matrix.platform == 'mac'
+        run: |
+          set -euo pipefail
+          brew list --versions llvm >/dev/null 2>&1 || brew install llvm
+          llvm_bin="$(brew --prefix llvm)/bin"
+          echo "$llvm_bin" >> "$GITHUB_PATH"
+          echo "CC_wasm32_unknown_unknown=$llvm_bin/clang" >> "$GITHUB_ENV"
+          echo "AR_wasm32_unknown_unknown=$llvm_bin/llvm-ar" >> "$GITHUB_ENV"
+      - name: LLVM WASM Windows
+        if: matrix.platform == 'win'
+        run: |
+          set -euo pipefail
+          if [ ! -x '/c/Program Files/LLVM/bin/clang.exe' ]; then
+            choco install llvm -y --no-progress
+          fi
+          llvm_dir='C:\Program Files\LLVM\bin'
+          echo "$llvm_dir" >> "$GITHUB_PATH"
+          echo "CC_wasm32_unknown_unknown=$llvm_dir\clang.exe" >> "$GITHUB_ENV"
+          echo "AR_wasm32_unknown_unknown=$llvm_dir\llvm-ar.exe" >> "$GITHUB_ENV"
+      - name: Dependencias do frontend e Electron
+        run: |
+          pnpm install --frozen-lockfile --filter 'star_desktop...' --filter 'star_app...'
+      - name: Compilar frontend, WASM e modulos nativos
+        env:
+          NODE_ENV: production
+        run: pnpm --filter star_desktop build
+      - name: Empacotar DMG e ZIP do Mac Intel
+        if: matrix.platform == 'mac'
+        env:
+          NODE_ENV: production
+        run: |
+          pnpm --filter star_desktop exec electron-builder \
+            --config ../../.github/workflows/star-electron-builder.cjs \
+            --mac dmg zip --x64 --publish never
+      - name: Empacotar EXE Windows
+        if: matrix.platform == 'win'
+        env:
+          NODE_ENV: production
+        run: |
+          pnpm --filter star_desktop exec electron-builder \
+            --config ../../.github/workflows/star-electron-builder.cjs \
+            --win nsis portable --x64 --publish never
+      - name: Disponibilizar DMG do Mac
+        if: matrix.platform == 'mac'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Star-macOS-Intel-DMG-${{ github.run_number }}
+          path: |
+            Star web/star_desktop/dist-electron/*.dmg
+            Star web/star_desktop/dist-electron/*.zip
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Disponibilizar EXE Windows
+        if: matrix.platform == 'win'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Star-Windows-EXE-${{ github.run_number }}
+          path: 'Star web/star_desktop/dist-electron/*.exe'
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
