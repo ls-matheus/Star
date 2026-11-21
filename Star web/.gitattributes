@@ -17,3 +17,6 @@ star_docs/src/installer/install.sh text eol=lf
 star_docs/src/installer/install.ps1 text eol=lf
 star_rexctl/internal/stack/files/** text eol=lf
 star_docs/src/content/docs/operator/rexctl.mdx text eol=lf linguist-generated
+
+# Keep CSS source with LF; frontend invariants compare exact newline-delimited selectors.
+*.css text eol=lf
