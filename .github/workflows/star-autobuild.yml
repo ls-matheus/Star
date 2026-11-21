@@ -182,13 +182,6 @@ jobs:
           echo "$llvm_dir" >> "$GITHUB_PATH"
           echo "CC_wasm32_unknown_unknown=$llvm_dir\clang.exe" >> "$GITHUB_ENV"
           echo "AR_wasm32_unknown_unknown=$llvm_dir\llvm-ar.exe" >> "$GITHUB_ENV"
-      - name: Interpretar variaveis de ambiente dos scripts no Windows
-        if: matrix.platform == 'win'
-        working-directory: ${{ matrix.workdir }}
-        run: |
-          set -euo pipefail
-          pnpm config set --global shellEmulator true
-          test "$(pnpm config get shellEmulator)" = "true"
       - name: Dependencias do frontend e Electron
         working-directory: ${{ matrix.workdir }}
         run: |
@@ -196,6 +189,7 @@ jobs:
       - name: Compilar frontend, WASM e modulos nativos
         env:
           NODE_ENV: production
+          PNPM_CONFIG_SHELL_EMULATOR: "${{ matrix.platform == 'win' && 'true' || 'false' }}"
         working-directory: ${{ matrix.workdir }}
         run: pnpm --filter star_desktop build
       - name: Empacotar DMG e ZIP do Mac Intel
