@@ -26,7 +26,14 @@ tar -C /source-web \
   --exclude='./.pnpm-store' --exclude='./build' \
   --exclude='*.jks' --exclude='*.p12' --exclude='*.key' \
   --exclude='*.keystore' -cf - . | tar -C /work/shared-star -xf -
+# The tracked Star mobile source includes star/README.md as a placeholder.
+# Move that disposable copy out of the way: ln -s into an existing directory
+# would create /work/star/shared-star and leave the real Rust workspace missing.
+if [ -e /work/star ] || [ -L /work/star ]; then
+  mv /work/star /work/star-placeholder
+fi
 ln -s /work/shared-star /work/star
+test -L /work/star && test "$(readlink /work/star)" = /work/shared-star
 
 # Native-assets build hooks run through Flutter/Dart subprocesses, whose PATH
 # may differ from the interactive container shell. Use an absolute Cargo path.
