@@ -1,0 +1,97 @@
+[
+	{
+		"name": "@star/webauthn",
+		"platforms": ["darwin", "linux", "win32"],
+		"severity": "fatal"
+	},
+	{
+		"name": "@star/platform-info",
+		"platforms": ["darwin", "linux", "win32"],
+		"severity": "fatal"
+	},
+	{
+		"name": "@star/mac-app-audio",
+		"platforms": ["darwin"],
+		"severity": "fatal"
+	},
+	{
+		"name": "@star/mac-clipboard",
+		"platforms": ["darwin"],
+		"severity": "fatal"
+	},
+	{
+		"name": "@star/mac-sysctl",
+		"platforms": ["darwin"],
+		"severity": "fatal"
+	},
+	{
+		"name": "@star/mac-tcc",
+		"platforms": ["darwin"],
+		"severity": "fatal"
+	},
+	{
+		"name": "@star/macos-input-hook",
+		"platforms": ["darwin"],
+		"severity": "fatal"
+	},
+	{
+		"name": "@star/linux-audio-capture",
+		"platforms": ["linux"],
+		"severity": "fatal"
+	},
+	{
+		"name": "@star/linux-evdev",
+		"platforms": ["linux"],
+		"severity": "fatal"
+	},
+	{
+		"name": "@star/linux-input-hook",
+		"platforms": ["linux"],
+		"severity": "fatal"
+	},
+	{
+		"name": "@star/linux-notifications",
+		"platforms": ["linux"],
+		"severity": "fatal"
+	},
+	{
+		"name": "@star/linux-portals",
+		"platforms": ["linux"],
+		"severity": "fatal"
+	},
+	{
+		"name": "@star/system-hunspell",
+		"platforms": ["linux"],
+		"severity": "fatal"
+	},
+	{
+		"name": "@star/win-clipboard",
+		"platforms": ["win32"],
+		"severity": "fatal"
+	},
+	{
+		"name": "@star/win-process-loopback",
+		"platforms": ["win32"],
+		"severity": "fatal"
+	},
+	{
+		"name": "@star/win-shell",
+		"platforms": ["win32"],
+		"severity": "fatal"
+	},
+	{
+		"name": "@star/windows-input-hook",
+		"platforms": ["win32"],
+		"severity": "fatal"
+	},
+	{
+		"name": "@star/app-store",
+		"platforms": ["darwin", "linux", "win32"],
+		"severity": "degraded"
+	},
+	{
+		"name": "@star/gateway-socket",
+		"platforms": ["darwin", "linux", "win32"],
+		"severity": "degraded"
+	}
+]
