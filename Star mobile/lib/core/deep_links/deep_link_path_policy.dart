@@ -9,7 +9,6 @@ const Set<String> kInviteShortLinkHosts = <String>{'star.gg'};
 
 const Set<String> kOfficialAppLinkHosts = <String>{
   'star.invalid',
-  'star.invalid',
   'canary.star.invalid',
   'star.gg',
 };

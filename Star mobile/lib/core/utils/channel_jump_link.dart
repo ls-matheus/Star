@@ -22,10 +22,6 @@ class MessageJumpLink extends ChannelJumpLink {
 const Set<String> kOfficialChannelJumpHosts = <String>{
   'star.invalid',
   'canary.star.invalid',
-  'star.invalid',
-  'canary.star.invalid',
-  'web.star.invalid',
-  'web.canary.star.invalid',
   'web.star.invalid',
   'web.canary.star.invalid',
 };

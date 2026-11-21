@@ -19,7 +19,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: star-release-${{ github.event_name == 'workflow_dispatch' && inputs.run_id || github.event.workflow_run.id }
+  group: star-release-${{ github.event_name == 'workflow_dispatch' && inputs.run_id || github.event.workflow_run.id }}
   cancel-in-progress: false
 
 jobs:
@@ -28,16 +28,16 @@ jobs:
     if: >-
       ${{ github.event_name == 'workflow_dispatch' ||
           (github.event.workflow_run.head_repository.full_name == github.repository &&
-           github.event.workflow_run.head_branch == 'main') }
+           github.event.workflow_run.head_branch == 'main') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       actions: read
       contents: write
     env:
-      GH_TOKEN: ${{ github.token }
-      GH_REPO: ${{ github.repository }
-      SOURCE_RUN_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.run_id || github.event.workflow_run.id }
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SOURCE_RUN_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.run_id || github.event.workflow_run.id }}
 
     steps:
       - name: 'Validar execucao original e verificar artefatos'
@@ -82,9 +82,9 @@ jobs:
         if: steps.source.outputs.has_assets == 'true'
         uses: actions/download-artifact@v4
         with:
-          run-id: ${{ env.SOURCE_RUN_ID }
-          github-token: ${{ github.token }
-          repository: ${{ github.repository }
+          run-id: ${{ env.SOURCE_RUN_ID }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
           pattern: 'Star-*'
           merge-multiple: true
           path: release-assets
@@ -93,8 +93,8 @@ jobs:
         if: steps.source.outputs.has_assets == 'true'
         shell: bash
         env:
-          RELEASE_SHA: ${{ steps.source.outputs.source_sha }
-          RELEASE_NUMBER: ${{ steps.source.outputs.run_number }
+          RELEASE_SHA: ${{ steps.source.outputs.source_sha }}
+          RELEASE_NUMBER: ${{ steps.source.outputs.run_number }}
         run: |
           set -euo pipefail
           shopt -s nullglob

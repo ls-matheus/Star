@@ -17,9 +17,5 @@ abstract final class InstanceConstants {
     'web.star.invalid',
     'canary.star.invalid',
     'web.canary.star.invalid',
-    'star.invalid',
-    'web.star.invalid',
-    'canary.star.invalid',
-    'web.canary.star.invalid',
   };
 }

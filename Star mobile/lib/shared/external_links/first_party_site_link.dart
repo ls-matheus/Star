@@ -1,8 +1,6 @@
 const Set<String> _kFirstPartySiteHosts = <String>{
   'star.invalid',
   'canary.star.invalid',
-  'star.invalid',
-  'canary.star.invalid',
 };
 
 const List<String> _kFirstPartySitePaths = <String>[

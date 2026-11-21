@@ -9,10 +9,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: star-autobuild-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   android:
     name: 'Android | APK ARM64'
@@ -115,9 +111,11 @@ jobs:
           - name: 'Mac Intel | DMG'
             os: macos-15-intel
             platform: mac
+            workdir: starweb
           - name: 'Windows x64 | EXE'
             os: windows-2025
             platform: win
+            workdir: starweb
     env:
       CI: 'true'
       BUILD_CHANNEL: stable
@@ -128,11 +126,18 @@ jobs:
     defaults:
       run:
         shell: bash
-        working-directory: 'Star web'
     steps:
       - name: Checkout Star
         uses: actions/checkout@v4
+      - name: Normalizar caminho das fontes para macOS e Windows
+        working-directory: .
+        run: |
+          set -euo pipefail
+          test -d 'Star web'
+          mv 'Star web' starweb
+          test -f starweb/Cargo.toml
       - name: Conferir fontes do frontend e desktop
+        working-directory: ${{ matrix.workdir }}
         run: |
           set -euo pipefail
           test -f package.json
@@ -157,6 +162,7 @@ jobs:
           targets: wasm32-unknown-unknown
       - name: LLVM WASM macOS
         if: matrix.platform == 'mac'
+        working-directory: ${{ matrix.workdir }}
         run: |
           set -euo pipefail
           brew list --versions llvm >/dev/null 2>&1 || brew install llvm
@@ -166,6 +172,7 @@ jobs:
           echo "AR_wasm32_unknown_unknown=$llvm_bin/llvm-ar" >> "$GITHUB_ENV"
       - name: LLVM WASM Windows
         if: matrix.platform == 'win'
+        working-directory: ${{ matrix.workdir }}
         run: |
           set -euo pipefail
           if [ ! -x '/c/Program Files/LLVM/bin/clang.exe' ]; then
@@ -176,16 +183,19 @@ jobs:
           echo "CC_wasm32_unknown_unknown=$llvm_dir\clang.exe" >> "$GITHUB_ENV"
           echo "AR_wasm32_unknown_unknown=$llvm_dir\llvm-ar.exe" >> "$GITHUB_ENV"
       - name: Dependencias do frontend e Electron
+        working-directory: ${{ matrix.workdir }}
         run: |
           pnpm install --frozen-lockfile --filter 'star_desktop...' --filter 'star_app...'
       - name: Compilar frontend, WASM e modulos nativos
         env:
           NODE_ENV: production
+        working-directory: ${{ matrix.workdir }}
         run: pnpm --filter star_desktop build
       - name: Empacotar DMG e ZIP do Mac Intel
         if: matrix.platform == 'mac'
         env:
           NODE_ENV: production
+        working-directory: ${{ matrix.workdir }}
         run: |
           pnpm --filter star_desktop exec electron-builder \
             --config ../../.github/workflows/star-electron-builder.cjs \
@@ -194,6 +204,7 @@ jobs:
         if: matrix.platform == 'win'
         env:
           NODE_ENV: production
+        working-directory: ${{ matrix.workdir }}
         run: |
           pnpm --filter star_desktop exec electron-builder \
             --config ../../.github/workflows/star-electron-builder.cjs \
@@ -204,8 +215,8 @@ jobs:
         with:
           name: Star-macOS-Intel-DMG-${{ github.run_number }}
           path: |
-            Star web/star_desktop/dist-electron/*.dmg
-            Star web/star_desktop/dist-electron/*.zip
+            starweb/star_desktop/dist-electron/*.dmg
+            starweb/star_desktop/dist-electron/*.zip
           if-no-files-found: error
           retention-days: 30
           compression-level: 0
@@ -214,7 +225,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Star-Windows-EXE-${{ github.run_number }}
-          path: 'Star web/star_desktop/dist-electron/*.exe'
+          path: 'starweb/star_desktop/dist-electron/*.exe'
           if-no-files-found: error
           retention-days: 30
           compression-level: 0
