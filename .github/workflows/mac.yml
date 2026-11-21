@@ -2,12 +2,6 @@
 name: 'Mac'
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'Star web/**'
-      - '.github/workflows/star-macos-release.yml'
-      - '.github/workflows/star-electron-builder.cjs'
   workflow_dispatch:
 
 permissions:

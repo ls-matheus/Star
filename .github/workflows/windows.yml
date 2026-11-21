@@ -2,12 +2,6 @@
 name: 'Windows'
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'Star web/**'
-      - '.github/workflows/star-windows-release.yml'
-      - '.github/workflows/star-electron-builder.cjs'
   workflow_dispatch:
 
 permissions:

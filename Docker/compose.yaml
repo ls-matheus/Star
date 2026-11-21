@@ -1,0 +1,77 @@
+# Star local-first Docker bundle. Source trees are NOT modified.
+# Web and server are shipped together by the project's existing monolith target.
+name: star-local
+
+services:
+  star:
+    image: star/server:local
+    build:
+      context: "../Star Server"
+      dockerfile: packaging/monolith/Dockerfile
+      target: runtime
+      args:
+        SOURCE: export
+        BUILD_VERSION: "${STAR_BUILD_VERSION:-local}"
+        PROFILE: release-fast
+        CARGO_BUILD_JOBS: "${STAR_BUILD_JOBS:-4}"
+    env_file:
+      - .env
+    environment:
+      STAR_DATA_DIR: /var/lib/star
+    ports:
+      - "127.0.0.1:${STAR_LOCAL_PORT:-8080}:80/tcp"
+      - "127.0.0.1:${STAR_VOICE_TCP_PORT:-7881}:7881/tcp"
+      - "127.0.0.1:${STAR_VOICE_UDP_PORT:-7882}:7882/udp"
+    volumes:
+      - star-data:/var/lib/star
+    restart: unless-stopped
+    stop_grace_period: 120s
+    healthcheck:
+      test: ["CMD", "/opt/star/current/bin/stard", "health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 600s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Dedicated image for Star web assets. This is a build artifact, not a second
+  # frontend service: the monolith above already embeds the web client.
+  web-assets:
+    profiles: ["build-only"]
+    image: star/web-assets:local
+    build:
+      context: "../Star web"
+      dockerfile: star_app_proxy/Dockerfile
+      target: app-assets
+      args:
+        BUILD_VERSION: "${STAR_BUILD_VERSION:-local}"
+        BUNDLE_LOCAL_ASSETS: "true"
+        PUBLIC_ASSET_BASE_URL: ""
+    entrypoint: ["/bin/true"]
+    restart: "no"
+
+  # Tool image for Android builds. Flutter is a compiler here, not an always-on
+  # containerized mobile app. Sources are mounted read-only and copied to tmp.
+  mobile-builder:
+    profiles: ["build-only"]
+    image: star/mobile-builder:local
+    build:
+      context: .
+      dockerfile: Dockerfile.mobile
+    volumes:
+      - type: bind
+        source: "../Star mobile"
+        target: /source
+        read_only: true
+      - type: bind
+        source: ./output/mobile
+        target: /output
+    restart: "no"
+
+volumes:
+  star-data:
+    name: star-local-data

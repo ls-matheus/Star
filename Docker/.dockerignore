@@ -1,0 +1,4 @@
+*
+!Dockerfile.mobile
+!scripts/
+!scripts/build-android.sh

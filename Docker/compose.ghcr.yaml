@@ -1,0 +1,34 @@
+# Star published image (GHCR) - local HTTP only.
+# Requires an image already built and published by GitHub Actions.
+name: star-local
+services:
+  star:
+    image: ghcr.io/ls-matheus/star-server:${STAR_IMAGE_TAG:-latest}
+    pull_policy: always
+    env_file:
+      - .env
+    environment:
+      STAR_DATA_DIR: /var/lib/star
+    ports:
+      - "127.0.0.1:${STAR_LOCAL_PORT:-8080}:80/tcp"
+      - "127.0.0.1:${STAR_VOICE_TCP_PORT:-7881}:7881/tcp"
+      - "127.0.0.1:${STAR_VOICE_UDP_PORT:-7882}:7882/udp"
+    volumes:
+      - star-data:/var/lib/star
+    restart: unless-stopped
+    stop_grace_period: 120s
+    healthcheck:
+      test: ["CMD", "/opt/star/current/bin/stard", "health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 600s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  star-data:
+    name: star-local-data

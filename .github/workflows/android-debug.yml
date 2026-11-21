@@ -7,7 +7,7 @@ on:
     paths:
       - 'Star mobile/**'
       - 'Star web/**'
-      - '.github/workflows/star-android-debug.yml'
+      - '.github/workflows/android-debug.yml'
   workflow_dispatch:
 
 permissions:

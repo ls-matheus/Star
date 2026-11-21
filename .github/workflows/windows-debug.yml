@@ -6,7 +6,7 @@ on:
     branches: [main]
     paths:
       - 'Star web/**'
-      - '.github/workflows/star-windows-debug.yml'
+      - '.github/workflows/windows-debug.yml'
       - '.github/workflows/star-electron-builder.cjs'
   workflow_dispatch:
 
