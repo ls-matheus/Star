@@ -211,7 +211,7 @@ class _StarAppState extends ConsumerState<StarApp> {
                   scaffoldBackgroundColor:
                       materialTheme.scaffoldBackgroundColor,
                 );
-            return Material(
+            final Widget appBody = Material(
               type: MaterialType.transparency,
               child: CupertinoTheme(
                 data: cupertinoTheme,
@@ -231,6 +231,14 @@ class _StarAppState extends ConsumerState<StarApp> {
                 ),
               ),
             );
+            // Paint the current theme behind transparent Android system bars,
+            // including routes whose content uses SafeArea for gesture space.
+            return isStarNativeAndroid
+                ? ColoredBox(
+                    color: materialTheme.scaffoldBackgroundColor,
+                    child: appBody,
+                  )
+                : appBody;
           },
         ),
       ),

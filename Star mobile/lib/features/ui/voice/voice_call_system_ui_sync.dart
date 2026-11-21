@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -33,12 +34,23 @@ class _VoiceCallSystemUiSyncState extends ConsumerState<VoiceCallSystemUiSync> {
       return;
     }
     _statusBarHidden = false;
-    unawaited(
-      SystemChrome.setEnabledSystemUIMode(
-        SystemUiMode.manual,
-        overlays: SystemUiOverlay.values,
-      ),
+    _showSystemBars();
+  }
+
+  void _showSystemBars() {
+    unawaited(_restoreSystemBars());
+  }
+
+  Future<void> _restoreSystemBars() async {
+    // Restore the status bar even on Android versions without edge-to-edge.
+    await SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.manual,
+      overlays: SystemUiOverlay.values,
     );
+    if (Platform.isAndroid) {
+      // Fullscreen voice calls can leave Android 10-14 in opaque manual mode.
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
   }
 
   void _sync({required bool hideStatusBar}) {
@@ -54,12 +66,7 @@ class _VoiceCallSystemUiSyncState extends ConsumerState<VoiceCallSystemUiSync> {
         ),
       );
     } else {
-      unawaited(
-        SystemChrome.setEnabledSystemUIMode(
-          SystemUiMode.manual,
-          overlays: SystemUiOverlay.values,
-        ),
-      );
+      _showSystemBars();
     }
   }
 

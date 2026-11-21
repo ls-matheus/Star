@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:star_app/app.dart';
 import 'package:star_app/core/api/retry_interceptor.dart';
@@ -140,6 +141,9 @@ Future<void> _bootstrapStar(List<String> args) async {
   }
 
   if (Platform.isAndroid) {
+    // Draw the app underneath system navigation gestures on Android 10+.
+    // Keep this out of the headless UnifiedPush startup path.
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     installImeEditingShortcutHandler();
     UploadKeepAlive.ensureAndroidResumeSync();
   }

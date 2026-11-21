@@ -18,7 +18,11 @@ SystemUiOverlayStyle starSystemUiOverlayStyle({
     statusBarBrightness: brightness,
     statusBarIconBrightness: iconBrightness,
     systemStatusBarContrastEnforced: false,
-    systemNavigationBarColor: navigationBarColor,
+    // The Android gesture/navigation area follows the Flutter surface,
+    // instead of drawing an opaque strip across the bottom of the screen.
+    systemNavigationBarColor: isStarNativeAndroid
+        ? const Color(0x00000000)
+        : navigationBarColor,
     systemNavigationBarDividerColor: const Color(0x00000000),
     systemNavigationBarIconBrightness: iconBrightness,
     systemNavigationBarContrastEnforced: false,
