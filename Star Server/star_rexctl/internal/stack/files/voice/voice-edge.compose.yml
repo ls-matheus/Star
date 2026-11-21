@@ -1,0 +1,39 @@
+services:
+  edge:
+    image: ${STAR_CADDY_IMAGE:-caddy:2.11-alpine}
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: ${STAR_LOG_MAX_SIZE:-10m}
+        max-file: "${STAR_LOG_MAX_FILE:-3}"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      STAR_VOICE_EDGE_GLOBAL_OPTIONS: ${STAR_VOICE_EDGE_EMAIL:+email ${STAR_VOICE_EDGE_EMAIL:-}}
+      STAR_VOICE_EDGE_SNI_OPTION: ${STAR_VOICE_EDGE_IP:+default_sni ${STAR_VOICE_EDGE_IP:-}}
+    volumes:
+      - ./Caddyfile.voice:/etc/caddy/Caddyfile:ro,z
+      - ./sites.d:/etc/caddy/sites.d:ro,z
+      - edge-data:/data
+      - edge-config:/config
+    networks:
+      - voice
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+      start_interval: 1s
+
+networks:
+  voice:
+    name: ${STAR_VOICE_NETWORK:-star-voice}
+    enable_ipv6: ${STAR_VOICE_NETWORK_IPV6:-false}
+
+volumes:
+  edge-data:
+  edge-config:

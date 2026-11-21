@@ -1,0 +1,56 @@
+services:
+  livekit:
+    image: ${STAR_LIVEKIT_IMAGE:-livekit/livekit-server:v1.12.0}
+    restart: unless-stopped
+    stop_grace_period: ${STAR_VOICE_STOP_GRACE:-15m}
+    deploy:
+      resources:
+        limits:
+          memory: ${STAR_VOICE_MEMORY_LIMIT:-2g}
+    logging:
+      driver: json-file
+      options:
+        max-size: ${STAR_LOG_MAX_SIZE:-10m}
+        max-file: "${STAR_LOG_MAX_FILE:-3}"
+    environment:
+      GOMEMLIMIT: ${STAR_VOICE_GOMEMLIMIT:-1700MiB}
+      LIVEKIT_KEYS: "${STAR_VOICE_API_KEY:?Set STAR_VOICE_API_KEY}: ${STAR_VOICE_API_SECRET:?Set STAR_VOICE_API_SECRET}"
+      LIVEKIT_CONFIG: |
+        port: 7880
+        log_level: ${STAR_LIVEKIT_LOG_LEVEL:-info}
+        rtc:
+          tcp_port: ${STAR_VOICE_TCP_PORT:-7881}
+          udp_port: ${STAR_VOICE_UDP_PORT:-7882}
+          use_external_ip: ${STAR_VOICE_USE_EXTERNAL_IP:-true}
+          node_ip: "${STAR_VOICE_NODE_IP:-}"
+          ips:
+            includes: ${STAR_VOICE_ICE_IPS:-[]}
+          stun_servers:
+            - ${STAR_LIVEKIT_STUN_PRIMARY:-stun.l.google.com:19302}
+            - ${STAR_LIVEKIT_STUN_SECONDARY:-stun1.l.google.com:19302}
+          turn_servers: ${STAR_LIVEKIT_TURN_SERVERS:-[]}
+        turn:
+          enabled: false
+        webhook:
+          api_key: ${STAR_VOICE_API_KEY:?Set STAR_VOICE_API_KEY}
+          urls:
+            - ${STAR_VOICE_WEBHOOK_URL:?Set STAR_VOICE_WEBHOOK_URL}
+    ports:
+      - "${STAR_VOICE_BIND_IP:+${STAR_VOICE_BIND_IP}:}${STAR_VOICE_TCP_PORT:-7881}:${STAR_VOICE_TCP_PORT:-7881}/tcp"
+      - "${STAR_VOICE_BIND_IP:+${STAR_VOICE_BIND_IP}:}${STAR_VOICE_UDP_PORT:-7882}:${STAR_VOICE_UDP_PORT:-7882}/udp"
+    networks:
+      voice:
+        aliases:
+          - voice-${STAR_VOICE_ID:?Set STAR_VOICE_ID}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:7880/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+      start_interval: 1s
+
+networks:
+  voice:
+    external: true
+    name: ${STAR_VOICE_NETWORK:-star-voice}
