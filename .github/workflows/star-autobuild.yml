@@ -182,6 +182,13 @@ jobs:
           echo "$llvm_dir" >> "$GITHUB_PATH"
           echo "CC_wasm32_unknown_unknown=$llvm_dir\clang.exe" >> "$GITHUB_ENV"
           echo "AR_wasm32_unknown_unknown=$llvm_dir\llvm-ar.exe" >> "$GITHUB_ENV"
+      - name: Interpretar variaveis de ambiente dos scripts no Windows
+        if: matrix.platform == 'win'
+        working-directory: ${{ matrix.workdir }}
+        run: |
+          set -euo pipefail
+          pnpm config set --global shellEmulator true
+          test "$(pnpm config get shellEmulator)" = "true"
       - name: Dependencias do frontend e Electron
         working-directory: ${{ matrix.workdir }}
         run: |
