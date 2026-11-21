@@ -1,4 +1,4 @@
-# Star desktop: release (instalador) ou debug (app sem modulo nativo).
+# Star desktop: debug ZIP sem instalador, com addons nativos necessarios para inicializacao.
 name: 'Mac Debug'
 
 on:
@@ -31,7 +31,7 @@ jobs:
       STAR_OFFLINE: '1'
       ELECTRON_ARCH: x64
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-      STAR_SKIP_NATIVE: 'true'
+      STAR_SKIP_NATIVE: 'false'
     defaults:
       run:
         shell: bash
@@ -67,6 +67,7 @@ jobs:
         with:
           workspaces: starweb -> target
           key: macos-debug
+          cache-on-failure: 'true'
       - name: Preparar LLVM WebAssembly no macOS
         run: |
           set -euo pipefail
