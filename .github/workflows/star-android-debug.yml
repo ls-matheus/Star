@@ -1,0 +1,117 @@
+# CI Star: um workflow para cada plataforma/variacao.
+name: 'Star | Android | Debug APK'
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Star mobile/**'
+      - 'Star web/**'
+      - '.github/workflows/star-android-debug.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  android:
+    name: 'Android | APK DEBUG ARM64'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CI: 'true'
+      FLUTTER_SUPPRESS_ANALYTICS: 'true'
+    defaults:
+      run:
+        shell: bash
+        working-directory: 'Star mobile'
+    steps:
+      - name: Checkout Star
+        uses: actions/checkout@v4
+      - name: Conectar fontes Rust compartilhadas
+        run: |
+          set -euo pipefail
+          test -f pubspec.yaml
+          test -f star_dart_sdk/pubspec.yaml
+          test -f '../Star web/packages/markdown_parser/rust/Cargo.toml'
+          if [ -e star ] || [ -L star ]; then
+            mv star "$RUNNER_TEMP/star-placeholder"
+          fi
+          ln -s '../Star web' star
+          test -f star/Cargo.toml
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Android SDK API 37
+        run: |
+          set -euo pipefail
+          if ! sdkmanager --channel=3 --install 'platforms;android-37.0' 'build-tools;37.0.0'; then
+            sdkmanager --channel=3 --install 'platforms;android-37.2' 'build-tools;37.0.0'
+          fi
+          platform_dir="$(find "$ANDROID_HOME/platforms" -maxdepth 1 -type d -name 'android-37.*' | sort -V | head -1)"
+          test -n "$platform_dir"
+          test -s "$platform_dir/android.jar"
+          if [ ! -e "$ANDROID_HOME/platforms/android-37" ]; then
+            ln -s "$(basename "$platform_dir")" "$ANDROID_HOME/platforms/android-37"
+          fi
+          test -s "$ANDROID_HOME/platforms/android-37/android.jar"
+      - name: Flutter 3.50.0
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.50.0'
+          channel: stable
+          cache: true
+      - name: Rust 1.98.1 e Android targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.98.1'
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+      - name: Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            Star web -> target
+            Star mobile -> target
+      - name: Preparar Flutter e codigo nativo
+        run: |
+          set -euo pipefail
+          (cd star && rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android)
+          flutter config --enable-native-assets
+          dart tool/configure_build.dart --profile=oss
+          bash tool/apply_macos_pub_overrides.sh
+          flutter pub get
+          dart run build_runner build --delete-conflicting-outputs
+      - name: Certificados HTTPS
+        run: |
+          bash tool/update_root_certificates.sh
+          test -s assets/certificates/root_certificates.pem
+      - name: Compilar APK DEBUG Star ARM64
+        run: |
+          set -euo pipefail
+          flutter build apk --debug \
+            --flavor stableUnifiedpush \
+            --target-platform android-arm64 \
+            --build-number "$GITHUB_RUN_NUMBER" \
+            --dart-define-from-file=tool/dart_defines/stable.json \
+            --dart-define=PUSH_PROVIDER=unifiedpush
+          ls -lh build/app/outputs/flutter-apk/*.apk
+      - name: Disponibilizar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Star-Android-Debug-APK-${{ github.run_number }}
+          path: 'Star mobile/build/app/outputs/flutter-apk/*.apk'
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
