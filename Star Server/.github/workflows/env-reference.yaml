@@ -1,0 +1,89 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name: env-reference
+
+on:
+  pull_request:
+    paths:
+      - star_rexctl/**
+      - star_admin/**
+      - star_api/**
+      - star_app_proxy/**
+      - star_common/**
+      - star_gateway/**
+      - star_gifs/**
+      - star_media_proxy/**
+      - star_messages/**
+      - star_push/**
+      - star_snowflakes/**
+      - star_static/**
+      - star_svc/**
+      - star_unfurl/**
+      - star_users/**
+      - star_*/Dockerfile
+      - packages/**
+      - star_docs/scripts/**
+      - star_docs/src/installer/**
+      - star_docs/src/pages/**
+      - star_docs/src/server/**
+      - star_docs/src/content/docs/**
+      - deploy/helm/**
+      - .github/workflows/env-reference.yaml
+  push:
+    branches:
+      - main
+    paths:
+      - star_rexctl/**
+      - star_admin/**
+      - star_api/**
+      - star_app_proxy/**
+      - star_common/**
+      - star_gateway/**
+      - star_gifs/**
+      - star_media_proxy/**
+      - star_messages/**
+      - star_push/**
+      - star_snowflakes/**
+      - star_static/**
+      - star_svc/**
+      - star_unfurl/**
+      - star_users/**
+      - star_*/Dockerfile
+      - packages/**
+      - star_docs/scripts/**
+      - star_docs/src/installer/**
+      - star_docs/src/pages/**
+      - star_docs/src/server/**
+      - star_docs/src/content/docs/**
+      - deploy/helm/**
+      - .github/workflows/env-reference.yaml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+    working-directory: star_rexctl
+
+jobs:
+  env-reference:
+    name: environment variables are documented
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: "1.27.x"
+          check-latest: true
+          cache-dependency-path: star_rexctl/go.sum
+
+      - name: every environment variable is documented
+        run: go test -count=1 ./internal/instance

@@ -1,0 +1,6 @@
+self-hosted-runner:
+  labels:
+    - star-desktop-macos-arm64
+    - star-electron-build
+
+config-variables: null
