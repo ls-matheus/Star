@@ -1,6 +1,0 @@
-**/Cargo.lock
-**/pnpm-lock.yaml
-**/rebar.lock
-
-/star_static/
-/packages/fonts/files/

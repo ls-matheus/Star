@@ -1,8 +1,0 @@
-services:
-  edge:
-    ports: !override
-      - "${STAR_EDGE_BIND:-127.0.0.1:80}:80"
-    environment:
-      STAR_EDGE_SITE_ADDRESS: ":80"
-      STAR_EDGE_TLS_DIRECTIVE: ""
-      STAR_EDGE_TRUSTED_PROXIES: ${STAR_EDGE_TRUSTED_PROXIES:-private_ranges}
