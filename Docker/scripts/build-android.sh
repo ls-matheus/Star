@@ -36,10 +36,10 @@ fi
 
 if [ ! -f android/gradlew ] || [ ! -f android/gradle/wrapper/gradle-wrapper.jar ]; then
   echo "Generating missing Gradle wrapper in a disposable Flutter project ..."
-  flutter create --platforms=android --no-pub /tmp/star-gradle-wrapper
+  flutter create --project-name star_gradle_wrapper --platforms=android --no-pub /tmp/star_gradle_wrapper
   mkdir -p android/gradle/wrapper
-  cp /tmp/star-gradle-wrapper/android/gradlew android/gradlew
-  cp /tmp/star-gradle-wrapper/android/gradle/wrapper/gradle-wrapper.jar android/gradle/wrapper/gradle-wrapper.jar
+  cp /tmp/star_gradle_wrapper/android/gradlew android/gradlew
+  cp /tmp/star_gradle_wrapper/android/gradle/wrapper/gradle-wrapper.jar android/gradle/wrapper/gradle-wrapper.jar
   chmod 0755 android/gradlew
 fi
 

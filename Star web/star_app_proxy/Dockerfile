@@ -135,6 +135,8 @@ RUN --mount=type=bind,from=app-dist,source=/dist,target=/dist \
 # This target extends the same source+dependencies as the web asset build,
 # but builds the desktop-specific renderer with no Electron native modules.
 FROM app-build AS desktop-app-build
+# Desktop Rspack copies favicon/icon assets from the monorepo static tree.
+COPY star_static/web/ ./star_static/web/
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     cd star_app && pnpm build:desktop
