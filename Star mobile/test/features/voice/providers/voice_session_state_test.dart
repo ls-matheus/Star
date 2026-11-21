@@ -1,0 +1,99 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:star_app/features/voice/providers/voice_session_state.dart';
+
+void main() {
+  group('VoiceSessionState.isInVoice', () {
+    test('is true while connecting to a channel', () {
+      const VoiceSessionState state = VoiceSessionState(
+        isConnecting: true,
+        channelId: 'voice-1',
+      );
+      expect(state.isInVoice, isTrue);
+    });
+
+    test('is true when connected to a channel', () {
+      const VoiceSessionState state = VoiceSessionState(
+        isConnected: true,
+        channelId: 'voice-1',
+      );
+      expect(state.isInVoice, isTrue);
+    });
+
+    test('is false without a channel id', () {
+      const VoiceSessionState state = VoiceSessionState(isConnecting: true);
+      expect(state.isInVoice, isFalse);
+    });
+
+    test('is false for an idle session', () {
+      expect(const VoiceSessionState().isInVoice, isFalse);
+    });
+  });
+
+  group('VoiceSessionState.copyWith', () {
+    test('clearChannel nulls guildId and channelId', () {
+      const VoiceSessionState before = VoiceSessionState(
+        guildId: 'g1',
+        channelId: 'voice-1',
+        activeConnectionId: 'conn-1',
+      );
+      final VoiceSessionState after = before.copyWith(clearChannel: true);
+      expect(after.guildId, isNull);
+      expect(after.channelId, isNull);
+      expect(after.activeConnectionId, 'conn-1');
+    });
+
+    test('clearActiveConnectionId nulls connection fields', () {
+      const VoiceSessionState before = VoiceSessionState(
+        guildId: 'g1',
+        channelId: 'voice-1',
+        activeConnectionId: 'conn-1',
+        voiceServerEndpoint: 'wss://livekit.example',
+      );
+      final VoiceSessionState after = before.copyWith(
+        clearActiveConnectionId: true,
+      );
+      expect(after.activeConnectionId, isNull);
+      expect(after.voiceServerEndpoint, isNull);
+      expect(after.channelId, 'voice-1');
+    });
+
+    test('clearError removes errorMessage', () {
+      const VoiceSessionState before = VoiceSessionState(
+        errorMessage: 'VOICE_ERR_MIC_PERM',
+      );
+      final VoiceSessionState after = before.copyWith(clearError: true);
+      expect(after.errorMessage, isNull);
+    });
+
+    test('clearRoom nulls liveKitRoom and e2eeKey', () {
+      const VoiceSessionState before = VoiceSessionState(e2eeKey: 'key');
+      final VoiceSessionState after = before.copyWith(clearRoom: true);
+      expect(after.liveKitRoom, isNull);
+      expect(after.e2eeKey, isNull);
+    });
+  });
+
+  group('VoiceSessionState equality', () {
+    test('equal fields compare equal so identical emits are skipped', () {
+      const VoiceSessionState a = VoiceSessionState(
+        isConnected: true,
+        isReconnecting: true,
+        channelId: 'voice-1',
+        activeConnectionId: 'conn-1',
+      );
+      final VoiceSessionState b = a.copyWith(isReconnecting: true);
+      expect(b, a);
+      expect(b.hashCode, a.hashCode);
+    });
+
+    test('any changed field breaks equality', () {
+      const VoiceSessionState a = VoiceSessionState(
+        isConnected: true,
+        channelId: 'voice-1',
+      );
+      expect(a.copyWith(isReconnecting: true), isNot(a));
+      expect(a.copyWith(errorMessage: 'x'), isNot(a));
+      expect(a.copyWith(channelId: 'voice-2'), isNot(a));
+    });
+  });
+}

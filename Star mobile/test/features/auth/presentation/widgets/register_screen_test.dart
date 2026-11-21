@@ -1,0 +1,557 @@
+import 'package:cupertino_ui/cupertino_ui.dart' show CupertinoDatePicker;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:star_app/core/instance/instance_config_snapshot.dart';
+import 'package:star_app/core/instance/instance_constants.dart';
+import 'package:star_app/core/instance/instance_runtime_config.dart';
+import 'package:star_app/core/providers/instance/instance_runtime_config_provider.dart';
+import 'package:star_app/core/theme/star_layout_theme.dart';
+import 'package:star_app/core/theme/star_text_theme.dart';
+import 'package:star_app/core/theme/star_theme.dart';
+import 'package:star_app/core/theme/star_theme_mode.dart';
+import 'package:star_app/core/theme/themes/dark.dart';
+import 'package:star_app/features/auth/data/auth_repository.dart';
+import 'package:star_app/features/auth/domain/registration_result.dart';
+import 'package:star_app/features/auth/presentation/widgets/register_screen.dart';
+import 'package:star_app/features/auth/providers/auth_instance_snapshot_provider.dart';
+import 'package:star_app/features/auth/providers/auth_providers.dart';
+import 'package:star_app/features/auth/providers/pending_registration_url_code_provider.dart';
+import 'package:star_app/features/auth/providers/registration_draft_provider.dart';
+import 'package:star_app/features/ui/button/star_button.dart';
+import 'package:star_app/features/ui/checkbox/star_checkbox.dart';
+import 'package:star_app/features/ui/input/star_input.dart';
+import 'package:star_app/features/ui/text_link/star_text_link.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:star_dart/export.dart';
+
+import '../../../../helpers/test_l10n.dart';
+
+const RegistrationDraft _completeDraft = RegistrationDraft(
+  email: 'user@example.com',
+  password: 'hunter2hunter2',
+  confirmPassword: 'hunter2hunter2',
+  birthMonth: 1,
+  birthDay: 2,
+  birthYear: 1990,
+  consent: true,
+);
+
+const RegistrationDraft _unconsentedDraft = RegistrationDraft(
+  email: 'user@example.com',
+  password: 'hunter2hunter2',
+  confirmPassword: 'hunter2hunter2',
+  birthMonth: 1,
+  birthDay: 2,
+  birthYear: 1990,
+);
+
+void main() {
+  testWidgets('shows the built-in rules when the instance has no legal URLs', (
+    tester,
+  ) async {
+    final ProviderContainer container = _containerFor(
+      _snapshot(selfHosted: true),
+    );
+    container
+        .read(registrationDraftProvider.notifier)
+        .update(_unconsentedDraft);
+
+    await tester.pumpWidget(_app(container));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(StarCheckbox), findsOneWidget);
+    expect(find.text(testL10n.registerConsentBuiltInRules), findsOneWidget);
+    expect(
+      tester
+          .widgetList<StarTextLink>(find.byType(StarTextLink))
+          .where((StarTextLink link) => link.url != null),
+      isEmpty,
+    );
+    expect(_submitButton(tester).onPressed, isNull);
+
+    await tester.ensureVisible(find.byType(StarCheckbox));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(StarCheckbox));
+    await tester.pumpAndSettle();
+
+    expect(_submitButton(tester).onPressed, isNotNull);
+  });
+
+  testWidgets('links the instance legal documents when they are published', (
+    tester,
+  ) async {
+    final ProviderContainer container = _containerFor(
+      _snapshot(
+        selfHosted: true,
+        termsUrl: 'https://self.example/legal/terms',
+        privacyUrl: 'https://self.example/legal/privacy',
+      ),
+    );
+
+    await tester.pumpWidget(_app(container));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(StarCheckbox), findsOneWidget);
+    final Iterable<String?> urls = tester
+        .widgetList<StarTextLink>(find.byType(StarTextLink))
+        .map((StarTextLink link) => link.url);
+    expect(
+      urls,
+      containsAll(<String>[
+        'https://self.example/legal/terms',
+        'https://self.example/legal/privacy',
+      ]),
+    );
+  });
+
+  testWidgets('falls back to default Star legal URLs when not self-hosted', (
+    tester,
+  ) async {
+    final ProviderContainer container = _containerFor(_snapshot());
+
+    await tester.pumpWidget(_app(container));
+    await tester.pumpAndSettle();
+
+    final Iterable<String?> urls = tester
+        .widgetList<StarTextLink>(find.byType(StarTextLink))
+        .map((StarTextLink link) => link.url);
+    expect(
+      urls,
+      containsAll(<String>[
+        InstanceConstants.defaultTermsUrl,
+        InstanceConstants.defaultPrivacyUrl,
+      ]),
+    );
+  });
+
+  testWidgets('renders only the terms link when no privacy URL exists', (
+    tester,
+  ) async {
+    final ProviderContainer container = _containerFor(
+      _snapshot(selfHosted: true, termsUrl: 'https://self.example/terms'),
+    );
+
+    await tester.pumpWidget(_app(container));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(StarCheckbox), findsOneWidget);
+    expect(
+      tester
+          .widgetList<StarTextLink>(find.byType(StarTextLink))
+          .map((StarTextLink link) => link.url)
+          .nonNulls,
+      <String>['https://self.example/terms'],
+    );
+  });
+
+  testWidgets('blocks submit with a notice when registration is closed', (
+    tester,
+  ) async {
+    final ProviderContainer container = _containerFor(
+      _snapshot(selfHosted: true, mode: InstanceRegistrationModeSchema.closed),
+    );
+    container.read(registrationDraftProvider.notifier).update(_completeDraft);
+
+    await tester.pumpWidget(_app(container));
+    await tester.pumpAndSettle();
+
+    expect(find.text(testL10n.registerClosed), findsOneWidget);
+    expect(_submitButton(tester).onPressed, isNull);
+  });
+
+  testWidgets('accepts the same draft when registration is open', (
+    tester,
+  ) async {
+    final ProviderContainer container = _containerFor(
+      _snapshot(selfHosted: true),
+    );
+    container.read(registrationDraftProvider.notifier).update(_completeDraft);
+
+    await tester.pumpWidget(_app(container));
+    await tester.pumpAndSettle();
+
+    expect(find.text(testL10n.registerClosed), findsNothing);
+    expect(_submitButton(tester).onPressed, isNotNull);
+  });
+
+  testWidgets(
+    'allows closed registration when a registration URL code is stored',
+    (tester) async {
+      final ProviderContainer container = _containerFor(
+        _snapshot(
+          selfHosted: true,
+          mode: InstanceRegistrationModeSchema.closed,
+          adminRegistrationUrlsEnabled: true,
+        ),
+      );
+      container.read(pendingRegistrationUrlCodeProvider.notifier).store('abc');
+      container.read(registrationDraftProvider.notifier).update(_completeDraft);
+
+      await tester.pumpWidget(_app(container));
+      await tester.pumpAndSettle();
+
+      expect(find.text(testL10n.registerClosed), findsNothing);
+      expect(_submitButton(tester).onPressed, isNotNull);
+    },
+  );
+
+  testWidgets(
+    'keeps registration closed when admin registration URLs are disabled',
+    (tester) async {
+      final ProviderContainer container = _containerFor(
+        _snapshot(
+          selfHosted: true,
+          mode: InstanceRegistrationModeSchema.closed,
+        ),
+      );
+      container.read(pendingRegistrationUrlCodeProvider.notifier).store('abc');
+      container.read(registrationDraftProvider.notifier).update(_completeDraft);
+
+      await tester.pumpWidget(_app(container));
+      await tester.pumpAndSettle();
+
+      expect(find.text(testL10n.registerClosed), findsOneWidget);
+      expect(_submitButton(tester).onPressed, isNull);
+    },
+  );
+
+  testWidgets('hides date of birth when the instance does not collect it', (
+    tester,
+  ) async {
+    final ProviderContainer container = _containerFor(
+      _snapshot(selfHosted: true, collectDateOfBirth: false),
+    );
+    container
+        .read(registrationDraftProvider.notifier)
+        .update(
+          const RegistrationDraft(
+            email: 'user@example.com',
+            password: 'hunter2hunter2',
+            confirmPassword: 'hunter2hunter2',
+            consent: true,
+          ),
+        );
+
+    await tester.pumpWidget(_app(container));
+    await tester.pumpAndSettle();
+
+    expect(find.text(testL10n.registerDateOfBirth), findsNothing);
+    expect(_submitButton(tester).onPressed, isNotNull);
+  });
+
+  testWidgets('iOS date of birth wheel starts today and leaves it unset', (
+    tester,
+  ) async {
+    final ProviderContainer container = _containerFor(
+      _snapshot(selfHosted: true),
+    );
+
+    await tester.pumpWidget(_app(container));
+    await tester.pumpAndSettle();
+
+    final Finder field = find.byWidgetPredicate(
+      (Widget widget) =>
+          widget is Semantics &&
+          (widget.properties.button ?? false) &&
+          widget.properties.label == testL10n.registerDateOfBirth,
+    );
+    expect(
+      tester.getSemantics(field),
+      isSemantics(
+        label: testL10n.registerDateOfBirth,
+        value: testL10n.registerDateOfBirthNotSet,
+        isButton: true,
+      ),
+    );
+
+    await tester.tap(field);
+    await tester.pumpAndSettle();
+    final CupertinoDatePicker picker = tester.widget(
+      find.byType(CupertinoDatePicker),
+    );
+    final DateTime now = DateTime.now();
+    expect(picker.initialDateTime.year, now.year);
+    expect(picker.initialDateTime.month, now.month);
+    expect(picker.initialDateTime.day, now.day);
+
+    await tester.tap(find.text(testL10n.registerDateOfBirthDone));
+    await tester.pumpAndSettle();
+    expect(
+      tester.getSemantics(field),
+      isSemantics(value: testL10n.registerDateOfBirthNotSet),
+    );
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+  testWidgets('shows the pending notice after an approval-mode signup', (
+    tester,
+  ) async {
+    final ProviderContainer container = _containerFor(
+      _snapshot(selfHosted: true),
+      repository: _PendingApprovalAuthRepository(),
+    );
+    container.read(registrationDraftProvider.notifier).update(_completeDraft);
+
+    await tester.pumpWidget(_app(container));
+    await tester.pumpAndSettle();
+    final Finder submit = find.widgetWithText(
+      StarButton,
+      testL10n.registerSubmit,
+    );
+    await tester.ensureVisible(submit);
+    await tester.pumpAndSettle();
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+
+    expect(find.text(testL10n.registerPendingApproval), findsOneWidget);
+    expect(find.text(testL10n.errorUnableToCreateAccount), findsNothing);
+    expect(_submitButton(tester).onPressed, isNull);
+  });
+
+  testWidgets('registers without the user accepting the legal documents', (
+    tester,
+  ) async {
+    final _PendingApprovalAuthRepository repository =
+        _PendingApprovalAuthRepository();
+    final ProviderContainer container = _containerFor(
+      _snapshot(
+        selfHosted: true,
+        termsUrl: 'https://self.example/legal/terms',
+        privacyUrl: 'https://self.example/legal/privacy',
+      ),
+      repository: repository,
+    );
+    container
+        .read(registrationDraftProvider.notifier)
+        .update(_unconsentedDraft);
+
+    await tester.pumpWidget(_app(container));
+    await tester.pumpAndSettle();
+
+    expect(_submitButton(tester).onPressed, isNull);
+
+    await _submitFromKeyboard(tester);
+
+    expect(repository.registerCalls, 0);
+  });
+
+  testWidgets('registers a second time while the first is pending approval', (
+    tester,
+  ) async {
+    final _PendingApprovalAuthRepository repository =
+        _PendingApprovalAuthRepository();
+    final ProviderContainer container = _containerFor(
+      _snapshot(selfHosted: true),
+      repository: repository,
+    );
+    container.read(registrationDraftProvider.notifier).update(_completeDraft);
+
+    await tester.pumpWidget(_app(container));
+    await tester.pumpAndSettle();
+
+    await _submitFromKeyboard(tester);
+
+    expect(repository.registerCalls, 1);
+    expect(find.text(testL10n.registerPendingApproval), findsOneWidget);
+
+    await _submitFromKeyboard(tester);
+
+    expect(repository.registerCalls, 1);
+    expect(find.text(testL10n.registerPendingApproval), findsOneWidget);
+  });
+}
+
+StarButton _submitButton(WidgetTester tester) {
+  return tester.widget<StarButton>(
+    find.widgetWithText(StarButton, testL10n.registerSubmit),
+  );
+}
+
+Future<void> _submitFromKeyboard(WidgetTester tester) async {
+  final Finder confirmField = find.descendant(
+    of: find.widgetWithText(StarInput, testL10n.registerConfirmPassword),
+    matching: find.byType(TextFormField),
+  );
+  await tester.ensureVisible(confirmField);
+  await tester.pumpAndSettle();
+  await tester.showKeyboard(confirmField);
+  await tester.testTextInput.receiveAction(TextInputAction.done);
+  await tester.pumpAndSettle();
+}
+
+class _PendingApprovalAuthRepository implements AuthRepository {
+  int registerCalls = 0;
+
+  @override
+  Future<RegistrationResult> register({
+    required String? email,
+    required String password,
+    required StarThemeMode theme,
+    String? dateOfBirth,
+    String? username,
+    String? displayName,
+    String? inviteCode,
+    String? registrationUrlCode,
+  }) async {
+    registerCalls++;
+    return const RegistrationPendingApproval('900000000000000001');
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+ProviderContainer _containerFor(
+  InstanceConfigSnapshot snapshot, {
+  AuthRepository? repository,
+}) {
+  final ProviderContainer container = ProviderContainer(
+    overrides: [
+      authInstanceSnapshotProvider.overrideWith((ref) => snapshot),
+      instanceRuntimeConfigProvider.overrideWithValue(
+        InstanceRuntimeConfig.fromWellKnown(snapshot.wellKnown),
+      ),
+      if (repository != null)
+        authRepositoryProvider.overrideWithValue(repository),
+    ],
+  );
+  addTearDown(container.dispose);
+  return container;
+}
+
+Widget _app(ProviderContainer container) {
+  final colorTheme = buildDarkColorTheme();
+  return UncontrolledProviderScope(
+    container: container,
+    child: MaterialApp(
+      locale: kTestLocale,
+      localizationsDelegates: starLocalizationsDelegates,
+      supportedLocales: StarLocalizations.supportedLocales,
+      theme: buildStarTheme(
+        colorTheme: colorTheme,
+        textTheme: StarTextTheme.fromColors(colorTheme),
+        layoutTheme: StarLayoutTheme.scaled(),
+      ),
+      home: Scaffold(
+        body: SingleChildScrollView(child: RegisterScreen(onBack: () {})),
+      ),
+    ),
+  );
+}
+
+InstanceConfigSnapshot _snapshot({
+  bool selfHosted = false,
+  String? termsUrl,
+  String? privacyUrl,
+  InstanceRegistrationModeSchema mode = InstanceRegistrationModeSchema.open,
+  bool collectDateOfBirth = true,
+  bool adminRegistrationUrlsEnabled = false,
+}) {
+  return InstanceConfigSnapshot(
+    apiBaseUrl: 'https://self.example/api',
+    gatewayUrl: 'wss://self.example/gateway',
+    displayDomain: 'self.example',
+    wellKnown: WellKnownStarResponse(
+      apiCodeVersion: 1,
+      endpoints: const InstanceEndpointsSchema(
+        api: 'https://self.example/api',
+        apiClient: 'https://self.example/api/client',
+        apiPublic: 'https://self.example/api/public',
+        gateway: 'wss://self.example/gateway',
+        media: 'https://self.example/media',
+        staticCdn: 'https://self.example/static',
+        marketing: 'https://self.example',
+        admin: 'https://self.example/admin',
+        invite: 'https://self.example/invite',
+        gift: 'https://self.example/gift',
+        webapp: 'https://self.example/webapp',
+      ),
+      captcha: const InstanceCaptchaSchema(
+        provider: CaptchaProviderSchema.none,
+      ),
+      features: InstanceFeaturesSchema(
+        voiceEnabled: true,
+        stripeEnabled: false,
+        premiumEnabled: false,
+        stripeServiceable: false,
+        selfHosted: selfHosted,
+        presignedAttachmentUploads: false,
+        emailsEnabled: true,
+        phoneVerificationEnabled: false,
+        accountIdentity: AccountIdentityModeSchema.email,
+        tagStyle: TagStyleSchema.random,
+      ),
+      gif: const InstanceGifSchema(
+        provider: 'tenor',
+        displayName: 'Tenor',
+        attributionRequired: false,
+      ),
+      sso: const InstanceSsoSchema(
+        enabled: false,
+        enforced: false,
+        usernameFromProvider: false,
+        displayName: null,
+        buttonLabel: null,
+        redirectUri: 'https://self.example/sso',
+      ),
+      registration: InstanceRegistrationSchema(
+        mode: mode,
+        adminRegistrationUrlsEnabled: adminRegistrationUrlsEnabled,
+      ),
+      community: const InstanceCommunitySchema(
+        singleCommunity: false,
+        singleCommunityGuildId: null,
+        directMessagesDisabled: false,
+        guildCreateAccess: true,
+      ),
+      services: const InstanceServicesSchema(
+        connectionProviders: <InstanceConnectionProviderSchema>[],
+        gifEnabled: true,
+        youtubeEnabled: true,
+        blueskyEnabled: false,
+      ),
+      limits: const WellKnownStarResponseLimits(
+        version: 2,
+        traitDefinitions: <String>[],
+        defaultsHash: 'test',
+        rules: <WellKnownStarResponseLimitsRules>[],
+      ),
+      push: const InstancePushSchema(publicVapidKey: null),
+      appPublic: InstanceAppPublicSchema(
+        branding: const InstanceBrandingSchema(
+          productName: 'Star',
+          iconUrl: null,
+          symbolUrl: null,
+          logoUrl: null,
+          wordmarkUrl: null,
+          faviconUrl: null,
+          themeColor: null,
+          statusPageUrl: null,
+          statusPageInstatus: false,
+          statusPageIncidentHistoryUrl: null,
+          premiumProductName: 'Plutonium',
+          premiumInfoUrl: null,
+          faviconDarkUrl: null,
+          signInBackdropUrl: null,
+          premiumPageColor: null,
+          premiumShowcaseExpressionsUrl: null,
+          premiumShowcaseProfileUrl: null,
+          premiumShowcaseStreamUrl: null,
+          premiumShowcaseUploadUrl: null,
+          customCss: null,
+          uploadLimitMessage: null,
+          trustedDomains: <String>[],
+        ),
+        setup: const InstanceSetupSchema(configured: true, adminUrl: null),
+        legal: InstanceAppPublicSchemaLegal(
+          termsUrl: termsUrl,
+          privacyUrl: privacyUrl,
+          guidelinesUrl: null,
+        ),
+        registration: InstanceAppPublicSchemaRegistration(
+          collectDateOfBirth: collectDateOfBirth,
+        ),
+      ),
+      agePolicy: const InstanceAgePolicySchema(geos: []),
+    ),
+  );
+}

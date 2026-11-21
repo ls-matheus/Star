@@ -1,0 +1,190 @@
+import 'package:cached_network_image_ce/cached_network_image.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:star_app/core/theme/star_layout_theme.dart';
+import 'package:star_app/core/theme/star_text_theme.dart';
+import 'package:star_app/core/theme/star_theme.dart';
+import 'package:star_app/core/theme/themes/dark.dart';
+import 'package:star_app/features/chat/domain/message.dart';
+import 'package:star_app/features/chat/presentation/widgets/attachments/attachment_image.dart';
+import 'package:star_app/features/chat/presentation/widgets/media/alt_text_badge.dart';
+import 'package:star_app/features/chat/presentation/widgets/media/embed_animated_image.dart';
+import 'package:star_app/features/chat/presentation/widgets/media/star_animated_image.dart';
+import 'package:star_app/features/settings/providers/preferences/appearance_preferences_provider.dart';
+import 'package:star_app/features/settings/providers/preferences/chat_preferences_provider.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:visibility_detector/visibility_detector.dart';
+
+import '../../../../../helpers/core_test_provider_overrides.dart';
+import '../../../../../helpers/test_l10n.dart';
+
+Widget _app(Widget child, {bool showAltText = false}) {
+  final colorTheme = buildDarkColorTheme();
+  return ProviderScope(
+    overrides: coreTestProviderOverrides(
+      extra: [
+        if (showAltText)
+          appearancePreferencesProvider.overrideWithValue(
+            const AppearancePreferencesState(showAltTextOnImages: true),
+          ),
+      ],
+    ),
+    child: MaterialApp(
+      locale: kTestLocale,
+      localizationsDelegates: starLocalizationsDelegates,
+      supportedLocales: StarLocalizations.supportedLocales,
+      theme: buildStarTheme(
+        colorTheme: colorTheme,
+        textTheme: StarTextTheme.fromColors(colorTheme),
+        layoutTheme: StarLayoutTheme.scaled(),
+      ),
+      home: Scaffold(body: Center(child: child)),
+    ),
+  );
+}
+
+void main() {
+  setUpAll(() {
+    VisibilityDetectorController.instance.updateInterval = Duration.zero;
+  });
+
+  testWidgets('caps decoded bitmap to display size times device pixel ratio', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _app(
+        const AttachmentImage(
+          attachment: Attachment(
+            id: '1',
+            filename: 'p.png',
+            url: 'https://cdn.example/p.png',
+            width: 4000,
+            height: 3000,
+          ),
+          dimensionSize: MediaDimensionSize.large,
+          wrapWithSpoiler: false,
+        ),
+      ),
+    );
+
+    final image = tester.widget<CachedNetworkImage>(
+      find.byType(CachedNetworkImage),
+    );
+    expect(image.memCacheWidth, 1600);
+    expect(image.memCacheHeight, 1200);
+  });
+
+  testWidgets('gif attachment renders a visibility-gated animated image', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(
+        const AttachmentImage(
+          attachment: Attachment(
+            id: 'gif-1',
+            filename: 'loop.gif',
+            url: 'https://cdn.example/loop.gif',
+            proxyUrl: 'https://proxy.example/loop.gif',
+            contentType: 'image/gif',
+            width: 400,
+            height: 300,
+          ),
+          channelId: 'c1',
+          messageId: 'm1',
+          wrapWithSpoiler: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(EmbedAnimatedImage), findsOneWidget);
+    final animated = tester.widget<StarAnimatedImage>(
+      find.byType(StarAnimatedImage),
+    );
+    expect(animated.animatedUrl, contains('format=webp'));
+    expect(animated.animatedUrl, contains('animated=true'));
+    expect(animated.staticUrl, contains('animated=false'));
+  });
+
+  testWidgets('static image attachment renders a cached network image', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(
+        const AttachmentImage(
+          attachment: Attachment(
+            id: 'png-1',
+            filename: 'photo.png',
+            url: 'https://cdn.example/photo.png',
+            width: 400,
+            height: 300,
+          ),
+          wrapWithSpoiler: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(EmbedAnimatedImage), findsNothing);
+    expect(find.byType(CachedNetworkImage), findsOneWidget);
+    expect(
+      tester
+          .widget<CachedNetworkImage>(find.byType(CachedNetworkImage))
+          .errorBuilder,
+      isNotNull,
+    );
+  });
+
+  testWidgets('shows an ALT badge when the attachment has a description', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(
+        const AttachmentImage(
+          attachment: Attachment(
+            id: 'png-2',
+            filename: 'photo.png',
+            url: 'https://cdn.example/photo.png',
+            description: 'A waving cat',
+            width: 400,
+            height: 300,
+          ),
+          wrapWithSpoiler: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(AltTextBadge), findsOneWidget);
+    expect(find.text('ALT'), findsOneWidget);
+    expect(find.text('A waving cat'), findsNothing);
+  });
+
+  testWidgets('hides the ALT badge when alt text is shown as a caption', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(
+        const AttachmentImage(
+          attachment: Attachment(
+            id: 'png-3',
+            filename: 'photo.png',
+            url: 'https://cdn.example/photo.png',
+            description: 'A waving cat',
+            width: 400,
+            height: 300,
+          ),
+          wrapWithSpoiler: false,
+        ),
+        showAltText: true,
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(AltTextBadge), findsNothing);
+    expect(find.text('A waving cat'), findsOneWidget);
+  });
+}

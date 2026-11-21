@@ -1,0 +1,88 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:star_app/features/accessibility/domain/text_scale.dart';
+import 'package:star_app/features/profile/providers/user_presence_provider.dart';
+import 'package:star_app/features/settings/providers/view_models/user_settings_view_model.dart';
+import 'package:star_app/features/shell/presentation/app_bottom_nav_bar.dart';
+import 'package:star_app/features/ui/avatar/star_guild_icon_avatar.dart';
+import 'package:star_app/material_ui.dart';
+
+import '../../../helpers/pump_star_app.dart';
+
+const MediaQueryData _maxTextScaleMediaQuery = MediaQueryData(
+  textScaler: TextScaler.linear(2),
+  size: Size(390, 844),
+);
+
+Widget _wrapLargeText(Widget child) {
+  return MediaQuery(data: _maxTextScaleMediaQuery, child: child);
+}
+
+void main() {
+  group('large text accessibility', () {
+    testWidgets('bottom nav shows Notifications without overflow', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        pumpStarApp(
+          child: _wrapLargeText(
+            StarConstrainedUiTextScale(
+              child: Scaffold(
+                bottomNavigationBar: AppBottomNavBar(
+                  currentIndex: 1,
+                  onBranchSelected: (_) {},
+                ),
+              ),
+            ),
+          ),
+          overrides: [
+            userSettingsViewModelProvider.overrideWithValue(
+              const UserSettingsViewState(
+                userId: 'u1',
+                username: 'testuser',
+                displayName: 'Test User',
+                discriminator: '0001',
+                avatar: null,
+                avatarColor: null,
+                memberSince: null,
+                status: 'online',
+                messageDisplayCompact: false,
+                developerMode: false,
+                trustedDomains: <String>[],
+              ),
+            ),
+            userPresenceProvider('u1').overrideWithBuild(
+              (Ref ref, UserPresenceNotifier notifier) => null,
+            ),
+          ],
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('Notifications'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+
+    testWidgets('guild letter fallback stays inside fixed icon box', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        pumpStarApp(
+          child: _wrapLargeText(
+            const Center(
+              child: StarGuildIconAvatar(name: 'Test Guild', size: 44),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('TG'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  });
+}

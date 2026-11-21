@@ -1,0 +1,42 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
+part of 'guild_category_channel_create_request_permission_overwrites.dart';
+
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
+
+GuildCategoryChannelCreateRequestPermissionOverwrites
+_$GuildCategoryChannelCreateRequestPermissionOverwritesFromJson(
+  Map<String, dynamic> json,
+) => $checkedCreate(
+  'GuildCategoryChannelCreateRequestPermissionOverwrites',
+  json,
+  ($checkedConvert) {
+    final val = GuildCategoryChannelCreateRequestPermissionOverwrites(
+      id: $checkedConvert('id', (v) => v as SnowflakeType? ?? ''),
+      type: $checkedConvert(
+        'type',
+        (v) => v == null
+            ? GuildCategoryChannelCreateRequestPermissionOverwritesTypeType
+                  .$unknown
+            : GuildCategoryChannelCreateRequestPermissionOverwritesTypeType.fromJson(
+                (v as num).toInt(),
+              ),
+      ),
+      allow: $checkedConvert('allow', (v) => v as UnsignedInt64Type?),
+      deny: $checkedConvert('deny', (v) => v as UnsignedInt64Type?),
+    );
+    return val;
+  },
+);
+
+Map<String, dynamic>
+_$GuildCategoryChannelCreateRequestPermissionOverwritesToJson(
+  GuildCategoryChannelCreateRequestPermissionOverwrites instance,
+) => <String, dynamic>{
+  'id': instance.id,
+  'type': instance.type,
+  'allow': ?instance.allow,
+  'deny': ?instance.deny,
+};

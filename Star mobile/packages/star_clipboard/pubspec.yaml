@@ -1,0 +1,34 @@
+name: star_clipboard
+description: Reads files, images and text from the system clipboard.
+version: 0.0.1
+publish_to: none
+
+environment:
+  sdk: ^3.12.0
+  flutter: ">=3.24.0"
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.star.clipboard
+        pluginClass: StarClipboardPlugin
+      ios:
+        pluginClass: StarClipboardPlugin
+        sharedDarwinSource: true
+      macos:
+        pluginClass: StarClipboardPlugin
+        sharedDarwinSource: true
+      windows:
+        pluginClass: StarClipboardPluginCApi
+      linux:
+        pluginClass: StarClipboardPlugin
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  pigeon: ^27.3.2

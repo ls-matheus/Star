@@ -1,0 +1,306 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:star_app/core/providers/database_provider.dart';
+import 'package:star_app/core/providers/instance/well_known_provider.dart';
+import 'package:star_app/core/router/route_state_providers.dart';
+import 'package:star_app/core/theme/star_layout_theme.dart';
+import 'package:star_app/core/theme/star_text_theme.dart';
+import 'package:star_app/core/theme/star_theme.dart';
+import 'package:star_app/core/theme/themes/dark.dart';
+import 'package:star_app/features/chat/presentation/widgets/channel/channel_chat_content.dart';
+import 'package:star_app/features/chat/providers/core/chat_read_viewport_provider.dart';
+import 'package:star_app/features/chat/providers/core/chat_view_model.dart';
+import 'package:star_app/features/shell/providers/drawer/reveal_side_provider.dart';
+import 'package:star_app/features/shell/providers/layout/shell_popup_overlay_provider.dart';
+import 'package:star_app/l10n/star_localizations_delegates.dart';
+import 'package:star_app/l10n/generated/star_localizations.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:star_dart/export.dart';
+import 'package:riverpod/src/framework.dart' show Override;
+
+import '../../../../helpers/open_test_database.dart';
+
+void main() {
+  group('ChannelChatContent mobile target sync', () {
+    testWidgets(
+      'runs switchChannel with target when drawer reveal side is left',
+      (WidgetTester tester) async {
+        final recorder = _RecordingChatViewModel();
+        final container = ProviderContainer(
+          overrides: _commonOverrides(
+            recorder: recorder,
+            revealSide: RevealSide.left,
+          ),
+        );
+        addTearDown(container.dispose);
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            container: container,
+            child: const ChannelChatContent(
+              channelId: 'target-channel',
+              targetMessageId: 'target-message',
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+
+        final goodCalls = recorder.switchChannelCalls
+            .where(
+              (call) =>
+                  call.channelId == 'target-channel' &&
+                  call.targetMessageId == 'target-message' &&
+                  call.loadMessages,
+            )
+            .toList();
+        expect(goodCalls, isNotEmpty);
+
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets('runs switchChannel with target when chat is visible', (
+      WidgetTester tester,
+    ) async {
+      final recorder = _RecordingChatViewModel();
+      final container = ProviderContainer(
+        overrides: _commonOverrides(
+          recorder: recorder,
+          revealSide: RevealSide.main,
+        ),
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          container: container,
+          child: const ChannelChatContent(
+            channelId: 'target-channel',
+            targetMessageId: 'target-message',
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      final goodCalls = recorder.switchChannelCalls
+          .where(
+            (call) =>
+                call.channelId == 'target-channel' &&
+                call.targetMessageId == 'target-message' &&
+                call.loadMessages,
+          )
+          .toList();
+      expect(goodCalls, isNotEmpty);
+      final badCalls = recorder.switchChannelCalls
+          .where((call) => !call.loadMessages)
+          .toList();
+      expect(badCalls, isEmpty);
+
+      await tester.pumpAndSettle();
+    });
+  });
+}
+
+List<Override> _commonOverrides({
+  required _RecordingChatViewModel recorder,
+  required RevealSide revealSide,
+}) {
+  return [
+    activeChannelIdProvider.overrideWithValue('target-channel'),
+    shellHasPopupOverlayProvider.overrideWithValue(false),
+    currentRevealSideProvider.overrideWithValue(revealSide),
+    chatViewModelProvider.overrideWith(() => recorder),
+    starDatabaseProvider.overrideWithValue(openTestDatabase()),
+    wellKnownProvider.overrideWith(_FakeWellKnown.new),
+  ];
+}
+
+class _FakeWellKnown extends WellKnown {
+  @override
+  Future<WellKnownStarResponse> build() async {
+    return const WellKnownStarResponse(
+      apiCodeVersion: 1,
+      endpoints: InstanceEndpointsSchema(
+        api: '',
+        apiClient: '',
+        apiPublic: '',
+        gateway: '',
+        media: '',
+        staticCdn: '',
+        marketing: '',
+        admin: '',
+        invite: '',
+        gift: '',
+        webapp: '',
+      ),
+      captcha: InstanceCaptchaSchema(provider: CaptchaProviderSchema.none),
+      features: InstanceFeaturesSchema(
+        voiceEnabled: false,
+        stripeEnabled: false,
+        premiumEnabled: false,
+        stripeServiceable: false,
+        selfHosted: false,
+        presignedAttachmentUploads: false,
+        emailsEnabled: false,
+        phoneVerificationEnabled: false,
+        accountIdentity: AccountIdentityModeSchema.email,
+        tagStyle: TagStyleSchema.random,
+      ),
+      gif: InstanceGifSchema(
+        provider: '',
+        displayName: '',
+        attributionRequired: false,
+      ),
+      sso: InstanceSsoSchema(
+        enabled: false,
+        enforced: false,
+        usernameFromProvider: false,
+        displayName: null,
+        buttonLabel: null,
+        redirectUri: '',
+      ),
+      registration: InstanceRegistrationSchema(
+        mode: InstanceRegistrationModeSchema.open,
+        adminRegistrationUrlsEnabled: false,
+      ),
+      community: InstanceCommunitySchema(
+        singleCommunity: false,
+        singleCommunityGuildId: null,
+        directMessagesDisabled: false,
+        guildCreateAccess: true,
+      ),
+      services: InstanceServicesSchema(
+        connectionProviders: <InstanceConnectionProviderSchema>[],
+        gifEnabled: false,
+        youtubeEnabled: false,
+        blueskyEnabled: false,
+      ),
+      limits: WellKnownStarResponseLimits(
+        version: 2,
+        traitDefinitions: <String>[],
+        rules: <WellKnownStarResponseLimitsRules>[],
+        defaultsHash: '',
+      ),
+      push: InstancePushSchema(publicVapidKey: null),
+      appPublic: InstanceAppPublicSchema(
+        branding: InstanceBrandingSchema(
+          productName: '',
+          iconUrl: null,
+          symbolUrl: null,
+          logoUrl: null,
+          wordmarkUrl: null,
+          faviconUrl: null,
+          themeColor: null,
+          statusPageUrl: null,
+          statusPageInstatus: false,
+          statusPageIncidentHistoryUrl: null,
+          premiumProductName: 'Plutonium',
+          premiumInfoUrl: null,
+          faviconDarkUrl: null,
+          signInBackdropUrl: null,
+          premiumPageColor: null,
+          premiumShowcaseExpressionsUrl: null,
+          premiumShowcaseProfileUrl: null,
+          premiumShowcaseStreamUrl: null,
+          premiumShowcaseUploadUrl: null,
+          customCss: null,
+          uploadLimitMessage: null,
+          trustedDomains: <String>[],
+        ),
+        setup: InstanceSetupSchema(configured: true, adminUrl: null),
+        legal: InstanceAppPublicSchemaLegal(
+          termsUrl: null,
+          privacyUrl: null,
+          guidelinesUrl: null,
+        ),
+        registration: InstanceAppPublicSchemaRegistration(
+          collectDateOfBirth: false,
+        ),
+      ),
+      agePolicy: InstanceAgePolicySchema(geos: []),
+    );
+  }
+}
+
+Widget _buildTestApp({
+  required ProviderContainer container,
+  required Widget child,
+}) {
+  final colorTheme = buildDarkColorTheme();
+  final textTheme = StarTextTheme.fromColors(colorTheme);
+  final layoutTheme = StarLayoutTheme.scaled();
+
+  return UncontrolledProviderScope(
+    container: container,
+    child: MaterialApp(
+      theme: buildStarTheme(
+        colorTheme: colorTheme,
+        textTheme: textTheme,
+        layoutTheme: layoutTheme,
+      ),
+      localizationsDelegates: starLocalizationsDelegates,
+      supportedLocales: StarLocalizations.supportedLocales,
+      home: MediaQuery(
+        data: const MediaQueryData(size: Size(400, 800)),
+        child: Scaffold(body: child),
+      ),
+    ),
+  );
+}
+
+class _SwitchChannelCall {
+  _SwitchChannelCall({
+    required this.channelId,
+    required this.targetMessageId,
+    required this.loadMessages,
+  });
+
+  final String channelId;
+  final String? targetMessageId;
+  final bool loadMessages;
+}
+
+class _RecordingChatViewModel extends ChatViewModel {
+  final List<_SwitchChannelCall> switchChannelCalls = [];
+
+  @override
+  ChatViewState build() {
+    ref.read(chatReadViewportProvider.notifier).setActiveChannel('');
+    return const ChatViewState(
+      channelId: '',
+      messages: [],
+      replyingTo: null,
+      replyMentioning: false,
+      editingMessage: null,
+      messageText: '',
+      scrollToBottomSignal: 0,
+      isLoading: false,
+      isSyncingMessages: false,
+      isLoadingMore: false,
+      isLoadingNewer: false,
+      hasMoreMessages: false,
+      hasMoreNewerMessages: false,
+      errorMessage: null,
+    );
+  }
+
+  @override
+  Future<void> switchChannel(
+    String channelId, {
+    String? targetMessageId,
+    bool loadMessages = true,
+  }) async {
+    switchChannelCalls.add(
+      _SwitchChannelCall(
+        channelId: channelId,
+        targetMessageId: targetMessageId,
+        loadMessages: loadMessages,
+      ),
+    );
+  }
+
+  @override
+  void clearStickyUnreadAfterBuildForCurrentChannel() {}
+}

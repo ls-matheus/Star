@@ -1,0 +1,79 @@
+// coverage:ignore-file
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: type=lint, unused_import, invalid_annotation_target, unnecessary_import
+
+import 'package:json_annotation/json_annotation.dart';
+
+import 'message_attachment_response.dart';
+import 'message_channel_mention_response.dart';
+import 'message_embed_response.dart';
+import 'message_flags.dart';
+import 'message_sticker_response.dart';
+import 'message_type.dart';
+
+part 'message_snapshot_response.g.dart';
+
+@JsonSerializable()
+class MessageSnapshotResponse {
+  const MessageSnapshotResponse({
+    required this.timestamp,
+    required this.type,
+    required this.flags,
+    this.content,
+    this.editedTimestamp,
+    this.mentions,
+    this.mentionRoles,
+    this.mentionChannels,
+    this.embeds,
+    this.attachments,
+    this.stickers,
+  });
+
+  factory MessageSnapshotResponse.fromJson(Map<String, Object?> json) =>
+      _$MessageSnapshotResponseFromJson(json);
+
+  /// The text content of the snapshot
+  @JsonKey(includeIfNull: false)
+  final String? content;
+
+  /// The ISO 8601 timestamp of when the original message was created
+  @JsonKey(defaultValue: _$missingDateTime)
+  final DateTime timestamp;
+
+  /// The ISO 8601 timestamp of when the original message was last edited
+  @JsonKey(includeIfNull: false, name: 'edited_timestamp')
+  final DateTime? editedTimestamp;
+
+  /// The user IDs mentioned in the snapshot
+  @JsonKey(includeIfNull: false)
+  final List<String>? mentions;
+
+  /// The role IDs mentioned in the snapshot
+  @JsonKey(includeIfNull: false, name: 'mention_roles')
+  final List<String>? mentionRoles;
+
+  /// Channels mentioned in the snapshot that are visible to @everyone
+  @JsonKey(includeIfNull: false, name: 'mention_channels')
+  final List<MessageChannelMentionResponse>? mentionChannels;
+
+  /// The embeds included in the snapshot
+  @JsonKey(includeIfNull: false)
+  final List<MessageEmbedResponse>? embeds;
+
+  /// The attachments included in the snapshot
+  @JsonKey(includeIfNull: false)
+  final List<MessageAttachmentResponse>? attachments;
+
+  /// The stickers included in the snapshot
+  @JsonKey(includeIfNull: false)
+  final List<MessageStickerResponse>? stickers;
+  @JsonKey(defaultValue: MessageType.$unknown)
+  final MessageType type;
+  @JsonKey(defaultValue: 0)
+  final MessageFlags flags;
+
+  Map<String, Object?> toJson() => _$MessageSnapshotResponseToJson(this);
+}
+
+DateTime _$missingDateTime() =>
+    DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);

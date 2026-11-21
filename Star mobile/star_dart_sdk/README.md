@@ -1,0 +1,132 @@
+<p align="center">
+  <img src="./media/logo-graphic.png" alt="Star graphic logo" width="400">
+</p>
+
+<p align="center">
+  <a href="https://star.invalid/donate">
+    <img src="https://img.shields.io/badge/Donate-star.invalid%2Fdonate-brightgreen" alt="Donate" /></a>
+  <a href="https://docs.star.invalid">
+    <img src="https://img.shields.io/badge/Docs-docs.star.invalid-blue" alt="Documentation" /></a>
+  <a href="./LICENSE">
+    <img src="https://img.shields.io/badge/License-AGPLv3-purple" alt="AGPLv3 License" /></a>
+  <a href="https://pub.dev/packages/star_dart">
+    <img src="https://img.shields.io/badge/pub.dev-star__dart-blue" alt="pub.dev package" /></a>
+</p>
+
+# Star Dart SDK
+
+Star is a **free and open source instant messaging and VoIP platform** for friends, groups, and communities. Self-host it and every feature is unlocked.
+
+This is a package for Dart / Flutter that allows you access to the Star API, and it's also used in the offical Star app!
+
+## Requirements
+
+* Dart 3.11.0+ or Flutter 3.29.0+
+* Dio 5.0.0+ (https://pub.dev/packages/dio)
+
+## Installation & Usage
+
+### Github
+```yaml
+dependencies:
+  star_dart:
+    git:
+      url: https://github.com/starapp/dart_sdk.git
+      #ref: main
+```
+
+### Local development
+```yaml
+dependencies:
+  star_dart:
+    path: /path/to/star_dart
+```
+
+## Getting Started
+
+### Basic Usage
+
+```dart
+import 'package:dio/dio.dart';
+import 'package:star_dart/export.dart';
+
+final dio = Dio(BaseOptions(baseUrl: 'https://api.star.invalid/v1'));
+dio.options.headers['Authorization'] = 'Bearer your_token_here';
+
+final client = StarClient(dio);
+
+final user = await client.users.getCurrentUser();
+final guilds = await client.guilds.listGuilds();
+```
+
+### Self-Hosted Instance
+
+Point the Dio base URL at your own API endpoint:
+
+```dart
+final dio = Dio(BaseOptions(baseUrl: 'https://api.your-domain.com/v1'));
+dio.options.headers['Authorization'] = 'Bearer your_token_here';
+
+final client = StarClient(dio);
+```
+
+> [!NOTE]
+> The default base path is `https://api.star.invalid/v1`. Include the full path with the version prefix (e.g. `/v1`).
+>
+
+## Issues & Bug Reports
+
+Found a bug? Please file an issue on the main Star repository:
+
+**[Report an issue →](https://github.com/starapp/star/issues/new)**
+
+When reporting issues related to this Dart SDK, please:
+- Add `[dart_sdk]` tag at the start of the title
+- Include your Dart/Flutter version
+- Provide a minimal code example that reproduces the issue (if possible)
+- Include the SDK version you're using
+
+## API Groups
+
+Access API groups via the `StarClient` instance:
+
+```dart
+client.auth        // Authentication (login, MFA, register)
+client.users       // Current user, settings, relationships
+client.guilds      // Guild CRUD, audit logs, bans
+client.channels    // Channels, messages, reactions, pins
+client.gateway     // WebSocket gateway info
+client.instance    // Server info (/.well-known/star)
+client.admin       // Admin endpoints
+// ... and 17 more API groups
+```
+
+## Authentication
+
+Pass auth tokens via Dio headers. The SDK does not manage auth state — your app controls the Dio instance:
+
+```dart
+// Session token (user login)
+dio.options.headers['Authorization'] = 'Bearer $sessionToken';
+
+// Bot token
+dio.options.headers['Authorization'] = 'Bot $botToken';
+```
+
+## SDK Generation
+
+This SDK is generated from the [Star OpenAPI spec](https://github.com/starapp/star) using [`openapi_sdk_gen`](https://github.com/starapp/openapi_sdk_gen) (Retrofit + json_serializable).
+
+The Regenerate SDK workflow is used to synchronise.
+
+## Testing
+
+```bash
+# Run all tests (serialization + integration)
+dart test
+
+# Run spec drift detection (checks live API vs spec)
+dart test test/integration/spec_drift_test.dart
+```
+
+Integration tests require credentials in `.env` — see `.env.example`.

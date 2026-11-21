@@ -1,0 +1,67 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
+part of 'email_change_apply_request.dart';
+
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
+
+EmailChangeApplyRequest _$EmailChangeApplyRequestFromJson(
+  Map<String, dynamic> json,
+) => $checkedCreate(
+  'EmailChangeApplyRequest',
+  json,
+  ($checkedConvert) {
+    final val = EmailChangeApplyRequest(
+      emailToken: $checkedConvert('email_token', (v) => v as String? ?? ''),
+      password: $checkedConvert('password', (v) => v as PasswordType?),
+      mfaMethod: $checkedConvert(
+        'mfa_method',
+        (v) => v == null
+            ? null
+            : EmailChangeApplyRequestMfaMethodMfaMethod.fromJson(v as String),
+      ),
+      mfaCode: $checkedConvert('mfa_code', (v) => v as String?),
+      emailCodeTicket: $checkedConvert(
+        'email_code_ticket',
+        (v) => v as String?,
+      ),
+      emailCode: $checkedConvert('email_code', (v) => v as String?),
+      webauthnResponse: $checkedConvert(
+        'webauthn_response',
+        (v) => v == null
+            ? null
+            : WebAuthnAuthenticationResponse.fromJson(
+                v as Map<String, dynamic>,
+              ),
+      ),
+      webauthnChallenge: $checkedConvert(
+        'webauthn_challenge',
+        (v) => v as String?,
+      ),
+    );
+    return val;
+  },
+  fieldKeyMap: const {
+    'emailToken': 'email_token',
+    'mfaMethod': 'mfa_method',
+    'mfaCode': 'mfa_code',
+    'emailCodeTicket': 'email_code_ticket',
+    'emailCode': 'email_code',
+    'webauthnResponse': 'webauthn_response',
+    'webauthnChallenge': 'webauthn_challenge',
+  },
+);
+
+Map<String, dynamic> _$EmailChangeApplyRequestToJson(
+  EmailChangeApplyRequest instance,
+) => <String, dynamic>{
+  'email_token': instance.emailToken,
+  'password': ?instance.password,
+  'mfa_method': ?instance.mfaMethod,
+  'mfa_code': ?instance.mfaCode,
+  'email_code_ticket': ?instance.emailCodeTicket,
+  'email_code': ?instance.emailCode,
+  'webauthn_response': ?instance.webauthnResponse,
+  'webauthn_challenge': ?instance.webauthnChallenge,
+};

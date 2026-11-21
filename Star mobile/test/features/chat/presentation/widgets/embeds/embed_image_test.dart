@@ -1,0 +1,175 @@
+import 'package:cached_network_image_ce/cached_network_image.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:star_app/core/theme/star_layout_theme.dart';
+import 'package:star_app/core/theme/star_text_theme.dart';
+import 'package:star_app/core/theme/star_theme.dart';
+import 'package:star_app/core/theme/themes/dark.dart';
+import 'package:star_app/features/chat/domain/message.dart';
+import 'package:star_app/features/chat/presentation/widgets/embeds/embed_image.dart';
+import 'package:star_app/features/chat/presentation/widgets/media/embed_animated_image.dart';
+import 'package:star_app/features/chat/presentation/widgets/media/star_animated_image.dart';
+import 'package:star_app/l10n/star_localizations_delegates.dart';
+import 'package:star_app/l10n/generated/star_localizations.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:visibility_detector/visibility_detector.dart';
+
+import '../../../../../helpers/core_test_provider_overrides.dart';
+
+Widget _wrap(Widget child) {
+  final colorTheme = buildDarkColorTheme();
+  return ProviderScope(
+    overrides: coreTestProviderOverrides(),
+    child: MaterialApp(
+      theme: buildStarTheme(
+        colorTheme: colorTheme,
+        textTheme: StarTextTheme.fromColors(colorTheme),
+        layoutTheme: StarLayoutTheme.scaled(),
+      ),
+      localizationsDelegates: starLocalizationsDelegates,
+      supportedLocales: StarLocalizations.supportedLocales,
+      home: Scaffold(body: child),
+    ),
+  );
+}
+
+void main() {
+  setUpAll(() {
+    VisibilityDetectorController.instance.updateInterval = Duration.zero;
+  });
+
+  testWidgets('gifv embed renders an animated webp image', (tester) async {
+    await tester.pumpWidget(
+      _wrap(
+        const EmbedImage(
+          embed: Embed(
+            type: EmbedType.gifv,
+            image: EmbedMedia(
+              url: 'https://x/a',
+              proxyUrl: 'https://cdn/a',
+              width: 200,
+              height: 150,
+            ),
+          ),
+          channelId: 'c1',
+          messageId: 'm1',
+          embedIndex: 0,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(EmbedAnimatedImage), findsOneWidget);
+    final animated = tester.widget<StarAnimatedImage>(
+      find.byType(StarAnimatedImage),
+    );
+    expect(animated.animatedUrl, contains('format=webp'));
+    expect(animated.animatedUrl, contains('animated=true'));
+    expect(animated.fit, BoxFit.cover);
+  });
+
+  testWidgets('image embed with animated flag renders animated', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _wrap(
+        const EmbedImage(
+          embed: Embed(
+            type: EmbedType.image,
+            image: EmbedMedia(
+              url: 'https://x/b',
+              proxyUrl: 'https://cdn/b',
+              width: 200,
+              height: 150,
+              flags: kEmbedMediaAnimatedFlag,
+            ),
+          ),
+          channelId: 'c1',
+          messageId: 'm2',
+          embedIndex: 0,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(EmbedAnimatedImage), findsOneWidget);
+  });
+
+  testWidgets('plain image embed renders a static image', (tester) async {
+    await tester.pumpWidget(
+      _wrap(
+        const EmbedImage(
+          embed: Embed(
+            type: EmbedType.image,
+            image: EmbedMedia(
+              url: 'https://x/c',
+              proxyUrl: 'https://cdn/c',
+              width: 200,
+              height: 150,
+            ),
+          ),
+          channelId: 'c1',
+          messageId: 'm3',
+          embedIndex: 0,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(EmbedAnimatedImage), findsNothing);
+    final image = tester.widget<CachedNetworkImage>(
+      find.byType(CachedNetworkImage),
+    );
+    expect(image.fit, BoxFit.cover);
+  });
+
+  testWidgets('static embed with dimensions reserves its box before load', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _wrap(
+        const EmbedImage(
+          embed: Embed(
+            type: EmbedType.image,
+            image: EmbedMedia(
+              url: 'https://x/d',
+              proxyUrl: 'https://cdn/d',
+              width: 200,
+              height: 150,
+            ),
+          ),
+          channelId: 'c1',
+          messageId: 'm4',
+          embedIndex: 0,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      tester.getSize(find.byType(CachedNetworkImage)),
+      const Size(200, 150),
+    );
+  });
+
+  testWidgets('static embed without dimensions renders nothing', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _wrap(
+        const EmbedImage(
+          embed: Embed(
+            type: EmbedType.image,
+            image: EmbedMedia(url: 'https://x/e', proxyUrl: 'https://cdn/e'),
+          ),
+          channelId: 'c1',
+          messageId: 'm5',
+          embedIndex: 0,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(CachedNetworkImage), findsNothing);
+  });
+}

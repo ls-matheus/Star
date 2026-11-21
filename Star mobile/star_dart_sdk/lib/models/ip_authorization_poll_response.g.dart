@@ -1,0 +1,33 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
+part of 'ip_authorization_poll_response.dart';
+
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
+
+IpAuthorizationPollResponse _$IpAuthorizationPollResponseFromJson(
+  Map<String, dynamic> json,
+) => $checkedCreate('IpAuthorizationPollResponse', json, ($checkedConvert) {
+  final val = IpAuthorizationPollResponse(
+    completed: $checkedConvert('completed', (v) => v as bool? ?? false),
+    token: $checkedConvert('token', (v) => v as String?),
+    userId: $checkedConvert('user_id', (v) => v as SnowflakeStringType?),
+    user: $checkedConvert(
+      'user',
+      (v) => v == null
+          ? null
+          : UserPartialResponse.fromJson(v as Map<String, dynamic>),
+    ),
+  );
+  return val;
+}, fieldKeyMap: const {'userId': 'user_id'});
+
+Map<String, dynamic> _$IpAuthorizationPollResponseToJson(
+  IpAuthorizationPollResponse instance,
+) => <String, dynamic>{
+  'completed': instance.completed,
+  'token': ?instance.token,
+  'user_id': ?instance.userId,
+  'user': ?instance.user,
+};

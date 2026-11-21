@@ -1,0 +1,118 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:star_app/core/deep_links/deep_link_handler.dart';
+import 'package:star_app/core/providers/app/splash_exit_allowed_provider.dart';
+import 'package:star_app/core/providers/gateway/gateway_ready_provider.dart';
+import 'package:star_app/core/providers/gateway/gateway_reconnect_provider.dart';
+import 'package:star_app/core/push/notification/pending_path_provider.dart';
+import 'package:star_app/core/router/star_router.dart';
+
+void main() {
+  test('stores path when navigation is not ready', () {
+    final ProviderContainer container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    container.read(authStateProvider.notifier).setAuthenticated(value: true);
+    container.read(gatewayReadyProvider.notifier).reset();
+
+    container
+        .read(pendingPushNotificationPathProvider.notifier)
+        .store('/channels/@me/123');
+
+    expect(
+      container.read(pendingPushNotificationPathProvider)?.path,
+      '/channels/@me/123',
+    );
+  });
+
+  test('does not flush before splash exit', () {
+    final _RecordingDeepLinkHandler recordingHandler =
+        _RecordingDeepLinkHandler();
+    final ProviderContainer container = ProviderContainer(
+      overrides: [deepLinkHandlerProvider.overrideWith(() => recordingHandler)],
+    );
+    addTearDown(container.dispose);
+
+    container.read(authStateProvider.notifier).setAuthenticated(value: true);
+    container.read(gatewayReadyProvider.notifier).setReady();
+    container
+        .read(gatewayConnectionFailedProvider.notifier)
+        .setFailed(value: false);
+    container
+        .read(pendingPushNotificationPathProvider.notifier)
+        .store('/channels/@me/789');
+
+    container.read(pendingPushNotificationPathProvider.notifier).flushIfReady();
+
+    expect(
+      container.read(pendingPushNotificationPathProvider)?.path,
+      '/channels/@me/789',
+    );
+    expect(recordingHandler.handledPaths, isEmpty);
+
+    container.read(splashExitAllowedProvider.notifier).allow();
+    container.read(pendingPushNotificationPathProvider.notifier).flushIfReady();
+
+    expect(container.read(pendingPushNotificationPathProvider), isNull);
+    expect(recordingHandler.handledPaths, <String>['/channels/@me/789']);
+  });
+
+  test('does not flush while connection failed', () {
+    final ProviderContainer container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    container.read(authStateProvider.notifier).setAuthenticated(value: true);
+    container.read(gatewayReadyProvider.notifier).setReady();
+    container
+        .read(gatewayConnectionFailedProvider.notifier)
+        .setFailed(value: true);
+    container
+        .read(pendingPushNotificationPathProvider.notifier)
+        .store('/channels/@me/789');
+
+    container.read(pendingPushNotificationPathProvider.notifier).flushIfReady();
+
+    expect(
+      container.read(pendingPushNotificationPathProvider)?.path,
+      '/channels/@me/789',
+    );
+  });
+
+  test('a deep link while the shell shows behind the splash is queued', () {
+    final ProviderContainer container = ProviderContainer(
+      overrides: [
+        deepLinkHandlerProvider.overrideWith(_InertDeepLinkHandler.new),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    container.read(authStateProvider.notifier).setAuthenticated(value: true);
+    container.read(gatewayReadyProvider.notifier).setReady();
+
+    container
+        .read(deepLinkHandlerProvider.notifier)
+        .handlePath('/channels/@me/123');
+
+    expect(
+      container.read(pendingPushNotificationPathProvider)?.path,
+      '/channels/@me/123',
+    );
+  });
+}
+
+final class _RecordingDeepLinkHandler extends DeepLinkHandler {
+  final List<String> handledPaths = <String>[];
+
+  @override
+  void build() {}
+
+  @override
+  void handlePath(String path) {
+    handledPaths.add(path);
+  }
+}
+
+final class _InertDeepLinkHandler extends DeepLinkHandler {
+  @override
+  void build() {}
+}

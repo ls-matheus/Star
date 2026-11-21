@@ -1,0 +1,52 @@
+name: Regenerate SDK
+
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types:
+      - star-openapi-updated
+
+permissions: {}
+
+concurrency:
+  group: regenerate-main
+  cancel-in-progress: true
+
+jobs:
+  regenerate:
+    name: Regenerate
+    environment: Regenerate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create token
+        id: create-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          client-id: ${{ vars.STAR_CI_APP_ID }}
+          private-key: ${{ secrets.STAR_CI_APP_KEY }}
+          owner: starapp
+          repositories: dart_sdk
+          permission-contents: write
+
+      - name: Checkout Dart SDK
+        uses: actions/checkout@b9e0990d219a03df7633c93f6f005a8fecbcab22
+        with:
+          token: ${{ steps.create-token.outputs.token }}
+          path: dart_sdk
+
+      - name: Checkout star
+        uses: actions/checkout@b9e0990d219a03df7633c93f6f005a8fecbcab22
+        with:
+          repository: starapp/star
+          path: star
+
+      - name: Setup Dart
+        uses: dart-lang/setup-dart@2bd11704788983a6a210731656d0042e2df8b2c1
+        with:
+          sdk: stable
+
+      - name: Regenerate SDK
+        working-directory: dart_sdk
+        env:
+          STAR_CI_APP_USER_ID: ${{ vars.STAR_CI_APP_USER_ID }}
+        run: ./scripts/openapi_sdk.sh regenerate

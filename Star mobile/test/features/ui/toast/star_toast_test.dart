@@ -1,0 +1,229 @@
+import 'package:flutter/widgets.dart' as widgets;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:star_app/core/theme/star_layout_theme.dart';
+import 'package:star_app/core/theme/star_text_theme.dart';
+import 'package:star_app/core/theme/star_theme.dart';
+import 'package:star_app/core/theme/themes/dark.dart';
+import 'package:star_app/features/ui/toast/star_toast.dart';
+import 'package:star_app/features/ui/toast/star_toast_overlay.dart';
+import 'package:star_app/features/ui/toast/toast_provider.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:star_app/shared/icons/phosphor.dart';
+
+import '../../../helpers/test_l10n.dart';
+
+Widget buildTestApp(Widget child) {
+  final colorTheme = buildDarkColorTheme();
+  return ProviderScope(
+    child: MaterialApp(
+      locale: kTestLocale,
+      localizationsDelegates: starLocalizationsDelegates,
+      supportedLocales: StarLocalizations.supportedLocales,
+      theme: buildStarTheme(
+        colorTheme: colorTheme,
+        textTheme: StarTextTheme.fromColors(colorTheme),
+        layoutTheme: StarLayoutTheme.scaled(),
+      ),
+      home: Scaffold(body: StarToastOverlay(child: child)),
+    ),
+  );
+}
+
+void main() {
+  group('StarToastOverlay', () {
+    testWidgets('shows toast message when triggered via provider', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildTestApp(const SizedBox.shrink()));
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(StarToastOverlay)),
+      );
+      container
+          .read(toastProvider.notifier)
+          .show(const StarToast(message: 'Test notification'));
+
+      await tester.pump();
+
+      expect(find.text('Test notification'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pump();
+    });
+
+    testWidgets('toast is dismissible via tap', (tester) async {
+      await tester.pumpWidget(buildTestApp(const SizedBox.shrink()));
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(StarToastOverlay)),
+      );
+      container
+          .read(toastProvider.notifier)
+          .show(const StarToast(message: 'Tap me away'));
+
+      await tester.pumpAndSettle();
+      expect(find.text('Tap me away'), findsOneWidget);
+
+      await tester.tap(find.text('Tap me away'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Tap me away'), findsNothing);
+    });
+
+    testWidgets('tapping the action runs it and dismisses the toast', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildTestApp(const SizedBox.shrink()));
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(StarToastOverlay)),
+      );
+      int pressed = 0;
+      container
+          .read(toastProvider.notifier)
+          .show(
+            StarToast(
+              message: 'Failed',
+              action: StarToastAction(
+                label: 'Undo',
+                onPressed: () => pressed++,
+              ),
+            ),
+          );
+
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+
+      expect(pressed, 1);
+      expect(find.text('Failed'), findsNothing);
+    });
+
+    testWidgets('auto-dismisses after duration', (tester) async {
+      await tester.pumpWidget(buildTestApp(const SizedBox.shrink()));
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(StarToastOverlay)),
+      );
+      container
+          .read(toastProvider.notifier)
+          .show(
+            const StarToast(
+              message: 'Temporary',
+              duration: Duration(seconds: 2),
+            ),
+          );
+
+      await tester.pump();
+      expect(find.text('Temporary'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump();
+
+      expect(find.text('Temporary'), findsNothing);
+    });
+
+    testWidgets('badge toast multiline message is center aligned', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildTestApp(const SizedBox.shrink()));
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(StarToastOverlay)),
+      );
+      container
+          .read(toastProvider.notifier)
+          .show(
+            const StarToast(
+              message: 'Line one\nLine two',
+              leading: SizedBox(width: 20, height: 20),
+            ),
+          );
+
+      await tester.pump();
+
+      final widgets.Text textWidget = tester.widget<widgets.Text>(
+        find.textContaining('Line one'),
+      );
+      expect(textWidget.textAlign, TextAlign.center);
+    });
+
+    testWidgets('multiline message without leading stays start aligned', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildTestApp(const SizedBox.shrink()));
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(StarToastOverlay)),
+      );
+      container
+          .read(toastProvider.notifier)
+          .show(const StarToast(message: 'Line one\nLine two'));
+
+      await tester.pump();
+
+      final widgets.Text textWidget = tester.widget<widgets.Text>(
+        find.textContaining('Line one'),
+      );
+      expect(textWidget.textAlign, isNull);
+    });
+
+    testWidgets('custom leading replaces variant icon', (tester) async {
+      await tester.pumpWidget(buildTestApp(const SizedBox.shrink()));
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(StarToastOverlay)),
+      );
+      container
+          .read(toastProvider.notifier)
+          .show(
+            const StarToast(
+              message: 'Badge info',
+              variant: StarToastVariant.warning,
+              leading: SizedBox(
+                key: Key('toast-leading'),
+                width: 20,
+                height: 20,
+              ),
+            ),
+          );
+
+      await tester.pump();
+
+      expect(find.byKey(const Key('toast-leading')), findsOneWidget);
+      expect(find.byIcon(PhosphorIconsBold.warning), findsNothing);
+    });
+
+    testWidgets('hide removes a visible or pending toast', (tester) async {
+      await tester.pumpWidget(buildTestApp(const SizedBox.shrink()));
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(StarToastOverlay)),
+      );
+      final notifier = container.read(toastProvider.notifier);
+      const first = StarToast(message: 'First');
+      const pending = StarToast(message: 'Pending');
+
+      notifier.show(first);
+      await tester.pumpAndSettle();
+      expect(find.text('First'), findsOneWidget);
+
+      notifier
+        ..show(pending)
+        ..hide(pending);
+      await tester.pumpAndSettle();
+      expect(find.text('First'), findsNothing);
+      expect(find.text('Pending'), findsNothing);
+
+      notifier.show(first);
+      await tester.pump();
+      expect(find.text('First'), findsOneWidget);
+
+      notifier.hide(first);
+      await tester.pumpAndSettle();
+      expect(find.text('First'), findsNothing);
+      expect(container.read(toastProvider), isEmpty);
+    });
+  });
+}

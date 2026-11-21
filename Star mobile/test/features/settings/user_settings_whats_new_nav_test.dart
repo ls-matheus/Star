@@ -1,0 +1,58 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:star_app/features/settings/presentation/user_settings_nav.dart';
+import 'package:star_app/features/ui/ui.dart';
+
+import '../../helpers/test_l10n.dart';
+
+void main() {
+  test("desktop nav lists what's new as a link, not a page", () {
+    final List<UserSettingsDesktopNavEntry> nav = buildUserSettingsDesktopNav(
+      showBilling: false,
+      showGiveFeedback: false,
+      showHelp: false,
+      showJoinStarLabs: false,
+      isTouchPrimary: true,
+    );
+
+    final UserSettingsDesktopNavEntry entry = nav.singleWhere(
+      (UserSettingsDesktopNavEntry entry) => entry.isWhatsNew,
+    );
+    expect(entry.section, isNull);
+    expect(entry.displayLabel(testL10n), testL10n.userSettingsNavWhatsNew);
+    expect(
+      entry.toSidebarItem(testL10n).label,
+      testL10n.userSettingsNavWhatsNew,
+    );
+  });
+
+  test("mobile what's new row opens the link callback", () {
+    var opened = 0;
+    final List<StarSettingsNavGroup> groups =
+        buildUserSettingsMobileNavGroups(
+          l10n: testL10n,
+          onOpenSection: (_) => fail('opened a settings page'),
+          onOpenAppLogs: () {},
+          showAppLogs: false,
+          onOpenWhatsNew: () => opened++,
+          onJoinStarLabs: () {},
+          onGiveFeedback: () {},
+          onOpenHelp: () {},
+          onLogout: () {},
+          showBilling: false,
+          showGiveFeedback: false,
+          showHelp: false,
+          showJoinStarLabs: false,
+          isTouchPrimary: true,
+        );
+
+    final StarSettingsNavItem row = groups
+        .expand((StarSettingsNavGroup group) => group.items)
+        .singleWhere(
+          (StarSettingsNavItem item) =>
+              item.label == testL10n.userSettingsNavWhatsNew,
+        );
+    row.onTap();
+
+    expect(opened, 1);
+  });
+}

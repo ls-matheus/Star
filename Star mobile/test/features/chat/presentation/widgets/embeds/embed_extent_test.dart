@@ -1,0 +1,180 @@
+import 'package:cached_network_image_ce/cached_network_image.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:star_app/core/theme/star_layout_theme.dart';
+import 'package:star_app/core/theme/star_text_theme.dart';
+import 'package:star_app/core/theme/star_theme.dart';
+import 'package:star_app/core/theme/themes/dark.dart';
+import 'package:star_app/features/chat/domain/message.dart';
+import 'package:star_app/features/chat/presentation/widgets/embeds/embed_link.dart';
+import 'package:star_app/features/chat/presentation/widgets/embeds/embed_rich.dart';
+import 'package:star_app/features/chat/utils/embeds/embed_gallery_utils.dart';
+import 'package:star_app/features/chat/utils/media/media_dimension_utils.dart';
+import 'package:star_app/features/ui/media_viewer/attachment_media_viewer.dart';
+import 'package:star_app/features/ui/tappable/star_gesture_detector.dart';
+import 'package:star_app/l10n/star_localizations_delegates.dart';
+import 'package:star_app/l10n/generated/star_localizations.dart';
+import 'package:star_app/material_ui.dart';
+
+import '../../../../../helpers/core_test_provider_overrides.dart';
+import '../../../../../helpers/open_test_database.dart';
+
+const EmbedMedia _tapTestMedia = EmbedMedia(
+  url: 'https://x/img',
+  proxyUrl: 'https://cdn/img',
+  width: 400,
+  height: 300,
+);
+
+Widget _wrap(Widget child) {
+  final colorTheme = buildDarkColorTheme();
+  return ProviderScope(
+    overrides: coreTestProviderOverrides(),
+    child: MaterialApp(
+      theme: buildStarTheme(
+        colorTheme: colorTheme,
+        textTheme: StarTextTheme.fromColors(colorTheme),
+        layoutTheme: StarLayoutTheme.scaled(),
+      ),
+      localizationsDelegates: starLocalizationsDelegates,
+      supportedLocales: StarLocalizations.supportedLocales,
+      home: Scaffold(body: child),
+    ),
+  );
+}
+
+Size _imageBox(WidgetTester tester) =>
+    tester.getSize(find.byType(CachedNetworkImage));
+
+EmbedMedia _media({int? width, int? height}) => EmbedMedia(
+  url: 'https://x/img',
+  proxyUrl: 'https://cdn/img',
+  width: width,
+  height: height,
+);
+
+Finder _mediaTapTarget(Finder image) => find
+    .ancestor(of: image, matching: find.byType(StarGestureDetector))
+    .first;
+
+void main() {
+  group('EmbedRich large image', () {
+    Future<void> pumpRich(WidgetTester tester, EmbedMedia media) async {
+      final Embed embed = Embed(
+        type: EmbedType.rich,
+        url: 'https://example.com/post',
+        title: 'Post',
+        image: media,
+      );
+      await tester.pumpWidget(
+        _wrap(
+          EmbedRich(
+            embed: embed,
+            galleryIndex: EmbedGalleryIndex(<Embed>[embed]),
+            embedIndex: 0,
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    testWidgets('reserves the metadata extent before any bytes arrive', (
+      tester,
+    ) async {
+      await pumpRich(tester, _media(width: 400, height: 300));
+      final Size? expected = constrainMediaSize(
+        dimensions: compactMediaDimensions,
+        width: 400,
+        height: 300,
+      );
+      expect(_imageBox(tester), expected);
+      await tester.pump(const Duration(seconds: 1));
+      expect(_imageBox(tester), expected, reason: 'the box never changes');
+    });
+
+    testWidgets('caps tall portrait metadata at the layout max height', (
+      tester,
+    ) async {
+      await pumpRich(tester, _media(width: 400, height: 1200));
+      final Size box = _imageBox(tester);
+      expect(
+        box.height,
+        lessThanOrEqualTo(compactMediaDimensions.maxHeight),
+        reason: 'portrait metadata must not reserve unbounded height',
+      );
+      expect(
+        box,
+        constrainMediaSize(
+          dimensions: compactMediaDimensions,
+          width: 400,
+          height: 1200,
+        ),
+      );
+    });
+
+    testWidgets('skips the image when dimensions are missing', (tester) async {
+      await pumpRich(tester, _media());
+      expect(find.byType(CachedNetworkImage), findsNothing);
+    });
+
+    testWidgets('opens the media viewer when tapped', (tester) async {
+      await pumpRich(tester, _tapTestMedia);
+      await tester.tap(_mediaTapTarget(find.byType(CachedNetworkImage)));
+      await tester.pump();
+      expect(find.byType(AttachmentMediaViewerShell), findsOneWidget);
+      await releaseTestWidgetTree(tester);
+    });
+  });
+
+  group('EmbedLink thumbnail', () {
+    Future<void> pumpLink(WidgetTester tester, EmbedMedia media) async {
+      final Embed embed = Embed(
+        type: EmbedType.link,
+        url: 'https://example.com/post',
+        title: 'Post',
+        thumbnail: media,
+      );
+      await tester.pumpWidget(
+        _wrap(
+          EmbedLink(
+            embed: embed,
+            galleryIndex: EmbedGalleryIndex(<Embed>[embed]),
+            embedIndex: 0,
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    testWidgets('reserves the metadata extent capped by the layout', (
+      tester,
+    ) async {
+      await pumpLink(tester, _media(width: 400, height: 1200));
+      final Size box = _imageBox(tester);
+      expect(box.height, lessThanOrEqualTo(compactMediaDimensions.maxHeight));
+      expect(
+        box,
+        constrainMediaSize(
+          dimensions: compactMediaDimensions,
+          width: 400,
+          height: 1200,
+        ),
+      );
+    });
+
+    testWidgets('renders no thumbnail when dimensions are missing', (
+      tester,
+    ) async {
+      await pumpLink(tester, _media());
+      expect(find.byType(CachedNetworkImage), findsNothing);
+    });
+
+    testWidgets('opens the media viewer when tapped', (tester) async {
+      await pumpLink(tester, _tapTestMedia);
+      await tester.tap(_mediaTapTarget(find.byType(CachedNetworkImage)));
+      await tester.pump();
+      expect(find.byType(AttachmentMediaViewerShell), findsOneWidget);
+      await releaseTestWidgetTree(tester);
+    });
+  });
+}

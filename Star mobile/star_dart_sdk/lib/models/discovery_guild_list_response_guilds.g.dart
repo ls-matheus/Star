@@ -1,0 +1,78 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
+part of 'discovery_guild_list_response_guilds.dart';
+
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
+
+DiscoveryGuildListResponseGuilds _$DiscoveryGuildListResponseGuildsFromJson(
+  Map<String, dynamic> json,
+) => $checkedCreate(
+  'DiscoveryGuildListResponseGuilds',
+  json,
+  ($checkedConvert) {
+    final val = DiscoveryGuildListResponseGuilds(
+      id: $checkedConvert('id', (v) => v as SnowflakeStringType? ?? ''),
+      name: $checkedConvert('name', (v) => v as String? ?? ''),
+      categoryType: $checkedConvert('category_type', (v) => v as num? ?? 0),
+      customTags: $checkedConvert(
+        'custom_tags',
+        (v) => (v as List<dynamic>?)?.map((e) => e as String).toList() ?? [],
+      ),
+      memberCount: $checkedConvert('member_count', (v) => v as num? ?? 0),
+      onlineCount: $checkedConvert('online_count', (v) => v as num? ?? 0),
+      features: $checkedConvert(
+        'features',
+        (v) => (v as List<dynamic>?)?.map((e) => e as String).toList() ?? [],
+      ),
+      badgeIds: $checkedConvert(
+        'badge_ids',
+        (v) =>
+            (v as List<dynamic>?)
+                ?.map((e) => e as SnowflakeStringType)
+                .toList() ??
+            [],
+      ),
+      verificationLevel: $checkedConvert(
+        'verification_level',
+        (v) => v as num? ?? 0,
+      ),
+      icon: $checkedConvert('icon', (v) => v as String?),
+      banner: $checkedConvert('banner', (v) => v as String?),
+      description: $checkedConvert('description', (v) => v as String?),
+      primaryLanguage: $checkedConvert('primary_language', (v) => v as String?),
+      visitsEnabled: $checkedConvert('visits_enabled', (v) => v as bool?),
+    );
+    return val;
+  },
+  fieldKeyMap: const {
+    'categoryType': 'category_type',
+    'customTags': 'custom_tags',
+    'memberCount': 'member_count',
+    'onlineCount': 'online_count',
+    'badgeIds': 'badge_ids',
+    'verificationLevel': 'verification_level',
+    'primaryLanguage': 'primary_language',
+    'visitsEnabled': 'visits_enabled',
+  },
+);
+
+Map<String, dynamic> _$DiscoveryGuildListResponseGuildsToJson(
+  DiscoveryGuildListResponseGuilds instance,
+) => <String, dynamic>{
+  'id': instance.id,
+  'name': instance.name,
+  'icon': ?instance.icon,
+  'banner': ?instance.banner,
+  'description': ?instance.description,
+  'category_type': instance.categoryType,
+  'primary_language': ?instance.primaryLanguage,
+  'custom_tags': instance.customTags,
+  'member_count': instance.memberCount,
+  'online_count': instance.onlineCount,
+  'features': instance.features,
+  'badge_ids': instance.badgeIds,
+  'verification_level': instance.verificationLevel,
+  'visits_enabled': ?instance.visitsEnabled,
+};

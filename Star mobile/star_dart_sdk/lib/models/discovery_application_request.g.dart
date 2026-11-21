@@ -1,0 +1,43 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
+part of 'discovery_application_request.dart';
+
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
+
+DiscoveryApplicationRequest _$DiscoveryApplicationRequestFromJson(
+  Map<String, dynamic> json,
+) => $checkedCreate(
+  'DiscoveryApplicationRequest',
+  json,
+  ($checkedConvert) {
+    final val = DiscoveryApplicationRequest(
+      description: $checkedConvert('description', (v) => v as String? ?? ''),
+      categoryType: $checkedConvert(
+        'category_type',
+        (v) => (v as num?)?.toInt() ?? 0,
+      ),
+      primaryLanguage: $checkedConvert('primary_language', (v) => v as String?),
+      customTags: $checkedConvert(
+        'custom_tags',
+        (v) => (v as List<dynamic>?)?.map((e) => e as String).toList(),
+      ),
+    );
+    return val;
+  },
+  fieldKeyMap: const {
+    'categoryType': 'category_type',
+    'primaryLanguage': 'primary_language',
+    'customTags': 'custom_tags',
+  },
+);
+
+Map<String, dynamic> _$DiscoveryApplicationRequestToJson(
+  DiscoveryApplicationRequest instance,
+) => <String, dynamic>{
+  'description': instance.description,
+  'category_type': instance.categoryType,
+  'primary_language': ?instance.primaryLanguage,
+  'custom_tags': ?instance.customTags,
+};

@@ -1,0 +1,530 @@
+import 'package:star_dart/gateway_client/custom_status_storage.dart';
+import 'package:star_dart/models/channel_response.dart';
+import 'package:star_dart/models/guild_emoji_response.dart';
+import 'package:star_dart/models/guild_member_response.dart';
+import 'package:star_dart/models/guild_response.dart';
+import 'package:star_dart/models/guild_role_response.dart';
+import 'package:star_dart/models/guild_sticker_response.dart';
+
+class VoiceState {
+  const VoiceState({
+    required this.userId,
+    this.channelId,
+    this.guildId,
+    this.sessionId,
+    this.connectionId,
+    this.selfMute = false,
+    this.selfDeaf = false,
+    this.selfVideo = false,
+    this.selfStream = false,
+    this.mute = false,
+    this.deaf = false,
+    this.suppress = false,
+    this.isMobile = false,
+    this.e2eeCapable,
+    this.p2p = false,
+    this.version,
+    this.member,
+  });
+
+  final String userId;
+  final String? channelId;
+  final String? guildId;
+  final String? sessionId;
+  final String? connectionId;
+  final bool selfMute;
+  final bool selfDeaf;
+  final bool selfVideo;
+  final bool selfStream;
+  final bool mute;
+  final bool deaf;
+  final bool suppress;
+  final bool isMobile;
+  final bool? e2eeCapable;
+  final bool p2p;
+  final int? version;
+  final GuildMemberResponse? member;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is VoiceState &&
+          runtimeType == other.runtimeType &&
+          userId == other.userId &&
+          channelId == other.channelId &&
+          guildId == other.guildId &&
+          sessionId == other.sessionId &&
+          connectionId == other.connectionId &&
+          selfMute == other.selfMute &&
+          selfDeaf == other.selfDeaf &&
+          selfVideo == other.selfVideo &&
+          selfStream == other.selfStream &&
+          mute == other.mute &&
+          deaf == other.deaf &&
+          suppress == other.suppress &&
+          isMobile == other.isMobile &&
+          e2eeCapable == other.e2eeCapable &&
+          p2p == other.p2p &&
+          version == other.version;
+  @override
+  int get hashCode => Object.hash(
+    userId,
+    channelId,
+    guildId,
+    sessionId,
+    connectionId,
+    selfMute,
+    selfDeaf,
+    selfVideo,
+    selfStream,
+    mute,
+    deaf,
+    suppress,
+    isMobile,
+    e2eeCapable,
+    p2p,
+    version,
+  );
+
+  factory VoiceState.fromJson(Map<String, dynamic> json) {
+    return VoiceState(
+      userId: json['user_id'] as String,
+      channelId: json['channel_id'] as String?,
+      guildId: json['guild_id'] as String?,
+      sessionId: json['session_id'] as String?,
+      connectionId: json['connection_id'] as String?,
+      selfMute: json['self_mute'] as bool? ?? false,
+      selfDeaf: json['self_deaf'] as bool? ?? false,
+      selfVideo: json['self_video'] as bool? ?? false,
+      selfStream: json['self_stream'] as bool? ?? false,
+      mute: json['mute'] as bool? ?? false,
+      deaf: json['deaf'] as bool? ?? false,
+      suppress: json['suppress'] as bool? ?? false,
+      isMobile: json['is_mobile'] as bool? ?? false,
+      e2eeCapable: json['e2ee_capable'] as bool?,
+      p2p: json['p2p'] as bool? ?? false,
+      version: (json['version'] as num?)?.toInt(),
+      member: _voiceStateMember(json['member']),
+    );
+  }
+}
+
+GuildMemberResponse? _voiceStateMember(Object? member) {
+  if (member is! Map) {
+    return null;
+  }
+  try {
+    return GuildMemberResponse.fromJson(member.cast<String, Object?>());
+  } on Object {
+    return null;
+  }
+}
+
+class GatewayVoiceStateUpdate {
+  const GatewayVoiceStateUpdate({
+    this.guildId,
+    this.channelId,
+    required this.selfMute,
+    required this.selfDeaf,
+    required this.selfVideo,
+    required this.selfStream,
+    this.viewerStreamKeys,
+    this.connectionId,
+    this.voiceE2eePublicKey,
+    this.voiceE2eePublicKeySignature,
+    this.isMobile,
+    this.latitude,
+    this.longitude,
+    this.p2p,
+  });
+
+  final String? guildId;
+  final String? channelId;
+  final bool selfMute;
+  final bool selfDeaf;
+  final bool selfVideo;
+  final bool selfStream;
+  final List<String>? viewerStreamKeys;
+  final String? connectionId;
+  final String? voiceE2eePublicKey;
+  final String? voiceE2eePublicKeySignature;
+  final bool? isMobile;
+  final String? latitude;
+  final String? longitude;
+  final bool? p2p;
+
+  Map<String, Object?> toJson() {
+    final map = <String, Object?>{
+      'guild_id': guildId,
+      'channel_id': channelId,
+      'self_mute': selfMute,
+      'self_deaf': selfDeaf,
+      'self_video': selfVideo,
+      'self_stream': selfStream,
+      'connection_id': connectionId,
+    };
+    if (viewerStreamKeys != null) {
+      map['viewer_stream_keys'] = viewerStreamKeys;
+    }
+    if (voiceE2eePublicKey != null) {
+      map['voice_e2ee_public_key'] = voiceE2eePublicKey;
+    }
+    if (voiceE2eePublicKeySignature != null) {
+      map['voice_e2ee_public_key_signature'] = voiceE2eePublicKeySignature;
+    }
+    if (isMobile != null) {
+      map['is_mobile'] = isMobile;
+    }
+    if (latitude != null) {
+      map['latitude'] = latitude;
+    }
+    if (longitude != null) {
+      map['longitude'] = longitude;
+    }
+    if (p2p != null) {
+      map['p2p'] = p2p;
+    }
+    return map;
+  }
+}
+
+class MemberListGroup {
+  const MemberListGroup({required this.id, required this.count});
+
+  final String id;
+  final int count;
+
+  factory MemberListGroup.fromJson(Map<String, dynamic> json) {
+    return MemberListGroup(
+      id: json['id'] as String,
+      count: json['count'] as int,
+    );
+  }
+}
+
+class MemberListItem {
+  const MemberListItem({this.member, this.group});
+
+  final MemberListMember? member;
+  final MemberListGroup? group;
+
+  factory MemberListItem.fromJson(Map<String, dynamic> json) {
+    final memberData = json['member'] as Map<String, dynamic>?;
+    final groupData = json['group'] as Map<String, dynamic>?;
+    return MemberListItem(
+      member: memberData != null ? MemberListMember.fromJson(memberData) : null,
+      group: groupData != null ? MemberListGroup.fromJson(groupData) : null,
+    );
+  }
+}
+
+class MemberListMember {
+  const MemberListMember({
+    required this.member,
+    this.status,
+    this.customStatus,
+    this.mobile = false,
+  });
+
+  final GuildMemberResponse member;
+  final String? status;
+  final String? customStatus;
+  final bool mobile;
+
+  factory MemberListMember.fromJson(Map<String, dynamic> json) {
+    final presenceData = json['presence'] as Map<String, dynamic>?;
+    final customStatusMap =
+        presenceData?['custom_status'] as Map<String, dynamic>?;
+    return MemberListMember(
+      member: GuildMemberResponse.fromJson(json),
+      status: presenceData?['status'] as String?,
+      customStatus: serializeCustomStatusMap(customStatusMap),
+      mobile: presenceData?['mobile'] as bool? ?? false,
+    );
+  }
+}
+
+class MemberListOp {
+  const MemberListOp({
+    required this.op,
+    this.range,
+    this.items,
+    this.index,
+    this.item,
+  });
+
+  final String op;
+  final List<int>? range;
+  final List<MemberListItem>? items;
+  final int? index;
+  final MemberListItem? item;
+
+  factory MemberListOp.fromJson(Map<String, dynamic> json) {
+    return MemberListOp(
+      op: json['op'] as String,
+      range: (json['range'] as List<dynamic>?)
+          ?.map((e) => (e as num).toInt())
+          .toList(),
+      items: (json['items'] as List<dynamic>?)
+          ?.map((e) => MemberListItem.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      index: json['index'] as int?,
+      item: json['item'] != null
+          ? MemberListItem.fromJson(json['item'] as Map<String, dynamic>)
+          : null,
+    );
+  }
+}
+
+class ForumUnreadEntry {
+  const ForumUnreadEntry({
+    required this.threadId,
+    this.count,
+    this.missing = false,
+  });
+
+  final String threadId;
+  final int? count;
+  final bool missing;
+
+  factory ForumUnreadEntry.fromJson(Map<String, dynamic> json) {
+    return ForumUnreadEntry(
+      threadId: json['thread_id'] as String,
+      count: (json['count'] as num?)?.toInt(),
+      missing: json['missing'] == true,
+    );
+  }
+}
+
+class ThreadMemberEntry {
+  const ThreadMemberEntry({
+    required this.userId,
+    this.threadId,
+    this.joinTimestamp,
+    this.flags = 0,
+    this.member,
+    this.presence,
+  });
+
+  final String userId;
+  final String? threadId;
+  final String? joinTimestamp;
+  final int flags;
+  final GuildMemberResponse? member;
+  final Map<String, dynamic>? presence;
+
+  factory ThreadMemberEntry.fromJson(Map<String, dynamic> json) {
+    final member = json['member'];
+    final presence = json['presence'];
+    return ThreadMemberEntry(
+      userId: json['user_id'] as String,
+      threadId: json['id'] as String?,
+      joinTimestamp: json['join_timestamp'] as String?,
+      flags: (json['flags'] as num?)?.toInt() ?? 0,
+      member: member is Map
+          ? GuildMemberResponse.fromJson(member.cast<String, Object?>())
+          : null,
+      presence: presence is Map ? presence.cast<String, dynamic>() : null,
+    );
+  }
+}
+
+class LazyRequestSubscription {
+  const LazyRequestSubscription({
+    this.active,
+    this.typing,
+    this.sync,
+    this.members,
+    this.memberListChannels,
+    this.threads,
+    this.threadMemberLists,
+  });
+
+  final bool? active;
+  final bool? typing;
+  final bool? sync;
+  final List<String>? members;
+  final Map<String, List<List<int>>>? memberListChannels;
+  final bool? threads;
+  final List<String>? threadMemberLists;
+
+  Map<String, Object?> toJson() {
+    final json = <String, Object?>{};
+    if (active != null) json['active'] = active;
+    if (typing != null) json['typing'] = typing;
+    if (sync != null) json['sync'] = sync;
+    if (members != null) json['members'] = members;
+    if (memberListChannels != null) {
+      json['member_list_channels'] = memberListChannels;
+    }
+    if (threads != null) json['threads'] = threads;
+    if (threadMemberLists != null) {
+      json['thread_member_lists'] = threadMemberLists;
+    }
+    return json;
+  }
+}
+
+class GatewayReadState {
+  const GatewayReadState({
+    required this.id,
+    this.lastMessageId,
+    this.mentionCount = 0,
+    this.lastPinTimestamp,
+    this.version,
+    this.flags,
+    this.lastViewed,
+  });
+
+  factory GatewayReadState.fromJson(Map<String, dynamic> json) {
+    return GatewayReadState(
+      id: json['id'] as String,
+      lastMessageId: json['last_message_id'] as String?,
+      mentionCount: json['mention_count'] as int? ?? 0,
+      lastPinTimestamp: json['last_pin_timestamp'] as String?,
+      version: json['version'] as String?,
+      flags: (json['flags'] as num?)?.toInt(),
+      lastViewed: (json['last_viewed'] as num?)?.toInt(),
+    );
+  }
+
+  final String id;
+  final String? lastMessageId;
+  final int mentionCount;
+  final String? lastPinTimestamp;
+  final String? version;
+  final int? flags;
+  final int? lastViewed;
+}
+
+class GuildCreateData {
+  const GuildCreateData({
+    required this.guild,
+    required this.channels,
+    required this.members,
+    required this.roles,
+    required this.presences,
+    required this.voiceStates,
+    this.emojis = const [],
+    this.stickers = const [],
+    this.joinedAt,
+    this.memberCount,
+    this.onlineCount,
+    this.unavailable = false,
+    this.hasCompletePayload = true,
+    this.threads,
+  });
+
+  factory GuildCreateData.fromJson(Map<String, dynamic> json) {
+    return GuildCreateData(
+      guild: GuildResponse.fromJson(_guildData(json)),
+      channels: _parseListSafe(
+        json['channels'],
+        (e) => ChannelResponse.fromJson(e as Map<String, Object?>),
+      ),
+      members: _parseListSafe(
+        json['members'],
+        (e) => GuildMemberResponse.fromJson(e as Map<String, Object?>),
+      ),
+      roles: _parseListSafe(
+        json['roles'],
+        (e) => GuildRoleResponse.fromJson(e as Map<String, Object?>),
+      ),
+      presences:
+          (json['presences'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ??
+          [],
+      voiceStates:
+          (json['voice_states'] as List<dynamic>?)
+              ?.map((e) => VoiceState.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      emojis: _parseListSafe(
+        json['emojis'],
+        (e) => GuildEmojiResponse.fromJson(e as Map<String, Object?>),
+      ),
+      stickers: _parseListSafe(
+        json['stickers'],
+        (e) => GuildStickerResponse.fromJson(e as Map<String, Object?>),
+      ),
+      joinedAt: json['joined_at'] as String?,
+      memberCount: json['member_count'] as int?,
+      onlineCount: json['online_count'] as int?,
+      unavailable: json['unavailable'] as bool? ?? false,
+      hasCompletePayload: _hasCompletePayload(json),
+      threads: json['threads'] is List
+          ? _parseListSafe(
+              json['threads'],
+              (e) => ChannelResponse.fromJson(e as Map<String, Object?>),
+            )
+          : null,
+    );
+  }
+
+  final GuildResponse guild;
+  final List<ChannelResponse> channels;
+  final List<GuildMemberResponse> members;
+  final List<GuildRoleResponse> roles;
+  final List<Map<String, dynamic>> presences;
+  final List<VoiceState> voiceStates;
+  final List<GuildEmojiResponse> emojis;
+  final List<GuildStickerResponse> stickers;
+  final String? joinedAt;
+  final int? memberCount;
+  final int? onlineCount;
+  final bool unavailable;
+  final bool hasCompletePayload;
+  final List<ChannelResponse>? threads;
+
+  bool get shouldTreatAsUnavailable => unavailable || !hasCompletePayload;
+
+  static bool _hasCompletePayload(Map<String, dynamic> json) {
+    for (final key in ['channels', 'members', 'roles', 'emojis']) {
+      if (json[key] is! List) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static Map<String, Object?> _guildData(Map<String, dynamic> raw) {
+    final properties = raw['properties'] as Map<String, dynamic>?;
+    final data = properties != null
+        ? <String, Object?>{...properties, 'id': raw['id'] ?? properties['id']}
+        : Map<String, Object?>.from(raw);
+
+    for (final key in _numericGuildFields) {
+      final v = data[key];
+      if (v is String) {
+        data[key] = int.tryParse(v) ?? 0;
+      }
+    }
+
+    return data;
+  }
+
+  static const _numericGuildFields = [
+    'splash_card_alignment',
+    'system_channel_flags',
+    'afk_timeout',
+    'verification_level',
+    'mfa_level',
+    'nsfw_level',
+    'explicit_content_filter',
+    'default_message_notifications',
+    'disabled_operations',
+  ];
+
+  static List<T> _parseListSafe<T>(
+    dynamic rawList,
+    T Function(dynamic) parser,
+  ) {
+    if (rawList is! List) return [];
+    final result = <T>[];
+    for (final item in rawList) {
+      try {
+        result.add(parser(item));
+      } catch (_) {}
+    }
+    return result;
+  }
+}

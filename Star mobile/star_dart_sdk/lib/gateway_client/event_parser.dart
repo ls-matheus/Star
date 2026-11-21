@@ -1,0 +1,727 @@
+import 'package:star_dart/models/channel_response.dart';
+import 'package:star_dart/models/channel_type.dart';
+import 'package:star_dart/models/guild_emoji_response.dart';
+import 'package:star_dart/models/guild_member_response.dart';
+import 'package:star_dart/models/guild_role_response.dart';
+import 'package:star_dart/models/guild_sticker_response.dart';
+import 'package:star_dart/models/message_response_schema.dart';
+import 'package:star_dart/models/relationship_response.dart';
+import 'package:star_dart/models/thread_member_response.dart';
+import 'package:star_dart/models/user_partial_response.dart';
+import 'package:star_dart/models/user_private_response.dart';
+import 'package:star_dart/models/user_guild_settings_response.dart';
+import 'package:star_dart/models/user_settings_response.dart';
+import 'package:star_dart/models/web_authn_credential_response.dart';
+
+import 'package:star_dart/gateway_client/custom_status_storage.dart';
+import 'package:star_dart/gateway_client/gateway_event.dart';
+import 'package:star_dart/gateway_client/gateway_types.dart';
+
+class EventParser {
+  const EventParser();
+
+  GatewayEvent parse(String eventType, Map<String, dynamic> data) {
+    try {
+      return switch (eventType) {
+        'READY' => _parseReady(data),
+        'RESUMED' => const ResumedEvent(),
+        'MESSAGE_CREATE' => MessageCreateEvent(
+          message: MessageResponseSchema.fromJson(data),
+          guildId: data['guild_id'] as String?,
+          channelType: (data['channel_type'] as num?)?.toInt(),
+          member: _parseEmbeddedMember(data['member'], user: data['author']),
+        ),
+        'MESSAGE_UPDATE' => MessageUpdateEvent(
+          message: MessageResponseSchema.fromJson(data),
+          guildId: data['guild_id'] as String?,
+          member: _parseEmbeddedMember(data['member'], user: data['author']),
+        ),
+        'MESSAGE_DELETE' => MessageDeleteEvent(
+          channelId: data['channel_id'] as String,
+          messageId: data['id'] as String,
+          guildId: data['guild_id'] as String?,
+        ),
+        'MESSAGE_REACTION_ADD' => MessageReactionAddEvent(
+          channelId: data['channel_id'] as String,
+          messageId: data['message_id'] as String,
+          userId: data['user_id'] as String,
+          emoji: ReactionEmoji.fromJson(data['emoji'] as Map<String, dynamic>),
+          guildId: data['guild_id'] as String?,
+          member: _parseEmbeddedMember(data['member']),
+        ),
+        'MESSAGE_REACTION_REMOVE' => MessageReactionRemoveEvent(
+          channelId: data['channel_id'] as String,
+          messageId: data['message_id'] as String,
+          userId: data['user_id'] as String,
+          emoji: ReactionEmoji.fromJson(data['emoji'] as Map<String, dynamic>),
+          guildId: data['guild_id'] as String?,
+          member: _parseEmbeddedMember(data['member']),
+        ),
+        'MESSAGE_REACTION_REMOVE_ALL' => MessageReactionRemoveAllEvent(
+          channelId: data['channel_id'] as String,
+          messageId: data['message_id'] as String,
+          guildId: data['guild_id'] as String?,
+        ),
+        'MESSAGE_REACTION_REMOVE_EMOJI' => MessageReactionRemoveEmojiEvent(
+          channelId: data['channel_id'] as String,
+          messageId: data['message_id'] as String,
+          emoji: ReactionEmoji.fromJson(data['emoji'] as Map<String, dynamic>),
+          guildId: data['guild_id'] as String?,
+        ),
+        'CHANNEL_CREATE' => ChannelCreateEvent(
+          channel: ChannelResponse.fromJson(data),
+        ),
+        'CHANNEL_UPDATE' => ChannelUpdateEvent(
+          channel: ChannelResponse.fromJson(data),
+        ),
+        'CHANNEL_DELETE' => ChannelDeleteEvent(
+          channelId: data['id'] as String,
+          guildId: data['guild_id'] as String?,
+        ),
+        'GUILD_CREATE' => GuildCreateEvent(
+          guild: GuildCreateData.fromJson(data),
+        ),
+        'GUILD_UPDATE' => GuildUpdateEvent(
+          guild: GuildCreateData.fromJson(data),
+        ),
+        'GUILD_DELETE' => GuildDeleteEvent(
+          guildId: data['id'] as String,
+          unavailable: data['unavailable'] as bool? ?? false,
+          unavailableHidden: data['unavailable_hidden'] as bool? ?? false,
+        ),
+        'GUILD_MEMBER_ADD' => GuildMemberAddEvent(
+          guildId: data['guild_id'] as String,
+          member: GuildMemberResponse.fromJson(data),
+        ),
+        'GUILD_MEMBER_UPDATE' => GuildMemberUpdateEvent(
+          guildId: data['guild_id'] as String,
+          member: GuildMemberResponse.fromJson(data),
+        ),
+        'GUILD_MEMBER_REMOVE' => GuildMemberRemoveEvent(
+          guildId: data['guild_id'] as String,
+          userId:
+              data['user_id'] as String? ??
+              (data['user'] as Map<String, dynamic>)['id'] as String,
+        ),
+        'PRESENCE_UPDATE' => _parsePresenceUpdate(data),
+        'TYPING_START' => TypingStartEvent(
+          channelId: data['channel_id'] as String,
+          userId: data['user_id'] as String,
+          timestamp: DateTime.fromMillisecondsSinceEpoch(
+            (data['timestamp'] as num).toInt() * 1000,
+          ),
+          guildId: data['guild_id'] as String?,
+          member: data['member'] == null
+              ? null
+              : GuildMemberResponse.fromJson(
+                  data['member'] as Map<String, dynamic>,
+                ),
+        ),
+        'RELATIONSHIP_ADD' => RelationshipAddEvent(
+          relationship: _parseRelationship(data),
+        ),
+        'RELATIONSHIP_UPDATE' => RelationshipUpdateEvent(
+          relationship: _parseRelationship(data),
+        ),
+        'RELATIONSHIP_REMOVE' => RelationshipRemoveEvent(
+          userId: data['id'] as String,
+        ),
+
+        'USER_UPDATE' => UserUpdateEvent(
+          user: UserPrivateResponse.fromJson(data),
+        ),
+        'USER_SETTINGS_UPDATE' => UserSettingsUpdateEvent(
+          settings: UserSettingsResponse.fromJson(data),
+          data: data,
+        ),
+        'USER_GUILD_SETTINGS_UPDATE' => UserGuildSettingsUpdateEvent(
+          guildId: data['guild_id'] as String?,
+          data: data,
+        ),
+        'USER_NOTE_UPDATE' => UserNoteUpdateEvent(
+          userId: data['id'] as String,
+          note: data['note'] as String?,
+        ),
+        'USER_CONNECTIONS_UPDATE' => UserConnectionsUpdateEvent(data: data),
+        'AUTH_SESSION_CHANGE' => AuthSessionChangeEvent(
+          newToken: data['new_token'] as String?,
+          newAuthSessionIdHash: data['new_auth_session_id_hash'] as String?,
+        ),
+
+        'MESSAGE_DELETE_BULK' => MessageDeleteBulkEvent(
+          channelId: data['channel_id'] as String,
+          ids: (data['ids'] as List<dynamic>).cast<String>(),
+          guildId: data['guild_id'] as String?,
+        ),
+        'MESSAGE_ACK' => MessageAckEvent(
+          channelId: data['channel_id'] as String,
+          messageId: data['message_id'] as String,
+          mentionCount: data['mention_count'] as int?,
+          manual: data['manual'] as bool?,
+          version: data['version'] as String?,
+          flags: (data['flags'] as num?)?.toInt(),
+        ),
+        'MESSAGE_REACTION_ADD_MANY' => MessageReactionAddManyEvent(
+          channelId: data['channel_id'] as String,
+          messageId: data['message_id'] as String,
+          reactions: (data['reactions'] as List<dynamic>)
+              .cast<Map<String, dynamic>>(),
+          guildId: data['guild_id'] as String?,
+        ),
+
+        'CHANNEL_UPDATE_BULK' => ChannelUpdateBulkEvent(
+          channels: (data['channels'] as List<dynamic>)
+              .map((e) => ChannelResponse.fromJson(e as Map<String, Object?>))
+              .toList(),
+        ),
+        'CHANNEL_PINS_UPDATE' => ChannelPinsUpdateEvent(
+          channelId: data['channel_id'] as String,
+          guildId: data['guild_id'] as String?,
+          lastPinTimestamp: data['last_pin_timestamp'] as String?,
+        ),
+        'CHANNEL_PINS_ACK' => ChannelPinsAckEvent(
+          channelId: data['channel_id'] as String,
+          timestamp: data['timestamp'] as String?,
+        ),
+        'CHANNEL_RECIPIENT_ADD' => ChannelRecipientAddEvent(
+          channelId: data['channel_id'] as String,
+          user: UserPartialResponse.fromJson(
+            data['user'] as Map<String, Object?>,
+          ),
+        ),
+        'CHANNEL_RECIPIENT_REMOVE' => ChannelRecipientRemoveEvent(
+          channelId: data['channel_id'] as String,
+          user: UserPartialResponse.fromJson(
+            data['user'] as Map<String, Object?>,
+          ),
+        ),
+        'PASSIVE_UPDATES' => _parsePassiveUpdates(data),
+
+        'THREAD_CREATE' => ThreadCreateEvent(
+          channel: ChannelResponse.fromJson(data),
+          newlyCreated: data['newly_created'] as bool? ?? false,
+        ),
+        'THREAD_UPDATE' => ThreadUpdateEvent(
+          channel: ChannelResponse.fromJson(data),
+        ),
+        'THREAD_DELETE' => ThreadDeleteEvent(
+          id: data['id'] as String,
+          guildId: data['guild_id'] as String,
+          parentId: data['parent_id'] as String,
+          type: ChannelType.fromJson((data['type'] as num).toInt()),
+        ),
+        'THREAD_LIST_SYNC' => ThreadListSyncEvent(
+          guildId: data['guild_id'] as String,
+          channelIds: (data['channel_ids'] as List<dynamic>?)?.cast<String>(),
+          threads: _parseListSafe(
+            data['threads'],
+            (e) => ChannelResponse.fromJson(e as Map<String, Object?>),
+          ),
+          members: _parseListSafe(
+            data['members'],
+            (e) => ThreadMemberResponse.fromJson(e as Map<String, Object?>),
+          ),
+        ),
+        'THREAD_MEMBER_UPDATE' => ThreadMemberUpdateEvent(
+          guildId: data['guild_id'] as String,
+          member: ThreadMemberResponse.fromJson(data),
+        ),
+        'THREAD_MEMBERS_UPDATE' => ThreadMembersUpdateEvent(
+          id: data['id'] as String,
+          guildId: data['guild_id'] as String,
+          memberCount: (data['member_count'] as num).toInt(),
+          addedMembers: data['added_members'] is List
+              ? _parseListSafe(
+                  data['added_members'],
+                  (e) => ThreadMemberEntry.fromJson(e as Map<String, dynamic>),
+                )
+              : null,
+          removedMemberIds: (data['removed_member_ids'] as List<dynamic>?)
+              ?.cast<String>(),
+        ),
+        'THREAD_MEMBER_LIST_UPDATE' => ThreadMemberListUpdateEvent(
+          guildId: data['guild_id'] as String,
+          threadId: data['thread_id'] as String,
+          members: _parseListSafe(
+            data['members'],
+            (e) => ThreadMemberEntry.fromJson(e as Map<String, dynamic>),
+          ),
+        ),
+        'FORUM_UNREADS' => ForumUnreadsEvent(
+          guildId: data['guild_id'] as String,
+          channelId: data['channel_id'] as String,
+          threads: _parseListSafe(
+            data['threads'],
+            (e) => ForumUnreadEntry.fromJson(e as Map<String, dynamic>),
+          ),
+        ),
+
+        'GUILD_ROLE_CREATE' => GuildRoleCreateEvent(
+          guildId: data['guild_id'] as String,
+          role: GuildRoleResponse.fromJson(
+            data['role'] as Map<String, Object?>,
+          ),
+        ),
+        'GUILD_ROLE_UPDATE' => GuildRoleUpdateEvent(
+          guildId: data['guild_id'] as String,
+          role: GuildRoleResponse.fromJson(
+            data['role'] as Map<String, Object?>,
+          ),
+        ),
+        'GUILD_ROLE_DELETE' => GuildRoleDeleteEvent(
+          guildId: data['guild_id'] as String,
+          roleId: data['role_id'] as String,
+        ),
+        'GUILD_ROLE_UPDATE_BULK' => GuildRoleUpdateBulkEvent(
+          guildId: data['guild_id'] as String,
+          roles: (data['roles'] as List<dynamic>)
+              .map((e) => GuildRoleResponse.fromJson(e as Map<String, Object?>))
+              .toList(),
+        ),
+
+        'GUILD_BAN_ADD' => GuildBanAddEvent(
+          guildId: data['guild_id'] as String,
+          userId: (data['user'] as Map)['id'] as String,
+        ),
+        'GUILD_BAN_REMOVE' => GuildBanRemoveEvent(
+          guildId: data['guild_id'] as String,
+          userId: (data['user'] as Map)['id'] as String,
+        ),
+
+        'GUILD_EMOJIS_UPDATE' => GuildEmojisUpdateEvent(
+          guildId: data['guild_id'] as String,
+          emojis: (data['emojis'] as List<dynamic>)
+              .map(
+                (e) => GuildEmojiResponse.fromJson(e as Map<String, Object?>),
+              )
+              .toList(),
+        ),
+        'GUILD_STICKERS_UPDATE' => GuildStickersUpdateEvent(
+          guildId: data['guild_id'] as String,
+          stickers: (data['stickers'] as List<dynamic>)
+              .map(
+                (e) => GuildStickerResponse.fromJson(e as Map<String, Object?>),
+              )
+              .toList(),
+        ),
+
+        'GUILD_SYNC' => GuildSyncEvent(guild: GuildCreateData.fromJson(data)),
+        'GUILD_MEMBERS_CHUNK' => GuildMembersChunkEvent(
+          guildId: data['guild_id'] as String,
+          members: (data['members'] as List<dynamic>)
+              .map(
+                (e) => GuildMemberResponse.fromJson(e as Map<String, dynamic>),
+              )
+              .toList(),
+          chunkIndex: data['chunk_index'] as int,
+          chunkCount: data['chunk_count'] as int,
+          presences: (data['presences'] as List<dynamic>?)
+              ?.cast<Map<String, dynamic>>(),
+          nonce: data['nonce'] as String?,
+        ),
+        'GUILD_MEMBER_LIST_UPDATE' => _parseMemberListUpdate(data),
+
+        'PRESENCE_UPDATE_BULK' => PresenceUpdateBulkEvent(
+          presences: (data['presences'] as List<dynamic>)
+              .cast<Map<String, dynamic>>(),
+          guildId: data['guild_id'] as String?,
+        ),
+
+        'VOICE_STATE_UPDATE' => VoiceStateUpdateEvent(
+          state: VoiceState.fromJson(data),
+          member: _parseEmbeddedMember(data['member']),
+        ),
+        'VOICE_SERVER_UPDATE' when data['p2p'] == true =>
+          VoiceServerP2pUpdateEvent(
+            connectionId: data['connection_id'] as String,
+            iceServers: (data['ice_servers'] as List<dynamic>)
+                .cast<Map<String, dynamic>>()
+                .map(
+                  (server) => VoiceIceServer(
+                    urls: (server['urls'] as List<dynamic>).cast<String>(),
+                  ),
+                )
+                .toList(),
+            guildId: data['guild_id'] as String?,
+            channelId: data['channel_id'] as String?,
+          ),
+        'VOICE_SERVER_UPDATE' => VoiceServerUpdateEvent(
+          token: data['token'] as String,
+          endpoint: data['endpoint'] as String,
+          connectionId: data['connection_id'] as String,
+          guildId: data['guild_id'] as String?,
+          channelId: data['channel_id'] as String?,
+          e2eeKey: data['e2ee_key'] as String?,
+        ),
+        'VOICE_SIGNAL' => VoiceSignalEvent(
+          channelId: data['channel_id'] as String,
+          from: data['from'] as String,
+          userId: data['user_id'] as String,
+          data: data['data'] as Map<String, dynamic>,
+          guildId: data['guild_id'] as String?,
+        ),
+
+        'CALL_CREATE' => _parseCallCreate(data),
+        'CALL_UPDATE' => _parseCallUpdate(data),
+        'CALL_DELETE' => CallDeleteEvent(
+          channelId: data['channel_id'] as String,
+          unavailable: data['unavailable'] as bool? ?? false,
+        ),
+        'ENTRANCE_SOUND_PLAY' => EntranceSoundPlayEvent(
+          userId: data['user_id'] as String,
+          channelId: data['channel_id'] as String,
+          soundId: data['sound_id'] as String,
+          hash: data['hash'] as String,
+          url: data['url'] as String,
+          durationMs: (data['duration_ms'] as num).toInt(),
+          contentType: data['content_type'] as String,
+          guildId: data['guild_id'] as String?,
+        ),
+        'GUILD_COUNTS_UPDATE' => GuildCountsUpdateEvent(
+          counts: _parseGuildCountEntries(data['counts']),
+        ),
+        'CHANNEL_MEMBER_COUNTS_UPDATE' => ChannelMemberCountsUpdateEvent(
+          counts: _parseChannelMemberCountEntries(data['counts']),
+        ),
+
+        'INVITE_CREATE' => InviteCreateEvent(data: data),
+        'INVITE_DELETE' => InviteDeleteEvent(
+          code: data['code'] as String,
+          guildId: data['guild_id'] as String?,
+        ),
+
+        'SAVED_MESSAGE_CREATE' => SavedMessageCreateEvent(
+          message: MessageResponseSchema.fromJson(data),
+        ),
+        'SAVED_MESSAGE_DELETE' => SavedMessageDeleteEvent(
+          messageId: data['message_id'] as String,
+        ),
+        'RECENT_MENTION_DELETE' => RecentMentionDeleteEvent(
+          messageId: data['message_id'] as String,
+        ),
+
+        'WEBHOOKS_UPDATE' => WebhooksUpdateEvent(
+          channelId: data['channel_id'] as String,
+          guildId: data['guild_id'] as String,
+        ),
+        'FAVORITE_MEME_CREATE' => FavoriteMemeCreateEvent(data: data),
+        'FAVORITE_MEME_UPDATE' => FavoriteMemeUpdateEvent(data: data),
+        'FAVORITE_MEME_DELETE' => FavoriteMemeDeleteEvent(
+          id: _snowflakeId(data['id'] ?? data['meme_id']) ?? '',
+        ),
+
+        _ => UnknownGatewayEvent(eventType: eventType, data: data),
+      };
+    } catch (error) {
+      return UnknownGatewayEvent(
+        eventType: eventType,
+        data: data,
+        parseError: error,
+      );
+    }
+  }
+
+  GatewayEvent? parseList(String eventType, List<dynamic> data) {
+    try {
+      return switch (eventType) {
+        'WEBAUTHN_CREDENTIALS_UPDATE' => WebauthnCredentialsUpdateEvent(
+          credentials: data
+              .map(
+                (e) => WebAuthnCredentialResponse.fromJson(
+                  (e as Map).cast<String, Object?>(),
+                ),
+              )
+              .toList(),
+        ),
+        'USER_PINNED_DMS_UPDATE' => UserPinnedDmsUpdateEvent(
+          pinnedDmChannelIds: data.map((dynamic id) => id.toString()).toList(),
+        ),
+        'SESSIONS_REPLACE' => const SessionsReplaceEvent(),
+        _ => null,
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  GuildMemberResponse? _parseEmbeddedMember(Object? member, {Object? user}) {
+    if (member is! Map<String, dynamic>) {
+      return null;
+    }
+    try {
+      return GuildMemberResponse.fromJson(<String, Object?>{
+        ...member,
+        'user': ?user,
+      });
+    } catch (_) {
+      return null;
+    }
+  }
+
+  ReadyEvent _parseReady(Map<String, dynamic> data) {
+    final rawGuildsList = data['guilds'] as List<dynamic>? ?? [];
+    final rawGuilds = rawGuildsList.whereType<Map<String, dynamic>>().toList();
+
+    final _DropCounter drops = _DropCounter();
+    final privateChannels = _parseListSafe(
+      data['private_channels'],
+      (e) => ChannelResponse.fromJson(e as Map<String, Object?>),
+      drops: drops,
+    );
+
+    final Map<String, Object?> usersById = <String, Object?>{
+      for (final Object? user in data['users'] as List<dynamic>? ?? const [])
+        if (user is Map && user['id'] is String) user['id'] as String: user,
+    };
+    final relationships = _parseListSafe(
+      data['relationships'],
+      (dynamic raw) => _parseRelationship(
+        raw is Map && raw['user'] == null && usersById[raw['id']] != null
+            ? <dynamic, dynamic>{...raw, 'user': usersById[raw['id']]}
+            : raw,
+      ),
+      drops: drops,
+    );
+
+    final readStates = _parseListSafe(
+      data['read_states'],
+      (e) => GatewayReadState.fromJson(e as Map<String, dynamic>),
+      drops: drops,
+    );
+
+    final presencesRaw = data['presences'] as List<dynamic>? ?? [];
+    final presences = presencesRaw.cast<Map<String, dynamic>>().toList();
+
+    final userSettingsRaw = data['user_settings'] as Map<String, dynamic>?;
+    final userSettings = userSettingsRaw != null
+        ? UserSettingsResponse.fromJson(userSettingsRaw)
+        : null;
+
+    final userGuildSettingsRaw = data['user_guild_settings'] as List<dynamic>?;
+    final userGuildSettings = userGuildSettingsRaw != null
+        ? userGuildSettingsRaw
+              .cast<Map<String, dynamic>>()
+              .map((e) => UserGuildSettingsResponse.fromJson(e))
+              .toList()
+        : null;
+
+    final notesRaw = data['notes'] as Map<String, dynamic>?;
+    final notes = notesRaw?.map((key, value) => MapEntry(key, value as String));
+
+    final pinnedDmsRaw = data['pinned_dms'] as List<dynamic>?;
+    final pinnedDms = pinnedDmsRaw?.cast<String>().toList();
+
+    final favoriteMemes = (data['favorite_memes'] as List<dynamic>?)
+        ?.cast<Map<String, dynamic>>()
+        .toList();
+
+    final users = (data['users'] as List<dynamic>?)
+        ?.cast<Map<String, dynamic>>()
+        .toList();
+
+    final rtcRegions = (data['rtc_regions'] as List<dynamic>?)
+        ?.cast<Map<String, dynamic>>()
+        .toList();
+
+    return ReadyEvent(
+      sessionId: data['session_id'] as String,
+      user: UserPrivateResponse.fromJson(data['user'] as Map<String, dynamic>),
+      rawGuilds: rawGuilds,
+      privateChannels: privateChannels,
+      relationships: relationships,
+      readStates: readStates,
+      presences: presences,
+      userSettings: userSettings,
+      userGuildSettings: userGuildSettings,
+      notes: notes,
+      countryCode: data['country_code'] as String?,
+      pinnedDms: pinnedDms,
+      favoriteMemes: favoriteMemes,
+      users: users,
+      authSessionIdHash: data['auth_session_id_hash'] as String?,
+      rtcRegions: rtcRegions,
+      droppedItems: drops.count,
+    );
+  }
+
+  static RelationshipResponse _parseRelationship(dynamic raw) {
+    final Map<String, Object?> json = Map<String, Object?>.from(
+      raw as Map<dynamic, dynamic>,
+    );
+    json['share_voice_activity'] ??= true;
+    json['friend_shares_voice_activity'] ??= true;
+    return RelationshipResponse.fromJson(json);
+  }
+
+  static List<T> _parseListSafe<T>(
+    dynamic rawList,
+    T Function(dynamic) parser, {
+    _DropCounter? drops,
+  }) {
+    if (rawList is! List) return [];
+    final result = <T>[];
+    for (final item in rawList) {
+      try {
+        result.add(parser(item));
+      } catch (_) {
+        drops?.count++;
+      }
+    }
+    return result;
+  }
+
+  static List<GuildCountEntry> _parseGuildCountEntries(dynamic raw) {
+    if (raw is! List) {
+      return const <GuildCountEntry>[];
+    }
+    final List<GuildCountEntry> counts = <GuildCountEntry>[];
+    for (final dynamic item in raw) {
+      if (item is! Map) {
+        continue;
+      }
+      final Map<String, dynamic> map = Map<String, dynamic>.from(item);
+      final String? guildId = map['guild_id'] as String?;
+      final int? memberCount = (map['member_count'] as num?)?.toInt();
+      final int? onlineCount = (map['online_count'] as num?)?.toInt();
+      if (guildId == null || memberCount == null || onlineCount == null) {
+        continue;
+      }
+      counts.add(
+        GuildCountEntry(
+          guildId: guildId,
+          memberCount: memberCount,
+          onlineCount: onlineCount,
+        ),
+      );
+    }
+    return counts;
+  }
+
+  static List<ChannelMemberCountEntry> _parseChannelMemberCountEntries(
+    dynamic raw,
+  ) {
+    if (raw is! List) {
+      return const <ChannelMemberCountEntry>[];
+    }
+    final List<ChannelMemberCountEntry> counts = <ChannelMemberCountEntry>[];
+    for (final dynamic item in raw) {
+      if (item is! Map) {
+        continue;
+      }
+      final Map<String, dynamic> map = Map<String, dynamic>.from(item);
+      final String? guildId = map['guild_id'] as String?;
+      final String? channelId = map['channel_id'] as String?;
+      final int? memberCount = (map['member_count'] as num?)?.toInt();
+      final int? onlineCount = (map['online_count'] as num?)?.toInt();
+      if (guildId == null ||
+          channelId == null ||
+          memberCount == null ||
+          onlineCount == null) {
+        continue;
+      }
+      counts.add(
+        ChannelMemberCountEntry(
+          guildId: guildId,
+          channelId: channelId,
+          memberCount: memberCount,
+          onlineCount: onlineCount,
+        ),
+      );
+    }
+    return counts;
+  }
+
+  PresenceUpdateEvent _parsePresenceUpdate(Map<String, dynamic> data) {
+    final user = data['user'] as Map<String, dynamic>?;
+    final userId = user?['id'] as String? ?? data['user_id'] as String;
+    final customStatusMap = data['custom_status'] as Map<String, dynamic>?;
+
+    return PresenceUpdateEvent(
+      userId: userId,
+      status: data['status'] as String,
+      customStatus: serializeCustomStatusMap(customStatusMap),
+      mobile: data['mobile'] as bool? ?? false,
+      user: _parsePresenceUser(user),
+    );
+  }
+
+  static UserPartialResponse? _parsePresenceUser(Map<String, dynamic>? user) {
+    if (user == null || user['username'] == null) {
+      return null;
+    }
+    try {
+      return UserPartialResponse.fromJson(user);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  GuildMemberListUpdateEvent _parseMemberListUpdate(Map<String, dynamic> data) {
+    return GuildMemberListUpdateEvent(
+      guildId: data['guild_id'] as String,
+      id: data['id'] as String,
+      channelId: data['channel_id'] as String?,
+      memberCount: data['member_count'] as int,
+      onlineCount: data['online_count'] as int,
+      groups: (data['groups'] as List<dynamic>)
+          .map((e) => MemberListGroup.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      ops: (data['ops'] as List<dynamic>)
+          .map((e) => MemberListOp.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  CallCreateEvent _parseCallCreate(Map<String, dynamic> data) {
+    return CallCreateEvent(
+      channelId: data['channel_id'] as String,
+      messageId: data['message_id'] as String?,
+      region: data['region'] as String?,
+      voiceStates: (data['voice_states'] as List<dynamic>?)
+          ?.map((e) => VoiceState.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      ringing: (data['ringing'] as List<dynamic>?)?.cast<String>(),
+    );
+  }
+
+  CallUpdateEvent _parseCallUpdate(Map<String, dynamic> data) {
+    return CallUpdateEvent(
+      channelId: data['channel_id'] as String,
+      messageId: data['message_id'] as String?,
+      region: data['region'] as String?,
+      ringing: (data['ringing'] as List<dynamic>?)?.cast<String>(),
+      voiceStates: (data['voice_states'] as List<dynamic>?)
+          ?.map((e) => VoiceState.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  PassiveUpdatesEvent _parsePassiveUpdates(Map<String, dynamic> data) {
+    final channelsRaw = data['channels'] as Map<String, dynamic>? ?? {};
+    return PassiveUpdatesEvent(
+      guildId: data['guild_id'] as String,
+      channels: channelsRaw.map((key, value) => MapEntry(key, value as String)),
+      voiceStates: (data['voice_states'] as List<dynamic>?)
+          ?.map((e) => VoiceState.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
+
+String? _snowflakeId(Object? value) {
+  if (value is String) {
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+  if (value is int) {
+    return value.toString();
+  }
+  if (value is BigInt) {
+    return value.toString();
+  }
+  return null;
+}
+
+class _DropCounter {
+  int count = 0;
+}

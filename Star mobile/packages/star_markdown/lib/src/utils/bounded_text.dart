@@ -1,0 +1,118 @@
+import 'package:material_ui/material_ui.dart';
+
+const TextHeightBehavior starBoundedTextHeightBehavior = TextHeightBehavior(
+  leadingDistribution: TextLeadingDistribution.even,
+);
+
+const double kStarBoundedTextDefaultHeight = 1.25;
+
+StrutStyle boundedStrutFor(TextStyle style, {bool forceHeight = true}) {
+  return StrutStyle.fromTextStyle(
+    style,
+    forceStrutHeight: forceHeight,
+    height: style.height ?? kStarBoundedTextDefaultHeight,
+  );
+}
+
+bool shouldApplyBoundedTextMetrics({int? maxLines}) => maxLines != null;
+
+bool inlineSpanHasWidget(InlineSpan span) {
+  if (span is WidgetSpan) {
+    return true;
+  }
+  if (span is TextSpan) {
+    for (final InlineSpan child in span.children ?? const <InlineSpan>[]) {
+      if (inlineSpanHasWidget(child)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+class StarLineBoundedWidgetSpan extends WidgetSpan {
+  const StarLineBoundedWidgetSpan({required super.child})
+    : super(
+        alignment: PlaceholderAlignment.baseline,
+        baseline: TextBaseline.alphabetic,
+      );
+}
+
+bool inlineSpanHasUnboundedWidget(InlineSpan span) {
+  if (span is WidgetSpan) {
+    return span is! StarLineBoundedWidgetSpan;
+  }
+  if (span is TextSpan) {
+    for (final InlineSpan child in span.children ?? const <InlineSpan>[]) {
+      if (inlineSpanHasUnboundedWidget(child)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+class StarBoundedTextClip extends StatelessWidget {
+  const StarBoundedTextClip({required this.child, super.key});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRect(clipper: const _VerticalTextClipper(), child: child);
+  }
+}
+
+/// Clips stacked combining marks above and below the text box but lets glyphs
+/// overhang sideways, so the last italic letter of a line is not cut off.
+class _VerticalTextClipper extends CustomClipper<Rect> {
+  const _VerticalTextClipper();
+
+  @override
+  Rect getClip(Size size) {
+    // A glyph's overhang is smaller than its line height, and the box is at
+    // least one line tall.
+    final double overhang = size.height;
+    return Rect.fromLTRB(-overhang, 0, size.width + overhang, size.height);
+  }
+
+  @override
+  bool shouldReclip(_VerticalTextClipper oldClipper) => false;
+}
+
+Widget wrapBoundedTextClip({required Widget child, int? maxLines}) {
+  if (!shouldApplyBoundedTextMetrics(maxLines: maxLines)) {
+    return child;
+  }
+  return StarBoundedTextClip(child: child);
+}
+
+Widget buildStarBoundedRichText({
+  required InlineSpan text,
+  required TextStyle baseStyle,
+  TextScaler? textScaler,
+  int? maxLines,
+  TextOverflow? overflow,
+  TextWidthBasis? textWidthBasis,
+  TextAlign textAlign = TextAlign.start,
+  TextDirection? textDirection,
+  bool softWrap = true,
+}) {
+  final bool forceLineHeight = inlineSpanHasWidget(text)
+      ? !inlineSpanHasUnboundedWidget(text)
+      : maxLines != null;
+  return StarBoundedTextClip(
+    child: RichText(
+      text: text,
+      strutStyle: boundedStrutFor(baseStyle, forceHeight: forceLineHeight),
+      textHeightBehavior: starBoundedTextHeightBehavior,
+      textScaler: textScaler ?? TextScaler.noScaling,
+      maxLines: maxLines,
+      overflow: overflow ?? TextOverflow.clip,
+      textWidthBasis: textWidthBasis ?? TextWidthBasis.parent,
+      textAlign: textAlign,
+      textDirection: textDirection,
+      softWrap: softWrap,
+    ),
+  );
+}

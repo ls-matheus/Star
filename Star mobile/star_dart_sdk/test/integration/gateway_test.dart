@@ -1,0 +1,140 @@
+import 'dart:async';
+
+import 'package:star_dart/gateway_client/gateway_connection.dart';
+import 'package:star_dart/gateway_client/gateway_event.dart';
+import 'package:star_dart/gateway_client/gateway_models.dart';
+import 'package:test/test.dart';
+
+import 'test_config.dart';
+
+bool skipIfNotConfigured() {
+  if (!TestConfig.isConfigured) {
+    markTestSkipped(
+      'No credentials set — provide STAR_TEST_TOKEN or EMAIL/PASSWORD in .env',
+    );
+    return true;
+  }
+  return false;
+}
+
+void main() {
+  GatewayConnection? connection;
+
+  tearDown(() async {
+    await connection?.dispose();
+    connection = null;
+  });
+
+  group('GatewayConnection (live)', () {
+    test('connects and receives READY event', () async {
+      if (skipIfNotConfigured()) return;
+
+      final token = await TestConfig.getToken();
+      final dio = await TestConfig.createDio();
+
+      connection = GatewayConnection(token: token, dio: dio);
+
+      final readyFuture = connection!.events
+          .where((e) => e is ReadyEvent)
+          .cast<ReadyEvent>()
+          .first
+          .timeout(
+            const Duration(seconds: 30),
+            onTimeout: () => throw TimeoutException(
+              'Did not receive READY event within 30 seconds',
+            ),
+          );
+
+      await connection!.connect();
+
+      final ready = await readyFuture;
+
+      expect(ready.sessionId, isNotEmpty);
+      expect(ready.user.id, isNotEmpty);
+      expect(ready.user.username, isNotEmpty);
+      expect(ready.rawGuilds, isA<List>());
+      expect(ready.privateChannels, isA<List>());
+      expect(ready.relationships, isA<List>());
+    });
+
+    test('connection state transitions to connected', () async {
+      if (skipIfNotConfigured()) return;
+
+      final token = await TestConfig.getToken();
+      final dio = await TestConfig.createDio();
+
+      connection = GatewayConnection(token: token, dio: dio);
+
+      expect(connection!.state, GatewayState.disconnected);
+
+      final connectedFuture = connection!.stateChanges
+          .where((s) => s == GatewayState.connected)
+          .first
+          .timeout(
+            const Duration(seconds: 30),
+            onTimeout: () => throw TimeoutException(
+              'Did not reach connected state within 30 seconds',
+            ),
+          );
+
+      await connection!.connect();
+
+      final state = await connectedFuture;
+      expect(state, GatewayState.connected);
+      expect(connection!.state, GatewayState.connected);
+    });
+
+    test('disconnects cleanly', () async {
+      if (skipIfNotConfigured()) return;
+
+      final token = await TestConfig.getToken();
+      final dio = await TestConfig.createDio();
+
+      connection = GatewayConnection(token: token, dio: dio);
+
+      final connectedFuture = connection!.stateChanges
+          .where((s) => s == GatewayState.connected)
+          .first
+          .timeout(
+            const Duration(seconds: 30),
+            onTimeout: () => throw TimeoutException(
+              'Did not reach connected state within 30 seconds',
+            ),
+          );
+
+      await connection!.connect();
+      await connectedFuture;
+
+      await connection!.disconnect();
+      expect(connection!.state, GatewayState.disconnected);
+    });
+
+    test('suspend suppresses reconnect until unsuspend', () async {
+      if (skipIfNotConfigured()) return;
+
+      final token = await TestConfig.getToken();
+      final dio = await TestConfig.createDio();
+      connection = GatewayConnection(token: token, dio: dio);
+
+      final connectedFuture = connection!.stateChanges
+          .where((s) => s == GatewayState.connected)
+          .first
+          .timeout(const Duration(seconds: 30));
+
+      await connection!.connect();
+      await connectedFuture;
+
+      await connection!.suspend();
+      expect(connection!.state, GatewayState.disconnected);
+      expect(connection!.isReconnectSuspended, isTrue);
+
+      await connection!.unsuspendAndReconnect();
+      await connection!.stateChanges
+          .where((s) => s == GatewayState.connected)
+          .first
+          .timeout(const Duration(seconds: 30));
+      expect(connection!.isReconnectSuspended, isFalse);
+      expect(connection!.state, GatewayState.connected);
+    });
+  });
+}

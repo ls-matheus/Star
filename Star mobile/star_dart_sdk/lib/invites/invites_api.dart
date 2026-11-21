@@ -1,0 +1,92 @@
+// coverage:ignore-file
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: type=lint, unused_import, invalid_annotation_target, unnecessary_import
+
+import 'package:dio/dio.dart' hide Headers;
+import 'package:retrofit/retrofit.dart';
+import 'package:retrofit/error_logger.dart';
+
+import '../models/channel_invite_create_request.dart';
+import '../models/guild_visit_start_response.dart';
+import '../models/invite_metadata_list_response.dart';
+import '../models/invite_metadata_response_schema.dart';
+import '../models/invite_response_schema.dart';
+import '../models/snowflake_type.dart';
+
+part 'invites_api.g.dart';
+
+@RestApi()
+abstract class InvitesApi {
+  factory InvitesApi(Dio dio, {String? baseUrl}) = _InvitesApi;
+
+  /// Create channel invite.
+  ///
+  /// Creates a new invite for the specified channel with optional parameters such as maximum age, maximum uses, and temporary membership settings. The authenticated user must have permission to create invites for the channel. Returns the created invite with full metadata including usage statistics.
+  ///
+  /// [channelId] - The ID of the channel.
+  ///
+  /// [body] - Name not received - field will be skipped.
+  @POST('/channels/{channel_id}/invites')
+  Future<InviteMetadataResponseSchema> createChannelInvite({
+    @Path('channel_id') required SnowflakeType channelId,
+    @Body() ChannelInviteCreateRequest? body,
+  });
+
+  /// List channel invites.
+  ///
+  /// Retrieves all currently active invites for the specified channel, including invite codes, creators, expiration times, and usage statistics. The authenticated user must have permission to manage invites for the channel. Returns an array of invite metadata objects.
+  ///
+  /// [channelId] - The ID of the channel.
+  @GET('/channels/{channel_id}/invites')
+  Future<InviteMetadataListResponse> listChannelInvites({
+    @Path('channel_id') required SnowflakeType channelId,
+  });
+
+  /// List guild invites.
+  ///
+  /// Retrieves all currently active invites across all channels in the specified guild, including invite codes, creators, expiration times, and usage statistics. The authenticated user must have permission to manage invites for the guild. Returns an array of invite metadata objects.
+  ///
+  /// [guildId] - The ID of the guild.
+  @GET('/guilds/{guild_id}/invites')
+  Future<InviteMetadataListResponse> listGuildInvites({
+    @Path('guild_id') required SnowflakeType guildId,
+  });
+
+  /// Get invite information.
+  ///
+  /// Fetches detailed information about an invite using its code, including the guild or channel it belongs to and metadata such as expiration and usage limits. This endpoint does not require authentication and does not consume the invite.
+  ///
+  /// [inviteCode] - The unique invite code.
+  @GET('/invites/{invite_code}')
+  Future<InviteResponseSchema> getInvite({
+    @Path('invite_code') required String inviteCode,
+  });
+
+  /// Accept invite.
+  ///
+  /// Accepts an invite using its code, adding the authenticated user to the corresponding guild or other entity. The invite usage count is incremented, and if it reaches its maximum usage limit or expiration, the invite is automatically revoked. Returns the accepted invite details.
+  ///
+  /// [inviteCode] - The unique invite code.
+  @POST('/invites/{invite_code}')
+  Future<InviteResponseSchema> acceptInvite({
+    @Path('invite_code') required String inviteCode,
+  });
+
+  /// Delete invite.
+  ///
+  /// Permanently deletes an invite by its code, preventing any further usage. The authenticated user must have permission to manage invites for the guild or channel associated with the invite. This action can be logged in the audit log if an X-Audit-Log-Reason header is provided.
+  ///
+  /// [inviteCode] - The unique invite code.
+  @DELETE('/invites/{invite_code}')
+  Future<void> deleteInvite({@Path('invite_code') required String inviteCode});
+
+  /// Visit the guild of an invite.
+  ///
+  /// Opens the guild behind an invite without joining it. The visitor can read the channels that @everyone can see, but cannot post, react or see the member list, and other members see no change. Answers with member set to true and no visit when the user is already a member. Visiting does not use up a limited invite. Joining later from the visit uses one.
+  ///
+  /// [inviteCode] - The unique invite code.
+  @POST('/invites/{invite_code}/visit')
+  Future<GuildVisitStartResponse> visitInviteGuild({
+    @Path('invite_code') required String inviteCode,
+  });
+}

@@ -1,0 +1,459 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:star_app/core/database/star_database.dart'
+    show StarDatabase;
+import 'package:star_app/core/providers/database_provider.dart';
+import 'package:star_app/core/router/star_router.dart';
+import 'package:star_app/core/theme/star_color_theme.dart';
+import 'package:star_app/core/theme/star_layout_theme.dart';
+import 'package:star_app/core/theme/star_text_theme.dart';
+import 'package:star_app/core/theme/star_theme.dart';
+import 'package:star_app/core/theme/themes/dark.dart';
+import 'package:star_app/features/channels/domain/channel.dart';
+import 'package:star_app/features/channels/providers/channel_list_view_model.dart';
+import 'package:star_app/features/channels/providers/channel_providers.dart';
+import 'package:star_app/features/channels/providers/unread_provider.dart';
+import 'package:star_app/features/chat/domain/message.dart';
+import 'package:star_app/features/chat/presentation/widgets/wallpaper/chat_wallpaper_backdrop.dart';
+import 'package:star_app/features/chat/providers/core/chat_view_model.dart';
+import 'package:star_app/features/guilds/domain/guild.dart';
+import 'package:star_app/features/guilds/providers/guild_list_view_model.dart';
+import 'package:star_app/features/mature_content/providers/mature_geo_provider.dart';
+import 'package:star_app/features/mature_content/utils/mature_access_utils.dart';
+import 'package:star_app/features/ui/voice/voice_call_avatar.dart';
+import 'package:star_app/features/ui/voice/voice_channel_control_expandable_sheet.dart';
+import 'package:star_app/features/ui/voice/voice_channel_join_button.dart';
+import 'package:star_app/features/voice/domain/local_voice_state_data.dart';
+import 'package:star_app/features/voice/presentation/voice_channel_page_view.dart';
+import 'package:star_app/features/voice/presentation/widgets/voice_call_desktop_hud/voice_call_desktop_control_bar.dart';
+import 'package:star_app/features/voice/presentation/widgets/voice_call_desktop_hud/voice_call_desktop_stage.dart';
+import 'package:star_app/features/voice/presentation/widgets/voice_channel_join_empty_state.dart';
+import 'package:star_app/features/voice/providers/local_voice_state_provider.dart';
+import 'package:star_app/features/voice/providers/voice_channel_participants_provider.dart';
+import 'package:star_app/features/voice/providers/voice_channel_text_chat_provider.dart';
+import 'package:star_app/features/voice/providers/voice_join_eligibility_provider.dart';
+import 'package:star_app/features/voice/providers/voice_session_provider.dart';
+import 'package:star_app/features/voice/providers/voice_session_state.dart';
+import 'package:star_app/features/voice/voice_session_errors.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:star_app/shared/providers/guild_user_display_provider.dart';
+import 'package:star_app/shared/utils/guild_user_display.dart';
+import 'package:riverpod/src/framework.dart' show Override;
+import 'package:visibility_detector/visibility_detector.dart';
+
+import '../../../helpers/input_modality_override.dart';
+import '../../../helpers/open_test_database.dart';
+import '../../../helpers/test_l10n.dart';
+import '../../../helpers/wide_layout_test_sizes.dart';
+
+const String _guildId = 'g1';
+const String _channelId = 'voice-1';
+
+void main() {
+  setUp(() {
+    VisibilityDetectorController.instance.updateInterval = Duration.zero;
+  });
+
+  tearDown(() {
+    VisibilityDetectorController.instance.updateInterval = const Duration(
+      milliseconds: 500,
+    );
+  });
+
+  group('VoiceChannelPageView layout gates', () {
+    testWidgets('shows join UI when not in this voice channel', (
+      WidgetTester tester,
+    ) async {
+      await _pumpPage(tester);
+      expect(find.byType(VoiceChannelJoinEmptyState), findsOneWidget);
+      expect(find.byType(ChatWallpaperBackdrop), findsNothing);
+      expect(find.byType(VoiceChannelJoinButton), findsOneWidget);
+      expect(find.text('Join voice channel'), findsOneWidget);
+      expect(
+        find.text('This is a voice channel. Connect to start talking!'),
+        findsNothing,
+      );
+      expect(
+        find.textContaining('end-to-end encrypted', findRichText: true),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('voice-participant-grid')),
+        findsNothing,
+      );
+      expect(find.text('Connecting…'), findsNothing);
+    });
+
+    testWidgets('shows self voice card while connecting', (
+      WidgetTester tester,
+    ) async {
+      final _MutableVoiceSession session = _MutableVoiceSession();
+      await _pumpPage(tester, voiceSession: session);
+      session.setSession(
+        const VoiceSessionState(
+          isConnecting: true,
+          guildId: _guildId,
+          channelId: _channelId,
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        find.byKey(const ValueKey<String>('voice-participant-grid')),
+        findsOneWidget,
+      );
+      expect(find.byType(VoiceCallAvatar), findsOneWidget);
+      expect(find.text('Connecting…'), findsOneWidget);
+      await releaseTestWidgetTree(tester);
+    });
+
+    testWidgets('hides connecting pill after connected', (
+      WidgetTester tester,
+    ) async {
+      final _MutableVoiceSession session = _MutableVoiceSession();
+      await _pumpPage(tester, voiceSession: session);
+      session.setSession(
+        const VoiceSessionState(
+          isConnecting: true,
+          guildId: _guildId,
+          channelId: _channelId,
+        ),
+      );
+      await tester.pump();
+      expect(find.text('Connecting…'), findsOneWidget);
+
+      session.setSession(
+        const VoiceSessionState(
+          isConnected: true,
+          guildId: _guildId,
+          channelId: _channelId,
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        find.byKey(const ValueKey<String>('voice-participant-grid')),
+        findsOneWidget,
+      );
+      expect(find.text('Connecting…'), findsNothing);
+      await releaseTestWidgetTree(tester);
+    });
+
+    testWidgets('shows join error banner when session has errorMessage', (
+      WidgetTester tester,
+    ) async {
+      final _MutableVoiceSession session = _MutableVoiceSession();
+      await _pumpPage(tester, voiceSession: session);
+      session.setSession(
+        const VoiceSessionState(errorMessage: kVoiceSessionErrorMicPermission),
+      );
+      await tester.pump();
+      expect(find.byType(VoiceChannelJoinButton), findsOneWidget);
+      expect(
+        find.textContaining('microphone', findRichText: true),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('still shows join UI when connecting to a different channel', (
+      WidgetTester tester,
+    ) async {
+      final _MutableVoiceSession session = _MutableVoiceSession();
+      await _pumpPage(tester, voiceSession: session);
+      session.setSession(
+        const VoiceSessionState(
+          isConnecting: true,
+          channelId: 'other-voice-channel',
+        ),
+      );
+      await tester.pump();
+
+      final VoiceChannelJoinButton joinButton = tester.widget(
+        find.byType(VoiceChannelJoinButton),
+      );
+      expect(joinButton.onPressed, isNotNull);
+    });
+
+    testWidgets(
+      'shows connecting UI when guild id differs but channel matches',
+      (WidgetTester tester) async {
+        final _MutableVoiceSession session = _MutableVoiceSession();
+        await _pumpPage(tester, voiceSession: session);
+        session.setSession(
+          const VoiceSessionState(isConnecting: true, channelId: _channelId),
+        );
+        await tester.pump();
+
+        expect(find.text('Connecting…'), findsOneWidget);
+        expect(find.byType(VoiceChannelJoinButton), findsNothing);
+      },
+    );
+
+    testWidgets('shows transport failure banner on empty state', (
+      WidgetTester tester,
+    ) async {
+      final _MutableVoiceSession session = _MutableVoiceSession();
+      await _pumpPage(tester, voiceSession: session);
+      session.setSession(
+        const VoiceSessionState(
+          errorMessage: kVoiceSessionErrorTransportFailed,
+        ),
+      );
+      await tester.pump();
+      expect(
+        find.textContaining('connect', findRichText: true),
+        findsOneWidget,
+      );
+    });
+  });
+
+  group('VoiceChannelPageView desktop chat toggle', () {
+    testWidgets('hides chat toggle on tablet sizes', (
+      WidgetTester tester,
+    ) async {
+      await _pumpPage(
+        tester,
+        size: kTabletLandscapeTestViewportSize,
+        textChatSupported: true,
+        touchPrimary: true,
+      );
+
+      expect(find.byKey(kDesktopVoiceChatToggleKey), findsNothing);
+    });
+
+    testWidgets('hides chat toggle when shortest side is below desktop', (
+      WidgetTester tester,
+    ) async {
+      await _pumpPage(
+        tester,
+        size: kWideTestViewportSize,
+        textChatSupported: true,
+        touchPrimary: true,
+      );
+
+      expect(find.byKey(kDesktopVoiceChatToggleKey), findsNothing);
+    });
+
+    testWidgets('shows chat toggle on desktop sizes', (
+      WidgetTester tester,
+    ) async {
+      await _pumpPage(
+        tester,
+        size: kDesktopTestViewportSize,
+        textChatSupported: true,
+      );
+
+      expect(find.byKey(kDesktopVoiceChatToggleKey), findsOneWidget);
+    });
+
+    testWidgets('uses the pointer HUD stage for a mouse on a tablet size', (
+      WidgetTester tester,
+    ) async {
+      final _MutableVoiceSession session = _MutableVoiceSession();
+      await _pumpPage(
+        tester,
+        voiceSession: session,
+        size: kTabletLandscapeTestViewportSize,
+        textChatSupported: true,
+      );
+      session.setSession(
+        const VoiceSessionState(
+          isConnected: true,
+          guildId: _guildId,
+          channelId: _channelId,
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byType(VoiceCallDesktopStage), findsOneWidget);
+      expect(find.byType(VoiceCallMobilePageLayout), findsNothing);
+      await releaseTestWidgetTree(tester);
+    });
+
+    testWidgets('uses the pointer HUD stage with a corner chat toggle', (
+      WidgetTester tester,
+    ) async {
+      final _MutableVoiceSession session = _MutableVoiceSession();
+      await _pumpPage(
+        tester,
+        voiceSession: session,
+        size: kDesktopTestViewportSize,
+        textChatSupported: true,
+      );
+      session.setSession(
+        const VoiceSessionState(
+          isConnected: true,
+          guildId: _guildId,
+          channelId: _channelId,
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byType(VoiceCallDesktopStage), findsOneWidget);
+      expect(find.byType(VoiceCallDesktopControlBar), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(VoiceCallDesktopStage),
+          matching: find.byKey(kDesktopVoiceChatToggleKey),
+        ),
+        findsOneWidget,
+      );
+      await releaseTestWidgetTree(tester);
+    });
+  });
+}
+
+Future<void> _pumpPage(
+  WidgetTester tester, {
+  _MutableVoiceSession? voiceSession,
+  Size size = const Size(390, 844),
+  bool textChatSupported = false,
+  bool touchPrimary = false,
+}) async {
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+
+  final StarDatabase db = openTestDatabase();
+  final _MutableVoiceSession session = voiceSession ?? _MutableVoiceSession();
+  final StarColorTheme colorTheme = buildDarkColorTheme();
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: <Override>[
+        ..._voicePageOverrides(
+          db: db,
+          session: session,
+          textChatSupported: textChatSupported,
+        ),
+        inputModalityOverride(touch: touchPrimary),
+      ],
+      child: MaterialApp(
+        locale: kTestLocale,
+        localizationsDelegates: starLocalizationsDelegates,
+        supportedLocales: StarLocalizations.supportedLocales,
+        theme: buildStarTheme(
+          colorTheme: colorTheme,
+          textTheme: StarTextTheme.fromColors(colorTheme),
+          layoutTheme: StarLayoutTheme.scaled(),
+        ),
+        home: const Scaffold(
+          body: VoiceChannelPageView(guildId: _guildId, channelId: _channelId),
+        ),
+      ),
+    ),
+  );
+  await tester.pump();
+}
+
+List<Override> _voicePageOverrides({
+  required StarDatabase db,
+  required _MutableVoiceSession session,
+  bool textChatSupported = false,
+}) {
+  const Channel channel = Channel(
+    id: _channelId,
+    guildId: _guildId,
+    name: 'Lobby',
+    type: ChannelType.guildVoice,
+    parentId: 'cat1',
+  );
+  return <Override>[
+    starDatabaseProvider.overrideWithValue(db),
+    matureGeoStatusProvider.overrideWith(
+      (Ref ref) => Future<MatureGeoStatus>.value(MatureGeoStatus.none),
+    ),
+    voiceSessionProvider.overrideWith(() => session),
+    guildListViewModelProvider.overrideWith(_FakeGuildListViewModel.new),
+    chatViewModelProvider.overrideWith(_FakeChatViewModel.new),
+    channelByIdProvider(
+      _channelId,
+    ).overrideWith((ref) => Stream<Channel?>.value(channel)),
+    channelListViewModelProvider.overrideWith(
+      () => _FakeChannelListViewModel(
+        const ChannelListState(
+          guild: null,
+          selectedChannelId: null,
+          categories: [
+            ChannelCategory(id: 'cat1', name: 'Voice', channels: [channel]),
+          ],
+        ),
+      ),
+    ),
+    currentUserIdProvider.overrideWithValue('me'),
+    localVoiceStateProvider.overrideWithValue(const LocalVoiceStateData()),
+    guildUserDisplayFromDbProvider.overrideWith(
+      (Ref ref, (String, String?) args) =>
+          const AsyncValue<GuildUserDisplay?>.data(null),
+    ),
+    voiceJoinEligibilityProvider(
+      _channelId,
+    ).overrideWith((ref) => const VoiceJoinEligibility(canJoin: true)),
+    voiceChannelTextChatSupportedProvider(
+      _channelId,
+    ).overrideWith((ref) => textChatSupported),
+    channelUnreadProvider(
+      _channelId,
+    ).overrideWith((ref) => Stream<UnreadState>.value(const UnreadState())),
+    voiceChannelParticipantsProvider(
+      voiceChannelParticipantsFamilyKey(_guildId, _channelId),
+    ).overrideWith((ref) => const <VoiceChannelParticipantData>[]),
+  ];
+}
+
+class _FakeChannelListViewModel extends ChannelListViewModel {
+  _FakeChannelListViewModel(this._state);
+
+  final ChannelListState _state;
+
+  @override
+  ChannelListState build() => _state;
+}
+
+class _FakeGuildListViewModel extends GuildListViewModel {
+  @override
+  GuildListViewState build() => const GuildListViewState(
+    guilds: <Guild>[
+      Guild(id: _guildId, name: 'Test Guild', features: <String>['VOICE_E2EE']),
+    ],
+  );
+}
+
+class _FakeChatViewModel extends ChatViewModel {
+  @override
+  ChatViewState build() => const ChatViewState(
+    channelId: _channelId,
+    messages: <Message>[],
+    replyingTo: null,
+    replyMentioning: false,
+    editingMessage: null,
+    messageText: '',
+    scrollToBottomSignal: 0,
+    isLoading: false,
+    isSyncingMessages: false,
+    isLoadingMore: false,
+    isLoadingNewer: false,
+    hasMoreMessages: false,
+    hasMoreNewerMessages: false,
+    errorMessage: null,
+  );
+
+  @override
+  Future<void> switchChannel(
+    String channelId, {
+    String? targetMessageId,
+    bool loadMessages = true,
+  }) async {}
+}
+
+class _MutableVoiceSession extends VoiceSession {
+  VoiceSessionState _sessionState = const VoiceSessionState();
+
+  @override
+  VoiceSessionState build() => _sessionState;
+
+  void setSession(VoiceSessionState next) {
+    _sessionState = next;
+    state = next;
+  }
+}

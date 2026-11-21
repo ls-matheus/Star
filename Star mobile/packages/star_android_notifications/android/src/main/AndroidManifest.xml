@@ -1,0 +1,13 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <provider
+            android:name="com.star.notifications.StarPushMediaProvider"
+            android:authorities="${applicationId}.star_push_media"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/star_push_media_paths" />
+        </provider>
+    </application>
+</manifest>

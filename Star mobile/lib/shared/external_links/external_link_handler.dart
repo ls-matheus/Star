@@ -1,0 +1,120 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:star_app/core/api/attachment_request_auth.dart';
+import 'package:star_app/core/theme/star_theme_extension.dart';
+import 'package:star_app/core/utils/channel_jump_link.dart';
+import 'package:star_app/features/chat/utils/channel_jump_navigator.dart';
+import 'package:star_app/features/gifts/presentation/modals/gift_accept_modal.dart';
+import 'package:star_app/features/gifts/utils/gift_code_utils.dart';
+import 'package:star_app/features/guilds/utils/invites/invite_link_navigator.dart';
+import 'package:star_app/features/settings/providers/preferences/default_apps_preferences_provider.dart';
+import 'package:star_app/features/settings/providers/view_models/user_settings_view_model.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:star_app/shared/external_links/external_link_warning_sheet.dart';
+import 'package:star_app/shared/external_links/external_url_launcher.dart';
+
+Future<void> handleExternalLinkTap(
+  BuildContext context,
+  String url, {
+  bool? useRootNavigator,
+  bool skipWarning = false,
+  bool openChannelLinksInApp = true,
+}) async {
+  if (isInviteLink(url)) {
+    await handleInviteLinkTap(context, url);
+    return;
+  }
+
+  final String? giftCode = parseGiftLinkCode(url);
+  if (giftCode != null) {
+    await showGiftAcceptModal(context, code: giftCode);
+    return;
+  }
+
+  final ChannelJumpLink? jump = openChannelLinksInApp
+      ? parseChannelJumpLink(url.trim())
+      : null;
+  if (jump != null) {
+    await navigateToChannelJumpLink(
+      container: ProviderScope.containerOf(context, listen: false),
+      context: context,
+      link: jump,
+    );
+    return;
+  }
+
+  final uri = parseExternalLinkUri(url);
+  if (uri == null) {
+    return;
+  }
+
+  if (skipWarning) {
+    await _openExternalUrl(context, uri);
+    return;
+  }
+
+  if (!_shouldWarnForUri(uri)) {
+    await _openExternalUrl(context, uri);
+    return;
+  }
+
+  final container = ProviderScope.containerOf(context, listen: false);
+  final notifier = container.read(userSettingsViewModelProvider.notifier);
+
+  if (notifier.isTrustedDomain(uri.host)) {
+    await _openExternalUrl(context, uri);
+    return;
+  }
+
+  if (!context.mounted) {
+    return;
+  }
+
+  await ExternalLinkWarningSheet.show(
+    context,
+    url: url,
+    hostname: uri.host,
+    useRootNavigator: useRootNavigator,
+    onContinue: ({required bool trustDomain}) async {
+      if (trustDomain) {
+        await notifier.addTrustedDomain(uri.host);
+      }
+
+      if (!context.mounted) {
+        return;
+      }
+
+      await _openExternalUrl(context, uri);
+    },
+  );
+}
+
+Future<void> openAttachmentInBrowser(
+  BuildContext context,
+  String url, {
+  bool? useRootNavigator,
+}) async {
+  final String browserUrl = await AttachmentRequestAuth.fileTokenUrl(url);
+  if (!context.mounted) {
+    return;
+  }
+  await handleExternalLinkTap(
+    context,
+    browserUrl,
+    useRootNavigator: useRootNavigator,
+    skipWarning: AttachmentRequestAuth.isApiAttachmentUrl(url),
+  );
+}
+
+bool _shouldWarnForUri(Uri uri) {
+  return (uri.scheme == 'http' || uri.scheme == 'https') && uri.host.isNotEmpty;
+}
+
+Future<void> _openExternalUrl(BuildContext context, Uri uri) async {
+  final container = ProviderScope.containerOf(context, listen: false);
+  final browser = container.read(defaultAppsPreferencesProvider);
+  await openExternalUrl(
+    uri,
+    style: ExternalUrlBrowserStyle.fromColorTheme(context.colors),
+    browser: browser,
+  );
+}

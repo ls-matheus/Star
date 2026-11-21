@@ -1,0 +1,20 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
+part of 'guild_vanity_url_update_request.dart';
+
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
+
+GuildVanityUrlUpdateRequest _$GuildVanityUrlUpdateRequestFromJson(
+  Map<String, dynamic> json,
+) => $checkedCreate('GuildVanityUrlUpdateRequest', json, ($checkedConvert) {
+  final val = GuildVanityUrlUpdateRequest._(
+    codeValue: $checkedConvert('code', (v) => v as String?),
+  );
+  return val;
+}, fieldKeyMap: const {'codeValue': 'code'});
+
+Map<String, dynamic> _$GuildVanityUrlUpdateRequestToJson(
+  GuildVanityUrlUpdateRequest instance,
+) => <String, dynamic>{'code': ?instance.codeValue};

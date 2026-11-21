@@ -1,0 +1,126 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
+part of 'bulk_delete_self_messages_request.dart';
+
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
+
+BulkDeleteSelfMessagesRequest _$BulkDeleteSelfMessagesRequestFromJson(
+  Map<String, dynamic> json,
+) => $checkedCreate(
+  'BulkDeleteSelfMessagesRequest',
+  json,
+  ($checkedConvert) {
+    final val = BulkDeleteSelfMessagesRequest._(
+      excludedGuildIds: $checkedConvert(
+        'excluded_guild_ids',
+        (v) => (v as List<dynamic>?)?.map((e) => e as SnowflakeType).toList(),
+      ),
+      includedGuildIds: $checkedConvert(
+        'included_guild_ids',
+        (v) => (v as List<dynamic>?)?.map((e) => e as SnowflakeType).toList(),
+      ),
+      startDateValue: $checkedConvert(
+        'start_date',
+        (v) => v == null ? null : DateTime.parse(v as String),
+      ),
+      endDateValue: $checkedConvert(
+        'end_date',
+        (v) => v == null ? null : DateTime.parse(v as String),
+      ),
+      password: $checkedConvert('password', (v) => v as PasswordType?),
+      mfaMethod: $checkedConvert(
+        'mfa_method',
+        (v) => v == null
+            ? null
+            : BulkDeleteSelfMessagesRequestMfaMethodMfaMethod.fromJson(
+                v as String,
+              ),
+      ),
+      mfaCode: $checkedConvert('mfa_code', (v) => v as String?),
+      emailCodeTicket: $checkedConvert(
+        'email_code_ticket',
+        (v) => v as String?,
+      ),
+      emailCode: $checkedConvert('email_code', (v) => v as String?),
+      webauthnResponse: $checkedConvert(
+        'webauthn_response',
+        (v) => v == null
+            ? null
+            : WebAuthnAuthenticationResponse.fromJson(
+                v as Map<String, dynamic>,
+              ),
+      ),
+      webauthnChallenge: $checkedConvert(
+        'webauthn_challenge',
+        (v) => v as String?,
+      ),
+      scope: $checkedConvert(
+        'scope',
+        (v) => v == null
+            ? BulkDeleteSelfMessagesScope.selected
+            : BulkDeleteSelfMessagesScope.fromJson(v as String),
+      ),
+      includeDms: $checkedConvert('include_dms', (v) => v as bool? ?? true),
+      includeDmsClosed: $checkedConvert(
+        'include_dms_closed',
+        (v) => v as bool? ?? true,
+      ),
+      includeGroupDms: $checkedConvert(
+        'include_group_dms',
+        (v) => v as bool? ?? true,
+      ),
+      includeGuilds: $checkedConvert(
+        'include_guilds',
+        (v) => v as bool? ?? true,
+      ),
+      guildFilterMode: $checkedConvert(
+        'guild_filter_mode',
+        (v) => v == null
+            ? BulkDeleteSelfMessagesGuildFilterMode.exclude
+            : BulkDeleteSelfMessagesGuildFilterMode.fromJson(v as String),
+      ),
+    );
+    return val;
+  },
+  fieldKeyMap: const {
+    'excludedGuildIds': 'excluded_guild_ids',
+    'includedGuildIds': 'included_guild_ids',
+    'startDateValue': 'start_date',
+    'endDateValue': 'end_date',
+    'mfaMethod': 'mfa_method',
+    'mfaCode': 'mfa_code',
+    'emailCodeTicket': 'email_code_ticket',
+    'emailCode': 'email_code',
+    'webauthnResponse': 'webauthn_response',
+    'webauthnChallenge': 'webauthn_challenge',
+    'includeDms': 'include_dms',
+    'includeDmsClosed': 'include_dms_closed',
+    'includeGroupDms': 'include_group_dms',
+    'includeGuilds': 'include_guilds',
+    'guildFilterMode': 'guild_filter_mode',
+  },
+);
+
+Map<String, dynamic> _$BulkDeleteSelfMessagesRequestToJson(
+  BulkDeleteSelfMessagesRequest instance,
+) => <String, dynamic>{
+  'scope': instance.scope,
+  'include_dms': instance.includeDms,
+  'include_dms_closed': instance.includeDmsClosed,
+  'include_group_dms': instance.includeGroupDms,
+  'include_guilds': instance.includeGuilds,
+  'guild_filter_mode': instance.guildFilterMode,
+  'excluded_guild_ids': ?instance.excludedGuildIds,
+  'included_guild_ids': ?instance.includedGuildIds,
+  'password': ?instance.password,
+  'mfa_method': ?instance.mfaMethod,
+  'mfa_code': ?instance.mfaCode,
+  'email_code_ticket': ?instance.emailCodeTicket,
+  'email_code': ?instance.emailCode,
+  'webauthn_response': ?instance.webauthnResponse,
+  'webauthn_challenge': ?instance.webauthnChallenge,
+  'start_date': ?instance.startDateValue?.toIso8601String(),
+  'end_date': ?instance.endDateValue?.toIso8601String(),
+};

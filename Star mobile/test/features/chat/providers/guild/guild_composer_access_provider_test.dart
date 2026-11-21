@@ -1,0 +1,237 @@
+import 'package:drift/drift.dart' show Value;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:star_app/core/database/star_database.dart'
+    show ChannelsCompanion, StarDatabase, MembersCompanion;
+import 'package:star_app/core/providers/database_provider.dart';
+import 'package:star_app/core/router/star_router.dart';
+import 'package:star_app/features/channels/domain/channel.dart';
+import 'package:star_app/features/channels/providers/channel_list_view_model.dart';
+import 'package:star_app/features/chat/providers/guild/guild_composer_access_provider.dart';
+import 'package:star_app/features/dm/providers/dm_view_model.dart';
+import 'package:star_app/features/guilds/domain/guild.dart';
+import 'package:star_app/features/guilds/providers/guild_list_view_model.dart';
+import 'package:star_app/features/guilds/services/guild_verification.dart';
+import 'package:star_app/features/settings/providers/view_models/user_settings_view_model.dart';
+
+import '../../../../helpers/open_test_database.dart';
+
+const String _userId = '1000000000000000001';
+const String _ownerId = '1000000000000000002';
+const String _guildId = '1100000000000000001';
+const String _generalId = '1200000000000000001';
+const String _rulesId = '1200000000000000002';
+
+class _VerifiedUserSettings extends UserSettingsViewModel {
+  @override
+  UserSettingsViewState build() => UserSettingsViewState(
+    userId: _userId,
+    username: 'user',
+    displayName: 'user',
+    discriminator: '0001',
+    avatar: null,
+    avatarColor: null,
+    memberSince: DateTime.utc(2024),
+    status: 'online',
+    messageDisplayCompact: false,
+    developerMode: false,
+    trustedDomains: const <String>[],
+    email: 'user@example.com',
+    verified: true,
+    isProfileLoaded: true,
+  );
+}
+
+class _HighVerificationGuildList extends GuildListViewModel {
+  @override
+  GuildListViewState build() => const GuildListViewState(
+    guilds: <Guild>[
+      Guild(
+        id: _guildId,
+        name: 'Star HQ',
+        ownerId: _ownerId,
+        verificationLevel: GuildVerificationLevel.high,
+      ),
+    ],
+  );
+}
+
+class _OpenGuildList extends GuildListViewModel {
+  @override
+  GuildListViewState build() => const GuildListViewState(
+    guilds: <Guild>[Guild(id: _guildId, name: 'Star HQ', ownerId: _ownerId)],
+  );
+}
+
+class _EmptyDmViewModel extends DmViewModel {
+  @override
+  DmViewState build() => const DmViewState(
+    conversations: [],
+    friendsList: [],
+    activeTab: FriendsTab.online,
+    searchQuery: '',
+  );
+}
+
+void main() {
+  test('switching channels in a guild that blocks the member never reports '
+      'the composer as sendable', () async {
+    final StarDatabase db = openTestDatabase();
+    for (final String channelId in <String>[_generalId, _rulesId]) {
+      await db.channelDao.upsertChannel(
+        ChannelsCompanion.insert(
+          id: channelId,
+          guildId: _guildId,
+          name: channelId,
+        ),
+      );
+    }
+    await db.memberDao.upsertMember(
+      MembersCompanion.insert(
+        userId: _userId,
+        guildId: _guildId,
+        joinedAt: Value(DateTime.now().subtract(const Duration(minutes: 2))),
+      ),
+    );
+
+    final ProviderContainer container = ProviderContainer(
+      overrides: [
+        starDatabaseProvider.overrideWithValue(db),
+        currentUserIdProvider.overrideWithValue(_userId),
+        userSettingsViewModelProvider.overrideWith(_VerifiedUserSettings.new),
+        guildListViewModelProvider.overrideWith(_HighVerificationGuildList.new),
+        dmViewModelProvider.overrideWith(_EmptyDmViewModel.new),
+        channelListViewModelProvider.overrideWithValue(
+          const ChannelListState(
+            guild: null,
+            categories: <ChannelCategory>[
+              ChannelCategory(
+                id: 'text',
+                name: 'Text',
+                channels: <Channel>[
+                  Channel(id: _generalId, guildId: _guildId, name: 'general'),
+                  Channel(id: _rulesId, guildId: _guildId, name: 'rules'),
+                ],
+              ),
+            ],
+            selectedChannelId: _generalId,
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final ProviderSubscription<AsyncValue<GuildComposerAccess>> general =
+        container.listen(guildComposerAccessProvider(_generalId), (_, _) {});
+    for (var i = 0; i < 50 && !general.read().hasValue; i++) {
+      await pumpEventQueue();
+    }
+    expect(general.read().value?.canAccess, isFalse);
+    expect(
+      general.read().value?.reason,
+      GuildComposerBlockReason.notMemberLongEnough,
+    );
+
+    final ProviderSubscription<AsyncValue<GuildComposerAccess>> rules =
+        container.listen(guildComposerAccessProvider(_rulesId), (_, _) {});
+    general.close();
+
+    final AsyncValue<GuildComposerAccess> firstFrame = rules.read();
+    expect(firstFrame.hasValue, isTrue);
+    expect(firstFrame.value?.canAccess, isFalse);
+    expect(
+      firstFrame.value?.reason,
+      GuildComposerBlockReason.notMemberLongEnough,
+    );
+  });
+
+  group('guild member composer access stays live', () {
+    late StarDatabase db;
+    late ProviderContainer container;
+
+    setUp(() {
+      db = openTestDatabase();
+      container = ProviderContainer(
+        overrides: [
+          starDatabaseProvider.overrideWithValue(db),
+          currentUserIdProvider.overrideWithValue(_userId),
+          userSettingsViewModelProvider.overrideWith(_VerifiedUserSettings.new),
+          guildListViewModelProvider.overrideWith(_OpenGuildList.new),
+        ],
+      );
+      addTearDown(container.dispose);
+    });
+
+    Future<GuildComposerAccess?> settle(
+      ProviderSubscription<AsyncValue<GuildComposerAccess>> sub,
+      bool Function(GuildComposerAccess access) until,
+    ) async {
+      for (var i = 0; i < 250; i++) {
+        final GuildComposerAccess? access = sub.read().value;
+        if (access != null && until(access)) {
+          return access;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      return sub.read().value;
+    }
+
+    test('a timeout set while cached blocks without resubscribing', () async {
+      await db.memberDao.upsertMember(
+        MembersCompanion.insert(userId: _userId, guildId: _guildId),
+      );
+      final ProviderSubscription<AsyncValue<GuildComposerAccess>> sub =
+          container.listen(
+            guildMemberComposerAccessProvider(_guildId),
+            (_, _) {},
+          );
+      expect(
+        (await settle(sub, (GuildComposerAccess a) => a.canAccess))?.canAccess,
+        isTrue,
+      );
+
+      await db.memberDao.upsertMember(
+        MembersCompanion.insert(
+          userId: _userId,
+          guildId: _guildId,
+          communicationDisabledUntil: Value(
+            DateTime.now().add(const Duration(minutes: 5)),
+          ),
+        ),
+      );
+
+      final GuildComposerAccess? blocked = await settle(
+        sub,
+        (GuildComposerAccess a) => !a.canAccess,
+      );
+      expect(blocked?.reason, GuildComposerBlockReason.timedOut);
+    });
+
+    test('an expiring timeout unblocks on its own', () async {
+      await db.memberDao.upsertMember(
+        MembersCompanion.insert(
+          userId: _userId,
+          guildId: _guildId,
+          communicationDisabledUntil: Value(
+            DateTime.now().add(const Duration(seconds: 2)),
+          ),
+        ),
+      );
+      final ProviderSubscription<AsyncValue<GuildComposerAccess>> sub =
+          container.listen(
+            guildMemberComposerAccessProvider(_guildId),
+            (_, _) {},
+          );
+      expect(
+        (await settle(sub, (GuildComposerAccess a) => !a.canAccess))?.reason,
+        GuildComposerBlockReason.timedOut,
+      );
+
+      final GuildComposerAccess? unblocked = await settle(
+        sub,
+        (GuildComposerAccess a) => a.canAccess,
+      );
+      expect(unblocked?.canAccess, isTrue);
+    });
+  });
+}

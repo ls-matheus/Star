@@ -1,0 +1,62 @@
+// coverage:ignore-file
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: type=lint, unused_import, invalid_annotation_target, unnecessary_import
+
+import 'package:json_annotation/json_annotation.dart';
+
+import 'checkout_payment_method_enum.dart';
+import 'cnpj_schema.dart';
+import 'distribution_query_param.dart';
+import 'distribution_token_param.dart';
+
+part 'create_checkout_session_request.g.dart';
+
+@JsonSerializable()
+class CreateCheckoutSessionRequest {
+  const CreateCheckoutSessionRequest({
+    required this.priceId,
+    this.countryCode,
+    this.clientGeoipCountryCode,
+    this.euWithdrawalWaiverAccepted,
+    this.paymentMethod,
+    this.isBusiness,
+    this.cnpj,
+    this.distribution,
+    this.distributionToken,
+  });
+
+  factory CreateCheckoutSessionRequest.fromJson(Map<String, Object?> json) =>
+      _$CreateCheckoutSessionRequestFromJson(json);
+
+  /// The Stripe price ID for the subscription plan
+  @JsonKey(name: 'price_id', defaultValue: '')
+  final String priceId;
+
+  /// Two-letter country code used for regional pricing. Only used when the server cannot geolocate the request; otherwise the request GeoIP country wins.
+  @JsonKey(includeIfNull: false, name: 'country_code')
+  final String? countryCode;
+
+  /// Two-letter country code observed by the client GeoIP store before checkout
+  @JsonKey(includeIfNull: false, name: 'client_geoip_country_code')
+  final String? clientGeoipCountryCode;
+
+  /// Whether the EU/EEA digital content withdrawal waiver was expressly accepted before checkout
+  @JsonKey(includeIfNull: false, name: 'eu_withdrawal_waiver_accepted')
+  final bool? euWithdrawalWaiverAccepted;
+
+  /// Preferred payment method. card (default) uses the account Payment Method Configuration. pix requires a BRL recurring price and enables Pix Automático. upi requires an INR recurring price and enables RBI-compliant UPI mandates.
+  @JsonKey(includeIfNull: false, name: 'payment_method')
+  final CheckoutPaymentMethodEnum? paymentMethod;
+
+  /// Whether the purchase is for a business. When true, Stripe Checkout requires a billing address for the invoice. When false or omitted, billing address collection is left to Stripe (auto).
+  @JsonKey(includeIfNull: false, name: 'is_business')
+  final bool? isBusiness;
+  @JsonKey(includeIfNull: false)
+  final CnpjSchema? cnpj;
+  @JsonKey(includeIfNull: false)
+  final DistributionQueryParam? distribution;
+  @JsonKey(includeIfNull: false, name: 'distribution_token')
+  final DistributionTokenParam? distributionToken;
+
+  Map<String, Object?> toJson() => _$CreateCheckoutSessionRequestToJson(this);
+}

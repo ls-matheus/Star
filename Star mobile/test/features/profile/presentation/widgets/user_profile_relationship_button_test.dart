@@ -1,0 +1,110 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:star_app/core/theme/star_layout_theme.dart';
+import 'package:star_app/core/theme/star_text_theme.dart';
+import 'package:star_app/core/theme/star_theme.dart';
+import 'package:star_app/core/theme/themes/dark.dart';
+import 'package:star_app/features/friends/domain/friend.dart';
+import 'package:star_app/features/profile/presentation/widgets/user_profile_relationship_button.dart';
+import 'package:star_app/material_ui.dart';
+import 'package:star_app/shared/icons/phosphor.dart';
+
+import '../../../../helpers/test_l10n.dart';
+
+Widget buildTestApp(Widget child) {
+  final colorTheme = buildDarkColorTheme();
+  return MaterialApp(
+    locale: kTestLocale,
+    localizationsDelegates: starLocalizationsDelegates,
+    supportedLocales: StarLocalizations.supportedLocales,
+    theme: buildStarTheme(
+      colorTheme: colorTheme,
+      textTheme: StarTextTheme.fromColors(colorTheme),
+      layoutTheme: StarLayoutTheme.scaled(),
+    ),
+    home: Scaffold(body: child),
+  );
+}
+
+UserProfileRelationshipButton _build({
+  required void Function(String) record,
+  FriendStatus? status,
+  bool isCurrentUser = false,
+}) {
+  return UserProfileRelationshipButton(
+    relationshipStatus: status,
+    isCurrentUser: isCurrentUser,
+    onUnblock: () => record('unblock'),
+    onRemoveFriend: () => record('removeFriend'),
+    onAcceptRequest: () => record('accept'),
+    onCancelRequest: () => record('cancel'),
+    onSendFriendRequest: () => record('send'),
+  );
+}
+
+void main() {
+  group('UserProfileRelationshipButton', () {
+    testWidgets('renders nothing for current user', (tester) async {
+      await tester.pumpWidget(
+        buildTestApp(_build(isCurrentUser: true, record: (_) {})),
+      );
+      expect(find.byType(PhosphorIcon), findsNothing);
+    });
+
+    testWidgets('blocked → prohibit icon → onUnblock', (tester) async {
+      String? action;
+      await tester.pumpWidget(
+        buildTestApp(
+          _build(status: FriendStatus.blocked, record: (a) => action = a),
+        ),
+      );
+      await tester.tap(find.byType(PhosphorIcon));
+      expect(action, 'unblock');
+    });
+
+    testWidgets('accepted → userMinus icon → onRemoveFriend', (tester) async {
+      String? action;
+      await tester.pumpWidget(
+        buildTestApp(
+          _build(status: FriendStatus.accepted, record: (a) => action = a),
+        ),
+      );
+      await tester.tap(find.byType(PhosphorIcon));
+      expect(action, 'removeFriend');
+    });
+
+    testWidgets('pendingIncoming → onAcceptRequest', (tester) async {
+      String? action;
+      await tester.pumpWidget(
+        buildTestApp(
+          _build(
+            status: FriendStatus.pendingIncoming,
+            record: (a) => action = a,
+          ),
+        ),
+      );
+      await tester.tap(find.byType(PhosphorIcon));
+      expect(action, 'accept');
+    });
+
+    testWidgets('pendingOutgoing → onCancelRequest', (tester) async {
+      String? action;
+      await tester.pumpWidget(
+        buildTestApp(
+          _build(
+            status: FriendStatus.pendingOutgoing,
+            record: (a) => action = a,
+          ),
+        ),
+      );
+      await tester.tap(find.byType(PhosphorIcon));
+      expect(action, 'cancel');
+    });
+
+    testWidgets('null (stranger) → onSendFriendRequest', (tester) async {
+      String? action;
+      await tester.pumpWidget(buildTestApp(_build(record: (a) => action = a)));
+      await tester.tap(find.byType(PhosphorIcon));
+      expect(action, 'send');
+    });
+  });
+}

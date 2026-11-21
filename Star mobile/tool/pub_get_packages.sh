@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}"
+
+for pkg in packages/*/; do
+  [[ "${pkg}" == "packages/star_fcm/" ]] && continue
+  [[ "${pkg}" == "packages/star_billing/" ]] && continue
+  [[ "${pkg}" == "packages/desktop_webview_window/" ]] && continue
+  [[ "${pkg}" == "packages/passkeys_android_fdroid/" ]] && continue
+  [[ -f "${pkg}pubspec.yaml" ]] || continue
+  flutter pub get --directory "${pkg}" "$@"
+done

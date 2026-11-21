@@ -1,0 +1,188 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
+part of 'well_known_star_response.dart';
+
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
+
+WellKnownStarResponse _$WellKnownStarResponseFromJson(
+  Map<String, dynamic> json,
+) => $checkedCreate(
+  'WellKnownStarResponse',
+  json,
+  ($checkedConvert) {
+    final val = WellKnownStarResponse(
+      apiCodeVersion: $checkedConvert(
+        'api_code_version',
+        (v) => (v as num?)?.toInt() ?? 0,
+      ),
+      endpoints: $checkedConvert(
+        'endpoints',
+        (v) => v == null
+            ? _$missingInstanceEndpointsSchema()
+            : InstanceEndpointsSchema.fromJson(v as Map<String, dynamic>),
+      ),
+      captcha: $checkedConvert(
+        'captcha',
+        (v) => v == null
+            ? _$missingInstanceCaptchaSchema()
+            : InstanceCaptchaSchema.fromJson(v as Map<String, dynamic>),
+      ),
+      features: $checkedConvert(
+        'features',
+        (v) => v == null
+            ? _$missingInstanceFeaturesSchema()
+            : InstanceFeaturesSchema.fromJson(v as Map<String, dynamic>),
+      ),
+      gif: $checkedConvert(
+        'gif',
+        (v) => v == null
+            ? _$missingInstanceGifSchema()
+            : InstanceGifSchema.fromJson(v as Map<String, dynamic>),
+      ),
+      sso: $checkedConvert(
+        'sso',
+        (v) => v == null
+            ? _$missingInstanceSsoSchema()
+            : InstanceSsoSchema.fromJson(v as Map<String, dynamic>),
+      ),
+      registration: $checkedConvert(
+        'registration',
+        (v) => v == null
+            ? _$missingInstanceRegistrationSchema()
+            : InstanceRegistrationSchema.fromJson(v as Map<String, dynamic>),
+      ),
+      community: $checkedConvert(
+        'community',
+        (v) => v == null
+            ? _$missingInstanceCommunitySchema()
+            : InstanceCommunitySchema.fromJson(v as Map<String, dynamic>),
+      ),
+      services: $checkedConvert(
+        'services',
+        (v) => v == null
+            ? _$missingInstanceServicesSchema()
+            : InstanceServicesSchema.fromJson(v as Map<String, dynamic>),
+      ),
+      limits: $checkedConvert(
+        'limits',
+        (v) => v == null
+            ? _$missingWellKnownStarResponseLimits()
+            : WellKnownStarResponseLimits.fromJson(v as Map<String, dynamic>),
+      ),
+      push: $checkedConvert(
+        'push',
+        (v) => v == null
+            ? _$missingInstancePushSchema()
+            : InstancePushSchema.fromJson(v as Map<String, dynamic>),
+      ),
+      appPublic: $checkedConvert(
+        'app_public',
+        (v) => v == null
+            ? _$missingInstanceAppPublicSchema()
+            : InstanceAppPublicSchema.fromJson(v as Map<String, dynamic>),
+      ),
+      agePolicy: $checkedConvert(
+        'age_policy',
+        (v) => v == null
+            ? _$missingInstanceAgePolicySchema()
+            : InstanceAgePolicySchema.fromJson(v as Map<String, dynamic>),
+      ),
+      codename: $checkedConvert('codename', (v) => v as String?),
+      notice: $checkedConvert(
+        'notice',
+        (v) => v == null
+            ? null
+            : InstanceNoticeSchema.fromJson(v as Map<String, dynamic>),
+      ),
+      domainMigration: $checkedConvert(
+        'domain_migration',
+        (v) => v == null
+            ? null
+            : DomainMigrationDiscoveryResponse.fromJson(
+                v as Map<String, dynamic>,
+              ),
+      ),
+      guildBadges: $checkedConvert(
+        'guild_badges',
+        (v) => (v as List<dynamic>?)
+            ?.map(
+              (e) =>
+                  InstanceGuildBadgeSchema.fromJson(e as Map<String, dynamic>),
+            )
+            .toList(),
+      ),
+      guildBadgesPartial: $checkedConvert(
+        'guild_badges_partial',
+        (v) => v as bool?,
+      ),
+      customBadgesVersion: $checkedConvert(
+        'custom_badges_version',
+        (v) => v as String?,
+      ),
+      builtInGuildBadgeImages: $checkedConvert(
+        'built_in_guild_badge_images',
+        (v) => v == null
+            ? null
+            : InstanceBuiltInGuildBadgeImagesSchema.fromJson(
+                v as Map<String, dynamic>,
+              ),
+      ),
+      hiddenBuiltInGuildBadges: $checkedConvert(
+        'hidden_built_in_guild_badges',
+        (v) => (v as List<dynamic>?)
+            ?.map(
+              (e) => InstanceHiddenBuiltInGuildBadgesSchemaItem.fromJson(
+                e as String,
+              ),
+            )
+            .toList(),
+      ),
+      voiceOrigins: $checkedConvert(
+        'voice_origins',
+        (v) => (v as List<dynamic>?)?.map((e) => e as String).toList(),
+      ),
+    );
+    return val;
+  },
+  fieldKeyMap: const {
+    'apiCodeVersion': 'api_code_version',
+    'appPublic': 'app_public',
+    'agePolicy': 'age_policy',
+    'domainMigration': 'domain_migration',
+    'guildBadges': 'guild_badges',
+    'guildBadgesPartial': 'guild_badges_partial',
+    'customBadgesVersion': 'custom_badges_version',
+    'builtInGuildBadgeImages': 'built_in_guild_badge_images',
+    'hiddenBuiltInGuildBadges': 'hidden_built_in_guild_badges',
+    'voiceOrigins': 'voice_origins',
+  },
+);
+
+Map<String, dynamic> _$WellKnownStarResponseToJson(
+  WellKnownStarResponse instance,
+) => <String, dynamic>{
+  'codename': ?instance.codename,
+  'api_code_version': instance.apiCodeVersion,
+  'endpoints': instance.endpoints,
+  'captcha': instance.captcha,
+  'features': instance.features,
+  'gif': instance.gif,
+  'sso': instance.sso,
+  'registration': instance.registration,
+  'community': instance.community,
+  'services': instance.services,
+  'limits': instance.limits,
+  'push': instance.push,
+  'app_public': instance.appPublic,
+  'age_policy': instance.agePolicy,
+  'notice': ?instance.notice,
+  'domain_migration': ?instance.domainMigration,
+  'guild_badges': ?instance.guildBadges,
+  'guild_badges_partial': ?instance.guildBadgesPartial,
+  'custom_badges_version': ?instance.customBadgesVersion,
+  'built_in_guild_badge_images': ?instance.builtInGuildBadgeImages,
+  'hidden_built_in_guild_badges': ?instance.hiddenBuiltInGuildBadges,
+  'voice_origins': ?instance.voiceOrigins,
+};

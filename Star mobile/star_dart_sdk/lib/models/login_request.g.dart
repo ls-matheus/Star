@@ -1,0 +1,26 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
+part of 'login_request.dart';
+
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
+
+LoginRequest _$LoginRequestFromJson(Map<String, dynamic> json) =>
+    $checkedCreate('LoginRequest', json, ($checkedConvert) {
+      final val = LoginRequest._(
+        password: $checkedConvert('password', (v) => v as PasswordType? ?? ''),
+        email: $checkedConvert('email', (v) => v as EmailType?),
+        login: $checkedConvert('login', (v) => v as String?),
+        inviteCodeValue: $checkedConvert('invite_code', (v) => v as String?),
+      );
+      return val;
+    }, fieldKeyMap: const {'inviteCodeValue': 'invite_code'});
+
+Map<String, dynamic> _$LoginRequestToJson(LoginRequest instance) =>
+    <String, dynamic>{
+      'email': ?instance.email,
+      'login': ?instance.login,
+      'password': instance.password,
+      'invite_code': ?instance.inviteCodeValue,
+    };

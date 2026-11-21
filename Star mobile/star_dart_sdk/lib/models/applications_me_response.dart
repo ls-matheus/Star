@@ -1,0 +1,75 @@
+// coverage:ignore-file
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: type=lint, unused_import, invalid_annotation_target, unnecessary_import
+
+import 'package:json_annotation/json_annotation.dart';
+
+import 'applications_me_response_bot.dart';
+import 'snowflake_string_type.dart';
+import 'user_partial_response.dart';
+
+part 'applications_me_response.g.dart';
+
+@JsonSerializable()
+class ApplicationsMeResponse {
+  const ApplicationsMeResponse({
+    required this.id,
+    required this.name,
+    required this.icon,
+    required this.description,
+    required this.botPublic,
+    required this.botRequireCodeGrant,
+    required this.verifyKey,
+    required this.owner,
+    this.bot,
+    this.redirectUris,
+  });
+
+  factory ApplicationsMeResponse.fromJson(Map<String, Object?> json) =>
+      _$ApplicationsMeResponseFromJson(json);
+
+  /// The unique identifier of the application
+  @JsonKey(defaultValue: '')
+  final SnowflakeStringType id;
+
+  /// The name of the application
+  @JsonKey(defaultValue: '')
+  final String name;
+
+  /// The persisted bot avatar hash used as the application icon, if available
+  @JsonKey(includeIfNull: true)
+  final String? icon;
+
+  /// The persisted bot profile bio used as the application description
+  @JsonKey(includeIfNull: true)
+  final String? description;
+
+  /// Whether the bot can be invited by anyone
+  @JsonKey(name: 'bot_public', defaultValue: false)
+  final bool botPublic;
+
+  /// Whether the bot requires OAuth2 code grant
+  @JsonKey(name: 'bot_require_code_grant', defaultValue: false)
+  final bool botRequireCodeGrant;
+
+  /// Compatibility placeholder for AppInfo clients until keys are persisted
+  @JsonKey(name: 'verify_key', defaultValue: '')
+  final String verifyKey;
+
+  /// The owner of the application
+  @JsonKey(defaultValue: _$missingUserPartialResponse)
+  final UserPartialResponse owner;
+
+  /// The bot user associated with the application
+  @JsonKey(includeIfNull: false)
+  final ApplicationsMeResponseBot? bot;
+
+  /// The registered redirect URIs for OAuth2
+  @JsonKey(includeIfNull: false, name: 'redirect_uris')
+  final List<String>? redirectUris;
+
+  Map<String, Object?> toJson() => _$ApplicationsMeResponseToJson(this);
+}
+
+UserPartialResponse _$missingUserPartialResponse() =>
+    UserPartialResponse.fromJson(const <String, dynamic>{});

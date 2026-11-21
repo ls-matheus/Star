@@ -1,0 +1,109 @@
+import 'package:star_app/core/providers/instance/well_known_provider.dart';
+import 'package:star_dart/export.dart';
+
+class FakeWellKnown extends WellKnown {
+  @override
+  Future<WellKnownStarResponse> build() async {
+    return const WellKnownStarResponse(
+      apiCodeVersion: 1,
+      endpoints: InstanceEndpointsSchema(
+        api: '',
+        apiClient: '',
+        apiPublic: '',
+        gateway: '',
+        media: '',
+        staticCdn: '',
+        marketing: '',
+        admin: '',
+        invite: '',
+        gift: '',
+        webapp: '',
+      ),
+      captcha: InstanceCaptchaSchema(provider: CaptchaProviderSchema.none),
+      features: InstanceFeaturesSchema(
+        voiceEnabled: false,
+        stripeEnabled: false,
+        premiumEnabled: false,
+        stripeServiceable: false,
+        selfHosted: false,
+        presignedAttachmentUploads: false,
+        emailsEnabled: false,
+        phoneVerificationEnabled: false,
+        accountIdentity: AccountIdentityModeSchema.email,
+        tagStyle: TagStyleSchema.random,
+      ),
+      gif: InstanceGifSchema(
+        provider: '',
+        displayName: '',
+        attributionRequired: false,
+      ),
+      sso: InstanceSsoSchema(
+        enabled: false,
+        enforced: false,
+        usernameFromProvider: false,
+        displayName: null,
+        buttonLabel: null,
+        redirectUri: '',
+      ),
+      registration: InstanceRegistrationSchema(
+        mode: InstanceRegistrationModeSchema.open,
+        adminRegistrationUrlsEnabled: false,
+      ),
+      community: InstanceCommunitySchema(
+        singleCommunity: false,
+        singleCommunityGuildId: null,
+        directMessagesDisabled: false,
+        guildCreateAccess: true,
+      ),
+      services: InstanceServicesSchema(
+        connectionProviders: <InstanceConnectionProviderSchema>[],
+        gifEnabled: false,
+        youtubeEnabled: false,
+        blueskyEnabled: false,
+      ),
+      limits: WellKnownStarResponseLimits(
+        version: 2,
+        traitDefinitions: <String>[],
+        rules: <WellKnownStarResponseLimitsRules>[],
+        defaultsHash: '',
+      ),
+      push: InstancePushSchema(publicVapidKey: null),
+      appPublic: InstanceAppPublicSchema(
+        branding: InstanceBrandingSchema(
+          productName: '',
+          iconUrl: null,
+          symbolUrl: null,
+          logoUrl: null,
+          wordmarkUrl: null,
+          faviconUrl: null,
+          themeColor: null,
+          statusPageUrl: null,
+          statusPageInstatus: false,
+          statusPageIncidentHistoryUrl: null,
+          premiumProductName: 'Plutonium',
+          premiumInfoUrl: null,
+          faviconDarkUrl: null,
+          signInBackdropUrl: null,
+          premiumPageColor: null,
+          premiumShowcaseExpressionsUrl: null,
+          premiumShowcaseProfileUrl: null,
+          premiumShowcaseStreamUrl: null,
+          premiumShowcaseUploadUrl: null,
+          customCss: null,
+          uploadLimitMessage: null,
+          trustedDomains: <String>[],
+        ),
+        setup: InstanceSetupSchema(configured: true, adminUrl: null),
+        legal: InstanceAppPublicSchemaLegal(
+          termsUrl: null,
+          privacyUrl: null,
+          guidelinesUrl: null,
+        ),
+        registration: InstanceAppPublicSchemaRegistration(
+          collectDateOfBirth: false,
+        ),
+      ),
+      agePolicy: InstanceAgePolicySchema(geos: []),
+    );
+  }
+}

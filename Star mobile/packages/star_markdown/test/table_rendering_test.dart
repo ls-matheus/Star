@@ -1,0 +1,603 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:star_markdown/src/config/star_markdown_config.dart';
+import 'package:star_markdown/src/contexts/star_markdown_context.dart';
+import 'package:star_markdown/src/widgets/star_markdown.dart';
+import 'package:material_ui/material_ui.dart';
+import 'support/native_test_parser.dart';
+
+const Color _headerBackgroundColor = Color(0xFF112233);
+const Color _rowOddBackgroundColor = Color(0xFF223344);
+const Color _rowEvenBackgroundColor = Color(0xFF334455);
+const Color _tableBorderColor = Color(0xFF445566);
+const Color _headerTextColor = Color(0xFF556677);
+
+const StarMarkdownConfig _testMarkdownConfig = StarMarkdownConfig(
+  unicodeEmojiUrlBuilder: _noopUnicodeEmojiUrl,
+  customEmojiUrlBuilder: _noopCustomEmojiUrl,
+  tableBorderColor: _tableBorderColor,
+  tableHeaderBackgroundColor: _headerBackgroundColor,
+  tableHeaderTextColor: _headerTextColor,
+  tableRowOddBackgroundColor: _rowOddBackgroundColor,
+  tableRowEvenBackgroundColor: _rowEvenBackgroundColor,
+  tableBorderRadius: BorderRadius.all(Radius.circular(6)),
+);
+
+String? _noopUnicodeEmojiUrl(String unicode) => null;
+
+String _noopCustomEmojiUrl({
+  required String id,
+  required bool animated,
+  required int size,
+}) => '';
+
+const TextStyle _baseStyle = TextStyle(fontSize: 16, height: 1.375);
+const double _testMinCellWidth = 80;
+
+Finder _tableCellWithColor(Color color) {
+  return find.byWidgetPredicate(
+    (Widget widget) =>
+        widget is Container &&
+        widget.color == color &&
+        widget.constraints?.minWidth == _testMinCellWidth,
+  );
+}
+
+void main() {
+  group('table rendering', () {
+    testWidgets('standard context renders table cells', (tester) async {
+      const String input = '''
+| Header | Value |
+| --- | --- |
+| A | 1 |''';
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: StarMarkdown(
+              astParser: parseTestMarkdownAst,
+              data: input,
+              config: _testMarkdownConfig,
+              baseStyle: _baseStyle,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.textContaining('Header', findRichText: true), findsOneWidget);
+      expect(find.textContaining('Value', findRichText: true), findsOneWidget);
+      expect(find.textContaining('A', findRichText: true), findsOneWidget);
+      expect(find.byType(Table), findsOneWidget);
+      expect(find.byType(SingleChildScrollView), findsOneWidget);
+    });
+
+    testWidgets('renders a table that follows a text line without a blank line', (
+      tester,
+    ) async {
+      const String input =
+          "Example of a table I was building to compare web frameworks that renders on desktop that doesn't on mobile cc <@1472583967301656587> \r\n"
+          '| Framework | Type | Pros | Cons | Best for |\r\n'
+          '| --------- | ---- | ---- | ---- | -------- |\r\n'
+          '| React | UI library | Largest ecosystem | Requires choosing additional libraries | Interactive web apps |\r\n'
+          '| Vue | UI framework | Easy to learn | Smaller ecosystem than React | Beginners |';
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: StarMarkdown(
+              astParser: parseTestMarkdownAst,
+              data: input,
+              config: _testMarkdownConfig,
+              baseStyle: _baseStyle,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byType(Table), findsOneWidget);
+      expect(
+        find.textContaining('Framework', findRichText: true),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Vue', findRichText: true), findsOneWidget);
+    });
+
+    group('wide table scrollbar', () {
+      const Color thumbColor = Color(0xFF778899);
+      final String wideTable = [
+        '|${List<String>.generate(30, (int i) => 'c$i').join('|')}|',
+        '|${List<String>.filled(30, '-').join('|')}|',
+        '|${List<String>.generate(30, (int i) => 'v$i').join('|')}|',
+      ].join('\n');
+
+      Future<void> pumpWideTable(
+        WidgetTester tester, {
+        double offsetAbove = 0,
+      }) {
+        return tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData(
+              scrollbarTheme: ScrollbarThemeData(
+                thumbColor: WidgetStateProperty.all(thumbColor),
+                radius: const Radius.circular(4),
+                thickness: WidgetStateProperty.all<double>(6),
+              ),
+            ),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(padding: const EdgeInsets.only(bottom: 40)),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: ListView(
+                // An explicit padding leaves the screen inset in MediaQuery
+                // for the table, as the chat's message list does.
+                padding: EdgeInsets.zero,
+                children: [
+                  SizedBox(height: offsetAbove),
+                  StarMarkdown(
+                    astParser: parseTestMarkdownAst,
+                    data: wideTable,
+                    config: _testMarkdownConfig,
+                    baseStyle: _baseStyle,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
+
+      PaintPattern paintsThumbOnBottomEdge(WidgetTester tester) {
+        final double tableHeight = tester.getSize(find.byType(Table)).height;
+        return paints..something((Symbol method, List<dynamic> arguments) {
+          return method == #drawRRect &&
+              (arguments[1] as Paint).color.toARGB32() ==
+                  thumbColor.toARGB32() &&
+              ((arguments[0] as RRect).bottom - tableHeight).abs() < 1;
+        });
+      }
+
+      testWidgets(
+        'flashes a themed thumb on the table bottom edge, then fades it',
+        (tester) async {
+          await pumpWideTable(tester);
+          await tester.pumpAndSettle();
+
+          expect(find.byType(Scrollbar), paintsThumbOnBottomEdge(tester));
+
+          await tester.pump(const Duration(seconds: 1));
+          await tester.pumpAndSettle();
+
+          expect(
+            find.byType(Scrollbar),
+            isNot(paintsThumbOnBottomEdge(tester)),
+          );
+        },
+        variant: TargetPlatformVariant.only(TargetPlatform.android),
+      );
+
+      testWidgets(
+        'flashes the thumb when a table built off screen scrolls into view',
+        (tester) async {
+          // 700 is past the 600 tall test screen but inside the list's cache
+          // extent, so the table is built before it is visible, as in a chat.
+          await pumpWideTable(tester, offsetAbove: 700);
+          await tester.pump(const Duration(seconds: 1));
+          await tester.pumpAndSettle();
+          expect(find.byType(Table, skipOffstage: false), findsOneWidget);
+
+          final ScrollPosition list = tester
+              .state<ScrollableState>(find.byType(Scrollable).first)
+              .position;
+          list.jumpTo(list.maxScrollExtent);
+          await tester.pumpAndSettle();
+
+          expect(find.byType(Scrollbar), paintsThumbOnBottomEdge(tester));
+          await tester.pump(const Duration(seconds: 1));
+          await tester.pumpAndSettle();
+        },
+        variant: TargetPlatformVariant.only(TargetPlatform.android),
+      );
+
+      testWidgets(
+        'dragging on the thumb scrolls like the table, not like a thumb',
+        (tester) async {
+          await pumpWideTable(tester);
+          await tester.pumpAndSettle();
+          final Rect area = tester.getRect(find.byType(Scrollbar));
+
+          await tester.dragFrom(
+            area.bottomLeft + const Offset(20, -4),
+            const Offset(200, 0),
+          );
+          await tester.pumpAndSettle();
+
+          final ScrollableState scrollable = tester.state(
+            find.descendant(
+              of: find.byType(Scrollbar),
+              matching: find.byType(Scrollable),
+            ),
+          );
+          expect(scrollable.position.pixels, 0);
+        },
+        variant: TargetPlatformVariant.only(TargetPlatform.android),
+      );
+    });
+
+    testWidgets('uses configured header and zebra row backgrounds', (
+      tester,
+    ) async {
+      const String input = '''
+| Header | Value |
+| --- | --- |
+| Odd | 1 |
+| Even | 2 |''';
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: StarMarkdown(
+              astParser: parseTestMarkdownAst,
+              data: input,
+              config: _testMarkdownConfig,
+              baseStyle: _baseStyle,
+            ),
+          ),
+        ),
+      );
+
+      expect(_tableCellWithColor(_headerBackgroundColor), findsNWidgets(2));
+      expect(_tableCellWithColor(_rowOddBackgroundColor), findsNWidgets(2));
+      expect(_tableCellWithColor(_rowEvenBackgroundColor), findsNWidgets(2));
+    });
+
+    testWidgets('applies column alignment from markdown separator', (
+      tester,
+    ) async {
+      const String input = '''
+| Left | Center | Right |
+| :--- | :---: | ---: |
+| A | B | C |''';
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: StarMarkdown(
+              astParser: parseTestMarkdownAst,
+              data: input,
+              config: _testMarkdownConfig,
+              baseStyle: _baseStyle,
+            ),
+          ),
+        ),
+      );
+
+      final Iterable<RichText> richTexts = tester.widgetList<RichText>(
+        find.descendant(
+          of: find.byType(Table),
+          matching: find.byType(RichText),
+        ),
+      );
+      final List<TextAlign> alignments = richTexts
+          .skip(3)
+          .take(3)
+          .map((RichText richText) => richText.textAlign)
+          .toList();
+      expect(alignments, <TextAlign>[
+        TextAlign.left,
+        TextAlign.center,
+        TextAlign.right,
+      ]);
+    });
+
+    testWidgets('wraps table in rounded clip and border', (tester) async {
+      const String input = '''
+| Header | Value |
+| --- | --- |
+| A | 1 |''';
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: StarMarkdown(
+              astParser: parseTestMarkdownAst,
+              data: input,
+              config: _testMarkdownConfig,
+              baseStyle: _baseStyle,
+            ),
+          ),
+        ),
+      );
+
+      final ClipRRect clip = tester.widget<ClipRRect>(
+        find.descendant(
+          of: find.byType(SingleChildScrollView),
+          matching: find.byType(ClipRRect),
+        ),
+      );
+      expect(clip.borderRadius, const BorderRadius.all(Radius.circular(6)));
+      final Table table = tester.widget<Table>(find.byType(Table));
+      expect(
+        table.border?.borderRadius,
+        const BorderRadius.all(Radius.circular(6)),
+      );
+      expect(table.border?.top.color, _tableBorderColor);
+      expect(table.border?.horizontalInside.color, _tableBorderColor);
+    });
+
+    testWidgets('embed context does not render table structure', (
+      tester,
+    ) async {
+      const String input = '| not | table |';
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: StarMarkdown(
+              astParser: parseTestMarkdownAst,
+              data: input,
+              config: _testMarkdownConfig,
+              context: StarMarkdownContext.restrictedEmbedDescription,
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        find.textContaining('| not | table |', findRichText: true),
+        findsOneWidget,
+      );
+      expect(find.byType(Table), findsNothing);
+    });
+
+    testWidgets('emoji row cells share the same background height', (
+      tester,
+    ) async {
+      const String input = '''
+| Header | Value | Other |
+| --- | --- | --- |
+| text only | <:pingumusic:123> <:pinguvibe:123> cool beans | more text |''';
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: StarMarkdown(
+              astParser: parseTestMarkdownAst,
+              data: input,
+              config: _testMarkdownConfig,
+              baseStyle: _baseStyle,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final Finder rowCellFinder = _tableCellWithColor(_rowOddBackgroundColor);
+
+      expect(rowCellFinder, findsNWidgets(3));
+      final double firstHeight = tester.getSize(rowCellFinder.first).height;
+      for (var i = 1; i < 3; i++) {
+        expect(
+          tester.getSize(rowCellFinder.at(i)).height,
+          closeTo(firstHeight, 1),
+          reason: 'all cells in an emoji row should fill the same row height',
+        );
+      }
+    });
+
+    testWidgets('header row cells share the same background height', (
+      tester,
+    ) async {
+      const String input = '''
+| hello | this is quite a nice table | yeah | :pinched_fingers: |
+| ---- | ------- | ------ | ------- |
+| a | b | c | d |''';
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 350,
+              child: StarMarkdown(
+                astParser: parseTestMarkdownAst,
+                data: input,
+                config: _testMarkdownConfig,
+                baseStyle: _baseStyle,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final Finder headerCellFinder = _tableCellWithColor(
+        _headerBackgroundColor,
+      );
+
+      expect(headerCellFinder, findsNWidgets(4));
+      final double firstHeight = tester.getSize(headerCellFinder.first).height;
+      for (var i = 1; i < 4; i++) {
+        expect(
+          tester.getSize(headerCellFinder.at(i)).height,
+          closeTo(firstHeight, 1),
+          reason: 'all header cells should fill the same row height',
+        );
+      }
+    });
+
+    testWidgets('header cells use top alignment like web baseline', (
+      tester,
+    ) async {
+      const String input = '''
+| hello | this is quite a nice table | yeah |
+| ---- | ------- | ------ |
+| a | b | c |''';
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 280,
+              child: StarMarkdown(
+                astParser: parseTestMarkdownAst,
+                data: input,
+                config: _testMarkdownConfig,
+                baseStyle: _baseStyle,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final Container headerCell = tester.widget<Container>(
+        _tableCellWithColor(_headerBackgroundColor).first,
+      );
+      expect(headerCell.alignment, AlignmentDirectional.topStart);
+      expect(
+        headerCell.padding,
+        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      );
+    });
+
+    testWidgets('body cells use vertical center alignment like web', (
+      tester,
+    ) async {
+      const String input = '''
+| Header |
+| --- |
+| Value |''';
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: StarMarkdown(
+              astParser: parseTestMarkdownAst,
+              data: input,
+              config: _testMarkdownConfig,
+              baseStyle: _baseStyle,
+            ),
+          ),
+        ),
+      );
+
+      final Container bodyCell = tester.widget<Container>(
+        _tableCellWithColor(_rowOddBackgroundColor).first,
+      );
+      expect(bodyCell.alignment, AlignmentDirectional.centerStart);
+    });
+
+    testWidgets('table cell content respects padding inset', (tester) async {
+      const String input = '''
+| hello | value |
+| --- | --- |
+| a | b |''';
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: StarMarkdown(
+              astParser: parseTestMarkdownAst,
+              data: input,
+              config: _testMarkdownConfig,
+              baseStyle: _baseStyle,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final Finder helloText = find.descendant(
+        of: _tableCellWithColor(_headerBackgroundColor).first,
+        matching: find.textContaining('hello', findRichText: true),
+      );
+      final Finder helloCell = _tableCellWithColor(
+        _headerBackgroundColor,
+      ).first;
+      expect(
+        tester.getTopLeft(helloText).dx - tester.getTopLeft(helloCell).dx,
+        closeTo(12, 1),
+      );
+      expect(
+        tester.getTopLeft(helloText).dy - tester.getTopLeft(helloCell).dy,
+        closeTo(8, 1),
+      );
+    });
+
+    testWidgets('empty body cells keep the same row height as populated rows', (
+      tester,
+    ) async {
+      const String input = '''
+| A | B | C |
+| --- | --- | --- |
+| one | two | three |
+|  | two | three |
+|   | two | three |
+| one | two |''';
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: StarMarkdown(
+              astParser: parseTestMarkdownAst,
+              data: input,
+              config: _testMarkdownConfig,
+              baseStyle: _baseStyle,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final Finder oddRowCells = _tableCellWithColor(_rowOddBackgroundColor);
+      final Finder evenRowCells = _tableCellWithColor(_rowEvenBackgroundColor);
+      expect(oddRowCells, findsNWidgets(6));
+      expect(evenRowCells, findsNWidgets(6));
+
+      final List<double> rowHeights = <double>[
+        tester.getSize(oddRowCells.at(0)).height,
+        tester.getSize(evenRowCells.at(0)).height,
+        tester.getSize(oddRowCells.at(3)).height,
+        tester.getSize(evenRowCells.at(3)).height,
+      ];
+      for (var i = 1; i < rowHeights.length; i++) {
+        expect(
+          rowHeights[i],
+          closeTo(rowHeights[0], 1),
+          reason:
+              'body rows with empty or missing cells should match full rows',
+        );
+      }
+    });
+
+    testWidgets('wide emoji table renders with visible height', (tester) async {
+      const String input = '''
+| hello | this is quite a nice table | yeah | :pinched_fingers:  |
+| ---- | ------- | ------ | ------- |
+| pingu pingu | <:pingumusic:1> | <:pingumusic:1><:pinguvibe:1> cool beans |
+| hmm | strange formatting | when emotes are involved | <:HURRR:1> |
+| quite silly | <:alien:1><:alien:1><:alien:1> | Bogos binted | huh? |''';
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 350,
+              child: StarMarkdown(
+                astParser: parseTestMarkdownAst,
+                data: input,
+                config: _testMarkdownConfig,
+                baseStyle: _baseStyle,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.getSize(find.byType(Table)).height, greaterThan(50));
+      expect(find.textContaining('hello', findRichText: true), findsOneWidget);
+    });
+  });
+}

@@ -1,0 +1,43 @@
+import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:star_app/core/database/star_database.dart';
+
+StarDatabase openTestDatabase() {
+  final StarDatabase database = StarDatabase.forTesting(
+    NativeDatabase.memory(),
+  );
+  addTearDown(() async {
+    await _releaseWidgetTree();
+    await database.close().timeout(
+      const Duration(seconds: 2),
+      onTimeout: database.executor.close,
+    );
+  });
+  return database;
+}
+
+Future<void> releaseTestWidgetTree(WidgetTester tester) async {
+  await tester.pumpWidget(const SizedBox.shrink());
+  await tester.pump(const Duration(milliseconds: 1));
+}
+
+Future<void> flushTestWidgetBinding() => _releaseWidgetTree();
+
+Future<void> _releaseWidgetTree() async {
+  if (BindingBase.debugBindingType() == null) {
+    return;
+  }
+  if (WidgetsBinding.instance case final TestWidgetsFlutterBinding binding
+      when binding.inTest) {
+    binding
+      ..attachRootWidget(binding.wrapWithDefaultView(const SizedBox.shrink()))
+      ..scheduleFrame();
+    await binding.pump();
+    await binding.pump(Duration.zero);
+    for (int i = 0; i < 3; i++) {
+      await binding.pump(const Duration(milliseconds: 1));
+    }
+  }
+}

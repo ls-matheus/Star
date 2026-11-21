@@ -1,0 +1,679 @@
+// coverage:ignore-file
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: type=lint, unused_import, invalid_annotation_target, unnecessary_import
+
+import 'package:dio/dio.dart' hide Headers;
+import 'package:retrofit/retrofit.dart';
+import 'package:retrofit/error_logger.dart';
+
+import '../models/audit_log_action_type_input.dart';
+import '../models/channel_create_request.dart';
+import '../models/channel_list_response.dart';
+import '../models/channel_position_update_request.dart';
+import '../models/channel_response.dart';
+import '../models/guild_audit_log_list_response.dart';
+import '../models/guild_ban_create_request.dart';
+import '../models/guild_ban_list_response.dart';
+import '../models/guild_ban_response.dart';
+import '../models/guild_create_request.dart';
+import '../models/guild_delete_request.dart';
+import '../models/guild_emoji_bulk_create_request.dart';
+import '../models/guild_emoji_bulk_create_response.dart';
+import '../models/guild_emoji_clone_request.dart';
+import '../models/guild_emoji_create_request.dart';
+import '../models/guild_emoji_response.dart';
+import '../models/guild_emoji_update_request.dart';
+import '../models/guild_emoji_with_user_list_response.dart';
+import '../models/guild_list_response.dart';
+import '../models/guild_member_list_response.dart';
+import '../models/guild_member_response.dart';
+import '../models/guild_member_search_request.dart';
+import '../models/guild_member_search_response.dart';
+import '../models/guild_member_update_request.dart';
+import '../models/guild_response.dart';
+import '../models/guild_role_create_request.dart';
+import '../models/guild_role_hoist_positions_request.dart';
+import '../models/guild_role_list_response.dart';
+import '../models/guild_role_positions_request.dart';
+import '../models/guild_role_response.dart';
+import '../models/guild_role_update_request.dart';
+import '../models/guild_sticker_bulk_create_request.dart';
+import '../models/guild_sticker_bulk_create_response.dart';
+import '../models/guild_sticker_clone_request.dart';
+import '../models/guild_sticker_create_request.dart';
+import '../models/guild_sticker_response.dart';
+import '../models/guild_sticker_update_request.dart';
+import '../models/guild_sticker_with_user_list_response.dart';
+import '../models/guild_transfer_ownership_with_verification_request.dart';
+import '../models/guild_update_request.dart';
+import '../models/guild_vanity_url_response.dart';
+import '../models/guild_vanity_url_update_request.dart';
+import '../models/guild_vanity_url_update_response.dart';
+import '../models/int32_type.dart';
+import '../models/my_guild_member_update_request.dart';
+import '../models/snowflake_type.dart';
+import '../models/sudo_verification_schema.dart';
+
+part 'guilds_api.g.dart';
+
+@RestApi()
+abstract class GuildsApi {
+  factory GuildsApi(Dio dio, {String? baseUrl}) = _GuildsApi;
+
+  /// Create guild.
+  ///
+  /// Only verified accounts that are not bots can create guilds. A self-hosted instance can restrict creation to admins and users granted the feature_guild_create limit.
+  ///
+  /// [body] - Name not received - field will be skipped.
+  @POST('/guilds')
+  Future<GuildResponse> createGuild({@Body() required GuildCreateRequest body});
+
+  /// Get guild information.
+  ///
+  /// User must be a member of the guild, or visiting it, to access this endpoint. Someone visiting gets channels that @everyone can see, without members, and visiting set to true. Requires guilds OAuth scope if using bearer token.
+  ///
+  /// [guildId] - The ID of the guild.
+  @GET('/guilds/{guild_id}')
+  Future<GuildResponse> getGuild({
+    @Path('guild_id') required SnowflakeType guildId,
+  });
+
+  /// Update guild settings.
+  ///
+  /// Requires manage_guild permission. Updates guild name, description, icon, banner, and other configuration options.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [body] - Name not received - field will be skipped.
+  @PATCH('/guilds/{guild_id}')
+  Future<GuildResponse> updateGuild({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Body() GuildUpdateRequest? body,
+  });
+
+  /// List guild audit logs.
+  ///
+  /// List guild audit logs. Requires view_audit_logs permission. Returns guild activity history with pagination and action filtering.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [limit] - Maximum number of audit log entries to return (1-100).
+  ///
+  /// [before] - Get entries before this audit log entry ID.
+  ///
+  /// [after] - Get entries after this audit log entry ID.
+  ///
+  /// [userId] - Filter entries by the user who performed the action.
+  ///
+  /// [actionType] - Filter entries by the type of action.
+  @GET('/guilds/{guild_id}/audit-logs')
+  Future<GuildAuditLogListResponse> listGuildAuditLogs({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Query('limit') Int32Type? limit,
+    @Query('before') SnowflakeType? before,
+    @Query('after') SnowflakeType? after,
+    @Query('user_id') SnowflakeType? userId,
+    @Query('action_type') AuditLogActionTypeInput? actionType,
+  });
+
+  /// List guild bans.
+  ///
+  /// List guild bans. Requires ban_members permission. Returns all banned users for the guild including ban reasons and expiry times.
+  ///
+  /// [guildId] - The ID of the guild.
+  @GET('/guilds/{guild_id}/bans')
+  Future<GuildBanListResponse> listGuildBans({
+    @Path('guild_id') required SnowflakeType guildId,
+  });
+
+  /// Get guild ban.
+  ///
+  /// Get guild ban. Requires ban_members permission. Returns the ban for the specified user including the ban reason and expiry time.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [userId] - The ID of the user.
+  @GET('/guilds/{guild_id}/bans/{user_id}')
+  Future<GuildBanResponse> getGuildBan({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Path('user_id') required SnowflakeType userId,
+  });
+
+  /// Ban guild member.
+  ///
+  /// Ban guild member. Requires ban_members permission. Prevents user from joining; optionally deletes recent messages and sets ban expiry duration.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [userId] - The ID of the user.
+  ///
+  /// [body] - Name not received - field will be skipped.
+  @PUT('/guilds/{guild_id}/bans/{user_id}')
+  Future<void> banGuildMember({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Path('user_id') required SnowflakeType userId,
+    @Body() GuildBanCreateRequest? body,
+  });
+
+  /// Unban guild member.
+  ///
+  /// Unban guild member. Requires ban_members permission. Removes ban and allows user to rejoin the guild.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [userId] - The ID of the user.
+  @DELETE('/guilds/{guild_id}/bans/{user_id}')
+  Future<void> unbanGuildMember({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Path('user_id') required SnowflakeType userId,
+  });
+
+  /// List guild channels.
+  ///
+  /// List guild channels. Returns all channels in the guild that the user has access to view. Someone visiting the guild gets the channels that @everyone can see, with only the @everyone permission overwrite.
+  ///
+  /// [guildId] - The ID of the guild.
+  @GET('/guilds/{guild_id}/channels')
+  Future<ChannelListResponse> listGuildChannels({
+    @Path('guild_id') required SnowflakeType guildId,
+  });
+
+  /// Create guild channel.
+  ///
+  /// Create guild channel. Requires manage_channels permission. Creates a new text, voice, or category channel in the guild.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [body] - Name not received - field will be skipped.
+  @POST('/guilds/{guild_id}/channels')
+  Future<ChannelResponse> createGuildChannel({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Body() required ChannelCreateRequest body,
+  });
+
+  /// Update channel positions.
+  ///
+  /// Update channel positions. Requires manage_channels permission. Reorders channels and optionally changes parent categories and permission locks.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [body] - Name not received - field will be skipped.
+  @PATCH('/guilds/{guild_id}/channels')
+  Future<void> updateGuildChannelPositions({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Body() required ChannelPositionUpdateRequest body,
+  });
+
+  /// Delete guild.
+  ///
+  /// Only guild owner can delete. Requires sudo mode verification (MFA). Permanently deletes the guild and all associated data.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [body] - Name not received - field will be skipped.
+  @POST('/guilds/{guild_id}/delete')
+  Future<void> deleteGuild({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Body() GuildDeleteRequest? body,
+  });
+
+  /// Create guild emoji.
+  ///
+  /// Create guild emoji. Requires manage_emojis permission. Uploads and registers a new custom emoji for the guild.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [body] - Name not received - field will be skipped.
+  @POST('/guilds/{guild_id}/emojis')
+  Future<GuildEmojiResponse> createGuildEmoji({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Body() required GuildEmojiCreateRequest body,
+  });
+
+  /// List guild emojis.
+  ///
+  /// List guild emojis. Returns all custom emojis for the guild including metadata about creators and timestamps.
+  ///
+  /// [guildId] - The ID of the guild.
+  @GET('/guilds/{guild_id}/emojis')
+  Future<GuildEmojiWithUserListResponse> listGuildEmojis({
+    @Path('guild_id') required SnowflakeType guildId,
+  });
+
+  /// Bulk create guild emojis.
+  ///
+  /// Bulk create guild emojis. Requires manage_emojis permission. Creates multiple emojis in a single request for efficiency.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [body] - Name not received - field will be skipped.
+  @POST('/guilds/{guild_id}/emojis/bulk')
+  Future<GuildEmojiBulkCreateResponse> bulkCreateGuildEmojis({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Body() required GuildEmojiBulkCreateRequest body,
+  });
+
+  /// Clone guild emoji.
+  ///
+  /// Clone an existing emoji into this guild by referencing its id. Copies the source image server-side, so the client does not need to re-upload it. Requires manage_emojis permission in the target guild, and the source guild must permit cloning.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [body] - Name not received - field will be skipped.
+  @POST('/guilds/{guild_id}/emojis/clone')
+  Future<GuildEmojiResponse> cloneGuildEmoji({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Body() required GuildEmojiCloneRequest body,
+  });
+
+  /// Update guild emoji.
+  ///
+  /// Update guild emoji. Requires manage_emojis permission. Renames or updates properties of an existing emoji.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [emojiId] - The ID of the emoji.
+  ///
+  /// [body] - Name not received - field will be skipped.
+  @PATCH('/guilds/{guild_id}/emojis/{emoji_id}')
+  Future<GuildEmojiResponse> updateGuildEmoji({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Path('emoji_id') required SnowflakeType emojiId,
+    @Body() required GuildEmojiUpdateRequest body,
+  });
+
+  /// Delete guild emoji.
+  ///
+  /// Delete guild emoji. Requires manage_emojis permission. Removes a custom emoji from the guild; optionally purges all references.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [emojiId] - The ID of the emoji.
+  ///
+  /// [purge] - Whether to also purge the asset from storage.
+  @DELETE('/guilds/{guild_id}/emojis/{emoji_id}')
+  Future<void> deleteGuildEmoji({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Path('emoji_id') required SnowflakeType emojiId,
+    @Query('purge') String? purge = 'false',
+  });
+
+  /// List guild members.
+  ///
+  /// List guild members. Supports pagination with limit and after cursor. Returns member information for the specified guild.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [limit] - Maximum number of members to return (1-1000, default 1).
+  ///
+  /// [after] - Get members after this user ID for pagination.
+  @GET('/guilds/{guild_id}/members')
+  Future<GuildMemberListResponse> listGuildMembers({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Query('after') SnowflakeType? after,
+    @Query('limit') int? limit = 1,
+  });
+
+  /// Search guild members.
+  ///
+  /// Search and filter guild members with pagination support.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [body] - Name not received - field will be skipped.
+  @POST('/guilds/{guild_id}/members-search')
+  Future<GuildMemberSearchResponse> searchGuildMembers({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Body() GuildMemberSearchRequest? body,
+  });
+
+  /// Get current user guild member.
+  ///
+  /// Get current user guild member. Returns the member information for the authenticated user in the specified guild.
+  ///
+  /// [guildId] - The ID of the guild.
+  @GET('/guilds/{guild_id}/members/@me')
+  Future<GuildMemberResponse> getCurrentGuildMember({
+    @Path('guild_id') required SnowflakeType guildId,
+  });
+
+  /// Update current user guild member.
+  ///
+  /// Update current user guild member. User can modify their own nickname within the guild.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [body] - Name not received - field will be skipped.
+  @PATCH('/guilds/{guild_id}/members/@me')
+  Future<GuildMemberResponse> updateCurrentGuildMember({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Body() MyGuildMemberUpdateRequest? body,
+  });
+
+  /// Get guild member by user ID.
+  ///
+  /// Get guild member by user ID. Returns member information including roles, nickname, and join date for the specified user in the guild.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [userId] - The ID of the user.
+  @GET('/guilds/{guild_id}/members/{user_id}')
+  Future<GuildMemberResponse> getGuildMember({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Path('user_id') required SnowflakeType userId,
+  });
+
+  /// Update guild member.
+  ///
+  /// Update guild member. Requires manage_members permission. Can modify member nickname, voice state, and other member properties.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [userId] - The ID of the user.
+  ///
+  /// [body] - Name not received - field will be skipped.
+  @PATCH('/guilds/{guild_id}/members/{user_id}')
+  Future<GuildMemberResponse> updateGuildMember({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Path('user_id') required SnowflakeType userId,
+    @Body() GuildMemberUpdateRequest? body,
+  });
+
+  /// Remove guild member.
+  ///
+  /// Remove guild member. Requires kick_members permission. Removes the specified user from the guild.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [userId] - The ID of the user.
+  @DELETE('/guilds/{guild_id}/members/{user_id}')
+  Future<void> removeGuildMember({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Path('user_id') required SnowflakeType userId,
+  });
+
+  /// Add role to guild member.
+  ///
+  /// Add role to guild member. Requires manage_roles permission. Grants the specified role to the user in the guild.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [roleId] - The ID of the role.
+  ///
+  /// [userId] - The ID of the user.
+  @PUT('/guilds/{guild_id}/members/{user_id}/roles/{role_id}')
+  Future<void> addGuildMemberRole({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Path('role_id') required SnowflakeType roleId,
+    @Path('user_id') required SnowflakeType userId,
+  });
+
+  /// Remove role from guild member.
+  ///
+  /// Remove role from guild member. Requires manage_roles permission. Revokes the specified role from the user in the guild.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [roleId] - The ID of the role.
+  ///
+  /// [userId] - The ID of the user.
+  @DELETE('/guilds/{guild_id}/members/{user_id}/roles/{role_id}')
+  Future<void> removeGuildMemberRole({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Path('role_id') required SnowflakeType roleId,
+    @Path('user_id') required SnowflakeType userId,
+  });
+
+  /// List guild roles.
+  ///
+  /// List guild roles. Requires guilds OAuth scope if using bearer token. Returns all roles defined in the guild including their permissions and settings.
+  ///
+  /// [guildId] - The ID of the guild.
+  @GET('/guilds/{guild_id}/roles')
+  Future<GuildRoleListResponse> listGuildRoles({
+    @Path('guild_id') required SnowflakeType guildId,
+  });
+
+  /// Create guild role.
+  ///
+  /// Create guild role. Requires manage_roles permission. Creates a new role with specified name, permissions, colour and an optional icon image or Unicode emoji.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [body] - Name not received - field will be skipped.
+  @POST('/guilds/{guild_id}/roles')
+  Future<GuildRoleResponse> createGuildRole({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Body() required GuildRoleCreateRequest body,
+  });
+
+  /// Update role positions.
+  ///
+  /// Update role positions. Requires manage_roles permission. Reorders roles to change their hierarchy and permission precedence.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [body] - Name not received - field will be skipped.
+  @PATCH('/guilds/{guild_id}/roles')
+  Future<void> updateGuildRolePositions({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Body() required GuildRolePositionsRequest body,
+  });
+
+  /// Update role hoist positions.
+  ///
+  /// Update role hoist positions. Requires manage_roles permission. Sets the display priority for hoisted (separated) roles in the member list.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [body] - Name not received - field will be skipped.
+  @PATCH('/guilds/{guild_id}/roles/hoist-positions')
+  Future<void> updateRoleHoistPositions({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Body() required GuildRoleHoistPositionsRequest body,
+  });
+
+  /// Reset role hoist positions.
+  ///
+  /// Reset role hoist positions. Requires manage_roles permission. Clears all hoist position assignments for roles in the guild.
+  ///
+  /// [guildId] - The ID of the guild.
+  @DELETE('/guilds/{guild_id}/roles/hoist-positions')
+  Future<void> resetRoleHoistPositions({
+    @Path('guild_id') required SnowflakeType guildId,
+  });
+
+  /// Update guild role.
+  ///
+  /// Update guild role. Requires manage_roles permission. Modifies role name, permissions, colour, icon and other settings.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [roleId] - The ID of the role.
+  ///
+  /// [body] - Name not received - field will be skipped.
+  @PATCH('/guilds/{guild_id}/roles/{role_id}')
+  Future<GuildRoleResponse> updateGuildRole({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Path('role_id') required SnowflakeType roleId,
+    @Body() GuildRoleUpdateRequest? body,
+  });
+
+  /// Delete guild role.
+  ///
+  /// Delete guild role. Requires manage_roles permission. Permanently removes the role from the guild.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [roleId] - The ID of the role.
+  @DELETE('/guilds/{guild_id}/roles/{role_id}')
+  Future<void> deleteGuildRole({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Path('role_id') required SnowflakeType roleId,
+  });
+
+  /// Create guild sticker.
+  ///
+  /// Create guild sticker. Requires manage_emojis permission. Uploads a new sticker with name, description, and tags.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [body] - Name not received - field will be skipped.
+  @POST('/guilds/{guild_id}/stickers')
+  Future<GuildStickerResponse> createGuildSticker({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Body() required GuildStickerCreateRequest body,
+  });
+
+  /// List guild stickers.
+  ///
+  /// List guild stickers. Returns all custom stickers for the guild including metadata about creators, descriptions, and tags.
+  ///
+  /// [guildId] - The ID of the guild.
+  @GET('/guilds/{guild_id}/stickers')
+  Future<GuildStickerWithUserListResponse> listGuildStickers({
+    @Path('guild_id') required SnowflakeType guildId,
+  });
+
+  /// Bulk create guild stickers.
+  ///
+  /// Bulk create guild stickers. Requires manage_emojis permission. Creates multiple stickers in a single request for efficiency.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [body] - Name not received - field will be skipped.
+  @POST('/guilds/{guild_id}/stickers/bulk')
+  Future<GuildStickerBulkCreateResponse> bulkCreateGuildStickers({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Body() required GuildStickerBulkCreateRequest body,
+  });
+
+  /// Clone guild sticker.
+  ///
+  /// Clone an existing sticker into this guild by referencing its id. Copies the source image server-side, so the client does not need to re-upload it. Requires manage_emojis permission in the target guild, and the source guild must permit cloning.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [body] - Name not received - field will be skipped.
+  @POST('/guilds/{guild_id}/stickers/clone')
+  Future<GuildStickerResponse> cloneGuildSticker({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Body() required GuildStickerCloneRequest body,
+  });
+
+  /// Update guild sticker.
+  ///
+  /// Update guild sticker. Requires manage_emojis permission. Updates sticker name, description, or tags.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [stickerId] - The ID of the sticker.
+  ///
+  /// [body] - Name not received - field will be skipped.
+  @PATCH('/guilds/{guild_id}/stickers/{sticker_id}')
+  Future<GuildStickerResponse> updateGuildSticker({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Path('sticker_id') required SnowflakeType stickerId,
+    @Body() required GuildStickerUpdateRequest body,
+  });
+
+  /// Delete guild sticker.
+  ///
+  /// Delete guild sticker. Requires manage_emojis permission. Removes a sticker from the guild; optionally purges all references.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [stickerId] - The ID of the sticker.
+  ///
+  /// [purge] - Whether to also purge the asset from storage.
+  @DELETE('/guilds/{guild_id}/stickers/{sticker_id}')
+  Future<void> deleteGuildSticker({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Path('sticker_id') required SnowflakeType stickerId,
+    @Query('purge') String? purge = 'false',
+  });
+
+  /// Transfer guild ownership.
+  ///
+  /// Transfer guild ownership. Only current owner can transfer. Requires sudo mode verification (MFA). Transfers all guild permissions to a new owner.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [body] - Name not received - field will be skipped.
+  @POST('/guilds/{guild_id}/transfer-ownership')
+  Future<GuildResponse> transferGuildOwnership({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Body() required GuildTransferOwnershipWithVerificationRequest body,
+  });
+
+  /// Get guild vanity URL.
+  ///
+  /// Returns the custom invite code for the guild if configured.
+  ///
+  /// [guildId] - The ID of the guild.
+  @GET('/guilds/{guild_id}/vanity-url')
+  Future<GuildVanityUrlResponse> getGuildVanityUrl({
+    @Path('guild_id') required SnowflakeType guildId,
+  });
+
+  /// Update guild vanity URL.
+  ///
+  /// Requires manage_guild permission. Sets or removes a custom invite code.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [body] - Name not received - field will be skipped.
+  @PATCH('/guilds/{guild_id}/vanity-url')
+  Future<GuildVanityUrlUpdateResponse> updateGuildVanityUrl({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Body() GuildVanityUrlUpdateRequest? body,
+  });
+
+  /// List current user guilds.
+  ///
+  /// Requires guilds OAuth scope if using bearer token. Returns all guilds the user is a member of.
+  ///
+  /// [before] - Get guilds before this guild ID.
+  ///
+  /// [after] - Get guilds after this guild ID.
+  ///
+  /// [limit] - Maximum number of guilds to return (1-200).
+  ///
+  /// [withCounts] - Include approximate member and presence counts.
+  @GET('/users/@me/guilds')
+  Future<GuildListResponse> listGuilds({
+    @Query('limit') int? limit = 200,
+    @Query('with_counts') String? withCounts = 'false',
+    @Query('before') SnowflakeType? before,
+    @Query('after') SnowflakeType? after,
+  });
+
+  /// Leave guild.
+  ///
+  /// Removes the current user from the specified guild membership. When `delete_messages` is true, the caller's authored messages in the guild are deleted before leaving; that path requires sudo mode verification.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [deleteMessages] - Also delete every message the caller has authored in the guild before leaving.
+  ///
+  /// [body] - Name not received - field will be skipped.
+  @DELETE('/users/@me/guilds/{guild_id}')
+  Future<void> leaveGuild({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Body() SudoVerificationSchema? body,
+    @Query('delete_messages') String? deleteMessages = 'false',
+  });
+
+  /// Bulk delete my messages in guild.
+  ///
+  /// Deletes every message the caller has authored across all channels of the specified guild. Caller must be a member of the guild and pass sudo mode verification.
+  ///
+  /// [guildId] - The ID of the guild.
+  ///
+  /// [body] - Name not received - field will be skipped.
+  @POST('/users/@me/guilds/{guild_id}/messages/bulk-delete-mine')
+  Future<void> bulkDeleteMyMessagesInGuild({
+    @Path('guild_id') required SnowflakeType guildId,
+    @Body() SudoVerificationSchema? body,
+  });
+}

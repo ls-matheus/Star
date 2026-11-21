@@ -1,0 +1,38 @@
+// coverage:ignore-file
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: type=lint, unused_import, invalid_annotation_target, unnecessary_import
+
+import 'package:json_annotation/json_annotation.dart';
+
+part 'sso_start_response.g.dart';
+
+@JsonSerializable()
+class SsoStartResponse {
+  const SsoStartResponse({
+    required this.authorizationUrl,
+    required this.state,
+    required this.redirectUri,
+    required this.clientBinding,
+  });
+
+  factory SsoStartResponse.fromJson(Map<String, Object?> json) =>
+      _$SsoStartResponseFromJson(json);
+
+  /// URL to redirect user to for SSO authentication
+  @JsonKey(name: 'authorization_url', defaultValue: '')
+  final String authorizationUrl;
+
+  /// State parameter for CSRF protection
+  @JsonKey(defaultValue: '')
+  final String state;
+
+  /// OAuth redirect URI used for the SSO provider callback
+  @JsonKey(name: 'redirect_uri', defaultValue: '')
+  final String redirectUri;
+
+  /// Secret the client keeps and sends back with the code and state to complete this sign-in
+  @JsonKey(name: 'client_binding', defaultValue: '')
+  final String clientBinding;
+
+  Map<String, Object?> toJson() => _$SsoStartResponseToJson(this);
+}

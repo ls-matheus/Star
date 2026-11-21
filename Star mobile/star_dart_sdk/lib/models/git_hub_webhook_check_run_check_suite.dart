@@ -1,0 +1,42 @@
+// coverage:ignore-file
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: type=lint, unused_import, invalid_annotation_target, unnecessary_import
+
+import 'package:json_annotation/json_annotation.dart';
+
+import 'git_hub_webhook_check_run_check_suite_pull_requests.dart';
+import 'git_hub_webhook_check_run_check_suite_app.dart';
+
+part 'git_hub_webhook_check_run_check_suite.g.dart';
+
+@JsonSerializable()
+class GitHubWebhookCheckRunCheckSuite {
+  const GitHubWebhookCheckRunCheckSuite({
+    required this.headSha,
+    required this.app,
+    this.conclusion,
+    this.headBranch,
+    this.pullRequests,
+  });
+
+  factory GitHubWebhookCheckRunCheckSuite.fromJson(Map<String, Object?> json) =>
+      _$GitHubWebhookCheckRunCheckSuiteFromJson(json);
+
+  @JsonKey(includeIfNull: false)
+  final String? conclusion;
+  @JsonKey(includeIfNull: false, name: 'head_branch')
+  final String? headBranch;
+  @JsonKey(name: 'head_sha', defaultValue: '')
+  final String headSha;
+  @JsonKey(includeIfNull: false, name: 'pull_requests')
+  final List<GitHubWebhookCheckRunCheckSuitePullRequests>? pullRequests;
+  @JsonKey(defaultValue: _$missingGitHubWebhookCheckRunCheckSuiteApp)
+  final GitHubWebhookCheckRunCheckSuiteApp app;
+
+  Map<String, Object?> toJson() =>
+      _$GitHubWebhookCheckRunCheckSuiteToJson(this);
+}
+
+GitHubWebhookCheckRunCheckSuiteApp
+_$missingGitHubWebhookCheckRunCheckSuiteApp() =>
+    GitHubWebhookCheckRunCheckSuiteApp.fromJson(const <String, dynamic>{});

@@ -1,0 +1,2372 @@
+import 'package:star_dart/gateway_client/event_parser.dart';
+import 'package:star_dart/gateway_client/gateway_event.dart';
+import 'package:star_dart/gateway_client/gateway_types.dart';
+import 'package:star_dart/models/channel_type.dart';
+import 'package:star_dart/models/relationship_types.dart';
+import 'package:star_dart/models/user_guild_settings_response.dart';
+import 'package:star_dart/models/user_notification_settings.dart';
+import 'package:test/test.dart';
+
+Map<String, Object?> _userPartialJson({String id = '100'}) => {
+  'id': id,
+  'username': 'testuser',
+  'discriminator': '0001',
+  'global_name': null,
+  'avatar': null,
+  'avatar_color': null,
+  'flags': 0,
+};
+
+Map<String, Object?> _userPrivateJson({String id = '100'}) => {
+  'id': id,
+  'username': 'testuser',
+  'discriminator': '0001',
+  'global_name': null,
+  'avatar': null,
+  'avatar_color': null,
+  'flags': 0,
+  'is_staff': false,
+  'acls': <String>[],
+  'traits': <String>[],
+  'email': 'test@example.com',
+  'bio': null,
+  'pronouns': null,
+  'accent_color': null,
+  'banner': null,
+  'banner_color': null,
+  'mfa_enabled': false,
+  'verified': true,
+  'premium_type': null,
+  'premium_since': null,
+  'premium_until': null,
+  'premium_will_cancel': false,
+  'premium_billing_cycle': null,
+  'premium_lifetime_sequence': null,
+  'premium_grace_ends_at': null,
+  'premium_discriminator': false,
+  'premium_badge_hidden': false,
+  'premium_badge_masked': false,
+  'premium_badge_timestamp_hidden': false,
+  'premium_badge_sequence_hidden': false,
+  'premium_purchase_disabled': false,
+  'premium_enabled_override': false,
+  'premium_perks_disabled': false,
+  'password_last_changed_at': null,
+  'last_voice_activity_sharing_change_at': null,
+  'required_actions': <String>[],
+  'nsfw_allowed': false,
+  'has_dismissed_premium_onboarding': false,
+  'has_ever_purchased': false,
+  'has_unread_gift_inventory': false,
+  'unread_gift_inventory_count': 0,
+  'has_verified_phone': false,
+  'pending_bulk_message_deletion': null,
+  'phone': null,
+  'terms_agreed_at': null,
+  'privacy_agreed_at': null,
+};
+
+Map<String, Object?> _channelJson({String id = '200', int type = 0}) => {
+  'id': id,
+  'type': type,
+};
+
+Map<String, Object?> _guildReadyJson({String id = '300'}) => {
+  'id': id,
+  'name': 'Test Guild',
+  'icon': null,
+  'owner_id': '100',
+  'member_count': 5,
+  'unavailable': false,
+  'joined_at': '2026-01-01T00:00:00.000Z',
+};
+
+Map<String, Object?> _guildJson({String id = '300'}) => {
+  'id': id,
+  'name': 'Test Guild',
+  'splash_card_alignment': 0,
+  'owner_id': '100',
+  'system_channel_flags': 0,
+  'afk_timeout': 300,
+  'features': <Object?>[],
+  'verification_level': 0,
+  'mfa_level': 0,
+  'nsfw_level': 0,
+  'explicit_content_filter': 0,
+  'default_message_notifications': 0,
+  'disabled_operations': 0,
+  'content_warning_level': 0,
+  'nsfw': false,
+};
+
+Map<String, Object?> _guildRoleJson({String id = '900'}) => {
+  'id': id,
+  'name': 'Test Role',
+  'color': 0,
+  'position': 0,
+  'permissions': '0',
+  'hoist': false,
+  'mentionable': false,
+};
+
+Map<String, Object?> _guildCreateJson({String id = '300'}) => {
+  'id': id,
+  'properties': _guildJson(id: id),
+  'channels': [_channelJson(id: '200', type: 0)],
+  'members': [_guildMemberJson(userId: '100')],
+  'roles': [_guildRoleJson(id: '900')],
+  'presences': <Object?>[],
+  'voice_states': <Object?>[],
+  'joined_at': '2026-01-01T00:00:00.000Z',
+  'member_count': 5,
+  'online_count': 3,
+};
+
+Map<String, Object?> _messageJson({
+  String id = '400',
+  String channelId = '200',
+}) => {
+  'id': id,
+  'channel_id': channelId,
+  'author': _userPartialJson(),
+  'type': 0,
+  'flags': 0,
+  'content': 'Hello world',
+  'timestamp': '2026-01-01T00:00:00.000Z',
+  'pinned': false,
+  'mention_everyone': false,
+  'tts': false,
+  'mentions': <Object?>[],
+  'mention_roles': <String>[],
+};
+
+Map<String, Object?> _guildMemberJson({String userId = '100'}) => {
+  'user': _userPartialJson(id: userId),
+  'roles': <String>[],
+  'joined_at': '2026-01-01T00:00:00.000Z',
+  'mute': false,
+  'deaf': false,
+};
+
+Map<String, Object?> _relationshipJson({String id = '100', int type = 1}) => {
+  'id': id,
+  'type': type,
+  'user': _userPartialJson(),
+  'nickname': null,
+  'share_voice_activity': false,
+  'friend_shares_voice_activity': true,
+};
+
+Map<String, Object?> _userSettingsJson() => {
+  'status': 'online',
+  'theme': 'dark',
+  'locale': 'en-US',
+  'restricted_guilds': <String>[],
+  'bot_restricted_guilds': <String>[],
+  'default_guilds_restricted': false,
+  'bot_default_guilds_restricted': false,
+  'inline_attachment_media': true,
+  'inline_embed_media': true,
+  'gif_auto_play': true,
+  'render_embeds': true,
+  'render_reactions': true,
+  'animate_emoji': true,
+  'animate_stickers': 0,
+  'render_spoilers': 0,
+  'message_display_compact': false,
+  'friend_source_flags': 0,
+  'incoming_call_flags': 0,
+  'group_dm_add_permission_flags': 0,
+  'guild_folders': <Object?>[],
+  'custom_status': null,
+  'afk_timeout': 300,
+  'time_format': 0,
+  'developer_mode': false,
+  'trusted_domains': <String>[],
+  'default_hide_muted_channels': false,
+  'profile_privacy': 0,
+  'synced_preferences': '{}',
+  'default_share_voice_activity': false,
+  'privacy_setup_version': 0,
+  'privacy_setup_completed_at': null,
+  'sensitive_content_friend_dm_filter': 0,
+  'sensitive_content_non_friend_dm_filter': 0,
+  'sensitive_content_guild_filter': 0,
+  'suppress_unprivileged_self_mentions': false,
+  'suppress_unprivileged_self_mentions_bypass_user_ids': <String>[],
+  'staff_dm_access_user_ids': <String>[],
+};
+
+void main() {
+  const parser = EventParser();
+
+  group('Connection lifecycle', () {
+    test('READY → ReadyEvent with raw guilds and counted drops', () {
+      final data = {
+        'session_id': 'sess-abc-123',
+        'user': _userPrivateJson(id: '42'),
+        'guilds': [_guildReadyJson(id: '300'), _guildReadyJson(id: '301')],
+        'private_channels': [
+          _channelJson(id: '500', type: 1),
+          <String, Object?>{'id': 501},
+        ],
+        'relationships': [_relationshipJson(id: '100', type: 1)],
+        'user_settings': null,
+        'read_state': <Object?>[],
+        'presences': <Object?>[],
+      };
+
+      final event = parser.parse('READY', data);
+
+      expect(event, isA<ReadyEvent>());
+      final ready = event as ReadyEvent;
+      expect(ready.sessionId, 'sess-abc-123');
+      expect(ready.user.id, '42');
+      expect(ready.rawGuilds.map((guild) => guild['id']), ['300', '301']);
+      expect(ready.privateChannels, hasLength(1));
+      expect(ready.droppedItems, 1);
+      expect(ready.privateChannels[0].id, '500');
+      expect(ready.relationships, hasLength(1));
+      expect(ready.relationships[0].id, '100');
+      expect(ready.userSettings, isNull);
+      expect(ready.readStates, isEmpty);
+      expect(ready.presences, isEmpty);
+    });
+
+    test('RESUMED → ResumedEvent', () {
+      final event = parser.parse('RESUMED', <String, dynamic>{});
+      expect(event, isA<ResumedEvent>());
+    });
+  });
+
+  group('Messages', () {
+    test('MESSAGE_CREATE → MessageCreateEvent', () {
+      final data = _messageJson(id: '401', channelId: '201');
+      final event = parser.parse('MESSAGE_CREATE', data);
+
+      expect(event, isA<MessageCreateEvent>());
+      final e = event as MessageCreateEvent;
+      expect(e.message.id, '401');
+      expect(e.message.channelId, '201');
+      expect(e.message.content, 'Hello world');
+      expect(e.guildId, isNull);
+      expect(e.channelType, isNull);
+    });
+
+    test('MESSAGE_CREATE carries guild_id and channel_type', () {
+      final data = {
+        ..._messageJson(id: '403', channelId: '203'),
+        'guild_id': '9',
+        'channel_type': 11,
+      };
+      final e = parser.parse('MESSAGE_CREATE', data) as MessageCreateEvent;
+
+      expect(e.guildId, '9');
+      expect(e.channelType, 11);
+    });
+
+    test('guild MESSAGE_CREATE joins the embedded member with the author', () {
+      final Map<String, Object?> member = _guildMemberJson()..remove('user');
+      final data = {
+        ..._messageJson(id: '404', channelId: '204'),
+        'guild_id': '9',
+        'member': {...member, 'nick': 'Nick'},
+      };
+      final e = parser.parse('MESSAGE_CREATE', data) as MessageCreateEvent;
+
+      expect(e.member, isNotNull);
+      expect(e.member!.nick, 'Nick');
+      expect(e.member!.user.id, e.message.author.id);
+    });
+
+    test('guild MESSAGE_UPDATE carries guild_id and the embedded member', () {
+      final Map<String, Object?> member = _guildMemberJson()..remove('user');
+      final data = {
+        ..._messageJson(id: '405', channelId: '205'),
+        'guild_id': '9',
+        'member': member,
+      };
+      final e = parser.parse('MESSAGE_UPDATE', data) as MessageUpdateEvent;
+
+      expect(e.guildId, '9');
+      expect(e.member, isNotNull);
+      expect(e.member!.user.id, e.message.author.id);
+    });
+
+    test('a malformed embedded member does not drop the message', () {
+      final data = {
+        ..._messageJson(id: '406', channelId: '206'),
+        'guild_id': '9',
+        'member': <String, Object?>{'roles': 'not-a-list'},
+      };
+      final event = parser.parse('MESSAGE_CREATE', data);
+
+      expect(event, isA<MessageCreateEvent>());
+      expect((event as MessageCreateEvent).member, isNull);
+    });
+
+    test('MESSAGE_UPDATE → MessageUpdateEvent', () {
+      final data = _messageJson(id: '402', channelId: '202');
+      final event = parser.parse('MESSAGE_UPDATE', data);
+
+      expect(event, isA<MessageUpdateEvent>());
+      final e = event as MessageUpdateEvent;
+      expect(e.message.id, '402');
+      expect(e.message.channelId, '202');
+    });
+
+    test(
+      'MESSAGE_DELETE → MessageDeleteEvent with channelId, messageId, guildId',
+      () {
+        final data = <String, Object?>{
+          'id': '403',
+          'channel_id': '203',
+          'guild_id': '300',
+        };
+        final event = parser.parse('MESSAGE_DELETE', data);
+
+        expect(event, isA<MessageDeleteEvent>());
+        final e = event as MessageDeleteEvent;
+        expect(e.messageId, '403');
+        expect(e.channelId, '203');
+        expect(e.guildId, '300');
+      },
+    );
+
+    test('MESSAGE_DELETE with null guildId', () {
+      final data = <String, Object?>{
+        'id': '404',
+        'channel_id': '204',
+        'guild_id': null,
+      };
+      final event = parser.parse('MESSAGE_DELETE', data);
+
+      expect(event, isA<MessageDeleteEvent>());
+      final e = event as MessageDeleteEvent;
+      expect(e.guildId, isNull);
+    });
+  });
+
+  group('Reactions', () {
+    test(
+      'MESSAGE_REACTION_ADD → MessageReactionAddEvent with emoji fields',
+      () {
+        final data = <String, Object?>{
+          'channel_id': '200',
+          'message_id': '400',
+          'user_id': '100',
+          'emoji': {'name': 'thumbsup', 'id': '999', 'animated': true},
+          'guild_id': '300',
+        };
+        final event = parser.parse('MESSAGE_REACTION_ADD', data);
+
+        expect(event, isA<MessageReactionAddEvent>());
+        final e = event as MessageReactionAddEvent;
+        expect(e.channelId, '200');
+        expect(e.messageId, '400');
+        expect(e.userId, '100');
+        expect(e.emoji.name, 'thumbsup');
+        expect(e.emoji.id, '999');
+        expect(e.emoji.animated, isTrue);
+        expect(e.guildId, '300');
+      },
+    );
+
+    test('guild reaction events carry the reacting member', () {
+      final data = <String, Object?>{
+        'channel_id': '200',
+        'message_id': '400',
+        'user_id': '100',
+        'emoji': {'name': 'fire'},
+        'guild_id': '300',
+        'member': _guildMemberJson(),
+      };
+      final add =
+          parser.parse('MESSAGE_REACTION_ADD', data) as MessageReactionAddEvent;
+      final remove =
+          parser.parse('MESSAGE_REACTION_REMOVE', data)
+              as MessageReactionRemoveEvent;
+
+      expect(add.member?.user.id, '100');
+      expect(remove.member?.user.id, '100');
+    });
+
+    test('MESSAGE_REACTION_REMOVE → MessageReactionRemoveEvent', () {
+      final data = <String, Object?>{
+        'channel_id': '200',
+        'message_id': '400',
+        'user_id': '100',
+        'emoji': {'name': 'fire', 'id': null, 'animated': false},
+        'guild_id': null,
+      };
+      final event = parser.parse('MESSAGE_REACTION_REMOVE', data);
+
+      expect(event, isA<MessageReactionRemoveEvent>());
+      final e = event as MessageReactionRemoveEvent;
+      expect(e.channelId, '200');
+      expect(e.messageId, '400');
+      expect(e.userId, '100');
+      expect(e.emoji.name, 'fire');
+      expect(e.emoji.id, isNull);
+      expect(e.emoji.animated, isFalse);
+      expect(e.guildId, isNull);
+    });
+
+    test('MESSAGE_REACTION_REMOVE_ALL → MessageReactionRemoveAllEvent', () {
+      final data = <String, Object?>{
+        'channel_id': '200',
+        'message_id': '400',
+        'guild_id': '300',
+      };
+      final event = parser.parse('MESSAGE_REACTION_REMOVE_ALL', data);
+
+      expect(event, isA<MessageReactionRemoveAllEvent>());
+      final e = event as MessageReactionRemoveAllEvent;
+      expect(e.channelId, '200');
+      expect(e.messageId, '400');
+      expect(e.guildId, '300');
+    });
+
+    test('MESSAGE_REACTION_REMOVE_EMOJI → MessageReactionRemoveEmojiEvent', () {
+      final data = <String, Object?>{
+        'channel_id': '200',
+        'message_id': '400',
+        'emoji': {'name': 'wave', 'id': null},
+        'guild_id': null,
+      };
+      final event = parser.parse('MESSAGE_REACTION_REMOVE_EMOJI', data);
+
+      expect(event, isA<MessageReactionRemoveEmojiEvent>());
+      final e = event as MessageReactionRemoveEmojiEvent;
+      expect(e.channelId, '200');
+      expect(e.messageId, '400');
+      expect(e.emoji.name, 'wave');
+      expect(e.guildId, isNull);
+    });
+  });
+
+  group('Channels', () {
+    test('CHANNEL_CREATE → ChannelCreateEvent', () {
+      final data = _channelJson(id: '500', type: 0);
+      final event = parser.parse('CHANNEL_CREATE', data);
+
+      expect(event, isA<ChannelCreateEvent>());
+      final e = event as ChannelCreateEvent;
+      expect(e.channel.id, '500');
+      expect(e.channel.type, ChannelType.guildText);
+    });
+
+    test('CHANNEL_UPDATE → ChannelUpdateEvent', () {
+      final data = _channelJson(id: '501', type: 2);
+      final event = parser.parse('CHANNEL_UPDATE', data);
+
+      expect(event, isA<ChannelUpdateEvent>());
+      final e = event as ChannelUpdateEvent;
+      expect(e.channel.id, '501');
+    });
+
+    test('CHANNEL_DELETE → ChannelDeleteEvent', () {
+      final data = _channelJson(id: '502', type: 0);
+      final event = parser.parse('CHANNEL_DELETE', data);
+
+      expect(event, isA<ChannelDeleteEvent>());
+      final e = event as ChannelDeleteEvent;
+      expect(e.channelId, '502');
+    });
+
+    test('CHANNEL_DELETE for a channel the user can no longer view', () {
+      final event = parser.parse('CHANNEL_DELETE', <String, dynamic>{
+        'guild_id': '600',
+        'id': '503',
+      });
+
+      expect(event, isA<ChannelDeleteEvent>());
+      final e = event as ChannelDeleteEvent;
+      expect(e.channelId, '503');
+      expect(e.guildId, '600');
+    });
+  });
+
+  group('Guilds', () {
+    test('GUILD_CREATE → GuildCreateEvent with GuildCreateData', () {
+      final data = _guildCreateJson(id: '600');
+      final event = parser.parse('GUILD_CREATE', data);
+
+      expect(event, isA<GuildCreateEvent>());
+      final e = event as GuildCreateEvent;
+      expect(e.guild, isA<GuildCreateData>());
+      expect(e.guild.guild.id, '600');
+      expect(e.guild.guild.name, 'Test Guild');
+      expect(e.guild.channels, hasLength(1));
+      expect(e.guild.channels[0].id, '200');
+      expect(e.guild.members, hasLength(1));
+      expect(e.guild.members[0].user.id, '100');
+      expect(e.guild.roles, hasLength(1));
+      expect(e.guild.roles[0].id, '900');
+      expect(e.guild.joinedAt, '2026-01-01T00:00:00.000Z');
+      expect(e.guild.memberCount, 5);
+      expect(e.guild.onlineCount, 3);
+    });
+
+    test('GUILD_CREATE without properties wrapper (fallback)', () {
+      final data = <String, Object?>{
+        ..._guildJson(id: '603'),
+        'channels': <Object?>[],
+        'members': <Object?>[],
+        'roles': <Object?>[],
+      };
+      final event = parser.parse('GUILD_CREATE', data);
+
+      expect(event, isA<GuildCreateEvent>());
+      final e = event as GuildCreateEvent;
+      expect(e.guild.guild.id, '603');
+      expect(e.guild.guild.name, 'Test Guild');
+      expect(e.guild.channels, isEmpty);
+    });
+
+    test('GUILD_UPDATE → GuildUpdateEvent with GuildCreateData', () {
+      final data = _guildCreateJson(id: '601');
+      final event = parser.parse('GUILD_UPDATE', data);
+
+      expect(event, isA<GuildUpdateEvent>());
+      final e = event as GuildUpdateEvent;
+      expect(e.guild, isA<GuildCreateData>());
+      expect(e.guild.guild.id, '601');
+      expect(e.guild.guild.name, 'Test Guild');
+      expect(e.guild.channels, hasLength(1));
+      expect(e.guild.roles, hasLength(1));
+    });
+
+    test('GUILD_DELETE → GuildDeleteEvent with guildId', () {
+      final data = <String, Object?>{'id': '602'};
+      final event = parser.parse('GUILD_DELETE', data);
+
+      expect(event, isA<GuildDeleteEvent>());
+      final e = event as GuildDeleteEvent;
+      expect(e.guildId, '602');
+    });
+  });
+
+  group('Guild members', () {
+    test('GUILD_MEMBER_ADD → GuildMemberAddEvent with guildId, member', () {
+      final data = <String, Object?>{
+        'guild_id': '300',
+        ..._guildMemberJson(userId: '101'),
+      };
+      final event = parser.parse('GUILD_MEMBER_ADD', data);
+
+      expect(event, isA<GuildMemberAddEvent>());
+      final e = event as GuildMemberAddEvent;
+      expect(e.guildId, '300');
+      expect(e.member.user.id, '101');
+    });
+
+    test('GUILD_MEMBER_UPDATE → GuildMemberUpdateEvent', () {
+      final data = <String, Object?>{
+        'guild_id': '300',
+        ..._guildMemberJson(userId: '102'),
+      };
+      final event = parser.parse('GUILD_MEMBER_UPDATE', data);
+
+      expect(event, isA<GuildMemberUpdateEvent>());
+      final e = event as GuildMemberUpdateEvent;
+      expect(e.guildId, '300');
+      expect(e.member.user.id, '102');
+    });
+
+    test(
+      'GUILD_MEMBER_REMOVE → GuildMemberRemoveEvent with guildId, userId',
+      () {
+        final data = <String, Object?>{'guild_id': '300', 'user_id': '103'};
+        final event = parser.parse('GUILD_MEMBER_REMOVE', data);
+
+        expect(event, isA<GuildMemberRemoveEvent>());
+        final e = event as GuildMemberRemoveEvent;
+        expect(e.guildId, '300');
+        expect(e.userId, '103');
+      },
+    );
+
+    test('GUILD_MEMBER_REMOVE with user object fallback', () {
+      final data = <String, Object?>{
+        'guild_id': '300',
+        'user': {'id': '104'},
+      };
+      final event = parser.parse('GUILD_MEMBER_REMOVE', data);
+
+      expect(event, isA<GuildMemberRemoveEvent>());
+      final e = event as GuildMemberRemoveEvent;
+      expect(e.guildId, '300');
+      expect(e.userId, '104');
+    });
+  });
+
+  group('Presence', () {
+    test('PRESENCE_UPDATE → PresenceUpdateEvent with userId, status', () {
+      final data = <String, Object?>{
+        'user': {'id': '100'},
+        'status': 'online',
+        'custom_status': {'text': 'Working'},
+      };
+      final event = parser.parse('PRESENCE_UPDATE', data);
+
+      expect(event, isA<PresenceUpdateEvent>());
+      final e = event as PresenceUpdateEvent;
+      expect(e.userId, '100');
+      expect(e.status, 'online');
+      expect(e.customStatus, 'Working');
+    });
+
+    test('PRESENCE_UPDATE with null custom_status', () {
+      final data = <String, Object?>{
+        'user': {'id': '101'},
+        'status': 'idle',
+        'custom_status': null,
+      };
+      final event = parser.parse('PRESENCE_UPDATE', data);
+
+      expect(event, isA<PresenceUpdateEvent>());
+      final e = event as PresenceUpdateEvent;
+      expect(e.userId, '101');
+      expect(e.status, 'idle');
+      expect(e.customStatus, isNull);
+    });
+
+    test('PRESENCE_UPDATE keeps the partial user the gateway sends', () {
+      final data = <String, Object?>{
+        'user': {
+          'id': '103',
+          'username': 'renamed',
+          'discriminator': '0042',
+          'global_name': 'Renamed',
+          'avatar': 'abc',
+          'avatar_color': 123,
+          'flags': 0,
+        },
+        'status': 'online',
+        'mobile': false,
+        'afk': false,
+        'custom_status': null,
+      };
+      final event = parser.parse('PRESENCE_UPDATE', data);
+
+      expect(event, isA<PresenceUpdateEvent>());
+      final e = event as PresenceUpdateEvent;
+      expect(e.userId, '103');
+      expect(e.user?.username, 'renamed');
+      expect(e.user?.globalName, 'Renamed');
+      expect(e.user?.avatar, 'abc');
+    });
+
+    test('PRESENCE_UPDATE with only a user id has no user', () {
+      final event = parser.parse('PRESENCE_UPDATE', <String, Object?>{
+        'user': {'id': '104'},
+        'status': 'idle',
+      });
+
+      expect(event, isA<PresenceUpdateEvent>());
+      final e = event as PresenceUpdateEvent;
+      expect(e.userId, '104');
+      expect(e.user, isNull);
+    });
+
+    test('PRESENCE_UPDATE with user_id fallback', () {
+      final data = <String, Object?>{'user_id': '102', 'status': 'dnd'};
+      final event = parser.parse('PRESENCE_UPDATE', data);
+
+      expect(event, isA<PresenceUpdateEvent>());
+      final e = event as PresenceUpdateEvent;
+      expect(e.userId, '102');
+      expect(e.status, 'dnd');
+    });
+  });
+
+  group('Typing', () {
+    test(
+      'TYPING_START → TypingStartEvent with channelId, userId, timestamp',
+      () {
+        final data = <String, Object?>{
+          'channel_id': '200',
+          'user_id': '100',
+          'timestamp': 1700000000,
+          'guild_id': '300',
+          'member': _guildMemberJson(userId: '100'),
+        };
+        final event = parser.parse('TYPING_START', data);
+
+        expect(event, isA<TypingStartEvent>());
+        final e = event as TypingStartEvent;
+        expect(e.channelId, '200');
+        expect(e.userId, '100');
+        expect(
+          e.timestamp,
+          DateTime.fromMillisecondsSinceEpoch(1700000000 * 1000),
+        );
+        expect(e.guildId, '300');
+        expect(e.member, isNotNull);
+        expect(e.member!.user.avatar, isNull);
+        expect(e.member!.user.avatarColor, isNull);
+      },
+    );
+
+    test('TYPING_START without guild member data', () {
+      final data = <String, Object?>{
+        'channel_id': '200',
+        'user_id': '100',
+        'timestamp': 1700000000,
+      };
+      final event = parser.parse('TYPING_START', data);
+
+      expect(event, isA<TypingStartEvent>());
+      final e = event as TypingStartEvent;
+      expect(e.guildId, isNull);
+      expect(e.member, isNull);
+    });
+  });
+
+  group('Relationships', () {
+    test('RELATIONSHIP_ADD → RelationshipAddEvent', () {
+      final data = _relationshipJson(id: '100', type: 1);
+      final event = parser.parse('RELATIONSHIP_ADD', data);
+
+      expect(event, isA<RelationshipAddEvent>());
+      final e = event as RelationshipAddEvent;
+      expect(e.relationship.id, '100');
+      expect(e.relationship.type, RelationshipTypes.friend);
+    });
+
+    test('RELATIONSHIP_ADD defaults omitted voice-share fields', () {
+      final data = <String, Object?>{
+        'id': '100',
+        'type': 4,
+        'user': _userPartialJson(id: '100'),
+        'nickname': null,
+      };
+      final event =
+          parser.parse('RELATIONSHIP_ADD', data) as RelationshipAddEvent;
+
+      expect(event.relationship.type, RelationshipTypes.outgoingRequest);
+      expect(event.relationship.shareVoiceActivity, isTrue);
+      expect(event.relationship.friendSharesVoiceActivity, isTrue);
+    });
+
+    test('RELATIONSHIP_REMOVE carries only the user id', () {
+      final data = <String, Object?>{'id': '101'};
+      final event = parser.parse('RELATIONSHIP_REMOVE', data);
+
+      expect(event, isA<RelationshipRemoveEvent>());
+      expect((event as RelationshipRemoveEvent).userId, '101');
+    });
+  });
+
+  group('User', () {
+    test('USER_UPDATE → UserUpdateEvent with full user data', () {
+      final data = _userPrivateJson(id: '42');
+      final event = parser.parse('USER_UPDATE', data);
+
+      expect(event, isA<UserUpdateEvent>());
+      final e = event as UserUpdateEvent;
+      expect(e.user.id, '42');
+      expect(e.user.username, 'testuser');
+      expect(e.user.email, 'test@example.com');
+    });
+
+    test('USER_SETTINGS_UPDATE → UserSettingsUpdateEvent', () {
+      final data = _userSettingsJson();
+      final event = parser.parse('USER_SETTINGS_UPDATE', data);
+
+      expect(event, isA<UserSettingsUpdateEvent>());
+      final e = event as UserSettingsUpdateEvent;
+      expect(e.settings.status, 'online');
+      expect(e.settings.theme, 'dark');
+    });
+
+    test('USER_GUILD_SETTINGS_UPDATE → UserGuildSettingsUpdateEvent', () {
+      final data = <String, Object?>{'guild_id': 'g1', 'muted': true};
+      final event = parser.parse('USER_GUILD_SETTINGS_UPDATE', data);
+
+      expect(event, isA<UserGuildSettingsUpdateEvent>());
+      final e = event as UserGuildSettingsUpdateEvent;
+      expect(e.guildId, 'g1');
+      expect(e.data['muted'], true);
+    });
+
+    test('USER_GUILD_SETTINGS_UPDATE for DMs has a null guild_id', () {
+      final data = <String, Object?>{'guild_id': null, 'muted': true};
+      final event = parser.parse('USER_GUILD_SETTINGS_UPDATE', data);
+
+      expect(event, isA<UserGuildSettingsUpdateEvent>());
+      expect((event as UserGuildSettingsUpdateEvent).guildId, isNull);
+    });
+
+    test('USER_NOTE_UPDATE → UserNoteUpdateEvent', () {
+      final data = <String, Object?>{'id': 'u1', 'note': 'A good friend'};
+      final event = parser.parse('USER_NOTE_UPDATE', data);
+
+      expect(event, isA<UserNoteUpdateEvent>());
+      final e = event as UserNoteUpdateEvent;
+      expect(e.userId, 'u1');
+      expect(e.note, 'A good friend');
+    });
+
+    test('USER_NOTE_UPDATE with null note', () {
+      final data = <String, Object?>{'id': 'u1', 'note': null};
+      final event = parser.parse('USER_NOTE_UPDATE', data);
+
+      expect(event, isA<UserNoteUpdateEvent>());
+      final e = event as UserNoteUpdateEvent;
+      expect(e.userId, 'u1');
+      expect(e.note, isNull);
+    });
+
+    test('USER_CONNECTIONS_UPDATE → UserConnectionsUpdateEvent', () {
+      final data = <String, Object?>{'connections': []};
+      final event = parser.parse('USER_CONNECTIONS_UPDATE', data);
+
+      expect(event, isA<UserConnectionsUpdateEvent>());
+    });
+
+    test('AUTH_SESSION_CHANGE → AuthSessionChangeEvent', () {
+      final data = <String, Object?>{
+        'new_token': 'tok123',
+        'new_auth_session_id_hash': 'hash456',
+      };
+      final event = parser.parse('AUTH_SESSION_CHANGE', data);
+
+      expect(event, isA<AuthSessionChangeEvent>());
+      final e = event as AuthSessionChangeEvent;
+      expect(e.newToken, 'tok123');
+      expect(e.newAuthSessionIdHash, 'hash456');
+    });
+
+    test('AUTH_SESSION_CHANGE with null fields', () {
+      final data = <String, Object?>{
+        'new_token': null,
+        'new_auth_session_id_hash': null,
+      };
+      final event = parser.parse('AUTH_SESSION_CHANGE', data);
+
+      expect(event, isA<AuthSessionChangeEvent>());
+      final e = event as AuthSessionChangeEvent;
+      expect(e.newToken, isNull);
+      expect(e.newAuthSessionIdHash, isNull);
+    });
+  });
+
+  group('Messages (new events)', () {
+    test('MESSAGE_DELETE_BULK → MessageDeleteBulkEvent', () {
+      final data = <String, Object?>{
+        'channel_id': 'ch1',
+        'ids': ['m1', 'm2', 'm3'],
+        'guild_id': 'g1',
+      };
+      final event = parser.parse('MESSAGE_DELETE_BULK', data);
+
+      expect(event, isA<MessageDeleteBulkEvent>());
+      final e = event as MessageDeleteBulkEvent;
+      expect(e.channelId, 'ch1');
+      expect(e.ids, ['m1', 'm2', 'm3']);
+      expect(e.guildId, 'g1');
+    });
+
+    test('MESSAGE_DELETE_BULK with null guildId', () {
+      final data = <String, Object?>{
+        'channel_id': 'ch1',
+        'ids': ['m1'],
+        'guild_id': null,
+      };
+      final event = parser.parse('MESSAGE_DELETE_BULK', data);
+
+      expect(event, isA<MessageDeleteBulkEvent>());
+      final e = event as MessageDeleteBulkEvent;
+      expect(e.guildId, isNull);
+    });
+
+    test('MESSAGE_ACK → MessageAckEvent', () {
+      final data = <String, Object?>{
+        'channel_id': 'ch1',
+        'message_id': 'msg1',
+        'mention_count': 3,
+        'manual': false,
+      };
+      final event = parser.parse('MESSAGE_ACK', data);
+
+      expect(event, isA<MessageAckEvent>());
+      final e = event as MessageAckEvent;
+      expect(e.channelId, 'ch1');
+      expect(e.messageId, 'msg1');
+      expect(e.mentionCount, 3);
+      expect(e.manual, false);
+    });
+
+    test('MESSAGE_ACK with null optional fields', () {
+      final data = <String, Object?>{
+        'channel_id': 'ch1',
+        'message_id': 'msg1',
+        'mention_count': null,
+        'manual': null,
+      };
+      final event = parser.parse('MESSAGE_ACK', data);
+
+      expect(event, isA<MessageAckEvent>());
+      final e = event as MessageAckEvent;
+      expect(e.mentionCount, isNull);
+      expect(e.manual, isNull);
+    });
+
+    test('MESSAGE_REACTION_ADD_MANY → MessageReactionAddManyEvent', () {
+      final data = <String, Object?>{
+        'channel_id': '200',
+        'message_id': '400',
+        'reactions': [
+          {
+            'emoji': {'name': 'fire'},
+            'count': 2,
+          },
+          {
+            'emoji': {'name': 'heart'},
+            'count': 1,
+          },
+        ],
+        'guild_id': '300',
+      };
+      final event = parser.parse('MESSAGE_REACTION_ADD_MANY', data);
+
+      expect(event, isA<MessageReactionAddManyEvent>());
+      final e = event as MessageReactionAddManyEvent;
+      expect(e.channelId, '200');
+      expect(e.messageId, '400');
+      expect(e.reactions, hasLength(2));
+      expect(e.guildId, '300');
+    });
+  });
+
+  group('Channels (new events)', () {
+    test('CHANNEL_UPDATE_BULK → ChannelUpdateBulkEvent', () {
+      final data = <String, Object?>{
+        'channels': [
+          _channelJson(id: '500', type: 0),
+          _channelJson(id: '501', type: 2),
+        ],
+      };
+      final event = parser.parse('CHANNEL_UPDATE_BULK', data);
+
+      expect(event, isA<ChannelUpdateBulkEvent>());
+      final e = event as ChannelUpdateBulkEvent;
+      expect(e.channels, hasLength(2));
+      expect(e.channels[0].id, '500');
+      expect(e.channels[1].id, '501');
+    });
+
+    test('CHANNEL_PINS_UPDATE → ChannelPinsUpdateEvent', () {
+      final data = <String, Object?>{
+        'channel_id': 'ch1',
+        'guild_id': 'g1',
+        'last_pin_timestamp': '2026-03-21T00:00:00Z',
+      };
+      final event = parser.parse('CHANNEL_PINS_UPDATE', data);
+
+      expect(event, isA<ChannelPinsUpdateEvent>());
+      final e = event as ChannelPinsUpdateEvent;
+      expect(e.channelId, 'ch1');
+      expect(e.guildId, 'g1');
+      expect(e.lastPinTimestamp, '2026-03-21T00:00:00Z');
+    });
+
+    test('CHANNEL_PINS_UPDATE with null optional fields', () {
+      final data = <String, Object?>{
+        'channel_id': 'ch1',
+        'guild_id': null,
+        'last_pin_timestamp': null,
+      };
+      final event = parser.parse('CHANNEL_PINS_UPDATE', data);
+
+      expect(event, isA<ChannelPinsUpdateEvent>());
+      final e = event as ChannelPinsUpdateEvent;
+      expect(e.guildId, isNull);
+      expect(e.lastPinTimestamp, isNull);
+    });
+
+    test('CHANNEL_PINS_ACK → ChannelPinsAckEvent', () {
+      final data = <String, Object?>{
+        'channel_id': 'ch1',
+        'timestamp': '2026-03-21T00:00:00Z',
+      };
+      final event = parser.parse('CHANNEL_PINS_ACK', data);
+
+      expect(event, isA<ChannelPinsAckEvent>());
+      final e = event as ChannelPinsAckEvent;
+      expect(e.channelId, 'ch1');
+      expect(e.timestamp, '2026-03-21T00:00:00Z');
+    });
+
+    test('CHANNEL_RECIPIENT_ADD → ChannelRecipientAddEvent', () {
+      final data = <String, Object?>{
+        'channel_id': 'ch1',
+        'user': _userPartialJson(id: '42'),
+      };
+      final event = parser.parse('CHANNEL_RECIPIENT_ADD', data);
+
+      expect(event, isA<ChannelRecipientAddEvent>());
+      final e = event as ChannelRecipientAddEvent;
+      expect(e.channelId, 'ch1');
+      expect(e.user.id, '42');
+      expect(e.user.username, 'testuser');
+    });
+
+    test('CHANNEL_RECIPIENT_REMOVE → ChannelRecipientRemoveEvent', () {
+      final data = <String, Object?>{
+        'channel_id': 'ch1',
+        'user': _userPartialJson(id: '43'),
+      };
+      final event = parser.parse('CHANNEL_RECIPIENT_REMOVE', data);
+
+      expect(event, isA<ChannelRecipientRemoveEvent>());
+      final e = event as ChannelRecipientRemoveEvent;
+      expect(e.channelId, 'ch1');
+      expect(e.user.id, '43');
+    });
+
+    test('PASSIVE_UPDATES → PassiveUpdatesEvent', () {
+      final data = <String, Object?>{
+        'guild_id': 'g1',
+        'channels': {'ch1': 'msg123', 'ch2': 'msg456'},
+      };
+      final event = parser.parse('PASSIVE_UPDATES', data);
+
+      expect(event, isA<PassiveUpdatesEvent>());
+      final e = event as PassiveUpdatesEvent;
+      expect(e.guildId, 'g1');
+      expect(e.channels['ch1'], 'msg123');
+      expect(e.channels['ch2'], 'msg456');
+      expect(e.voiceStates, isNull);
+    });
+
+    test('PASSIVE_UPDATES voice_states hold changed and removed states', () {
+      final data = <String, Object?>{
+        'guild_id': 'g1',
+        'channels': <String, dynamic>{},
+        'voice_states': [
+          {
+            'guild_id': 'g1',
+            'channel_id': 'ch1',
+            'user_id': 'u1',
+            'connection_id': 'conn-1',
+            'session_id': 's1',
+            'member': null,
+            'mute': false,
+            'deaf': false,
+            'self_mute': true,
+            'self_deaf': false,
+            'self_video': false,
+            'self_stream': false,
+            'is_mobile': false,
+            'suppress': false,
+            'viewer_stream_keys': <String>[],
+            'e2ee_capable': false,
+            'version': 2,
+          },
+          {
+            'guild_id': 'g1',
+            'channel_id': null,
+            'user_id': 'u2',
+            'connection_id': 'conn-2',
+            'session_id': 's2',
+            'member': null,
+            'version': 1,
+          },
+        ],
+      };
+      final event = parser.parse('PASSIVE_UPDATES', data);
+
+      expect(event, isA<PassiveUpdatesEvent>());
+      final e = event as PassiveUpdatesEvent;
+      expect(e.voiceStates, hasLength(2));
+      expect(e.voiceStates![0].userId, 'u1');
+      expect(e.voiceStates![0].channelId, 'ch1');
+      expect(e.voiceStates![0].selfMute, isTrue);
+      expect(e.voiceStates![1].connectionId, 'conn-2');
+      expect(e.voiceStates![1].channelId, isNull);
+      expect(e.voiceStates![1].guildId, 'g1');
+    });
+  });
+
+  group('Guild roles', () {
+    test('GUILD_ROLE_CREATE → GuildRoleCreateEvent', () {
+      final data = <String, Object?>{
+        'guild_id': 'g1',
+        'role': _guildRoleJson(id: 'r1'),
+      };
+      final event = parser.parse('GUILD_ROLE_CREATE', data);
+
+      expect(event, isA<GuildRoleCreateEvent>());
+      final e = event as GuildRoleCreateEvent;
+      expect(e.guildId, 'g1');
+      expect(e.role.id, 'r1');
+      expect(e.role.name, 'Test Role');
+    });
+
+    test('GUILD_ROLE_UPDATE → GuildRoleUpdateEvent', () {
+      final data = <String, Object?>{
+        'guild_id': 'g1',
+        'role': _guildRoleJson(id: 'r2'),
+      };
+      final event = parser.parse('GUILD_ROLE_UPDATE', data);
+
+      expect(event, isA<GuildRoleUpdateEvent>());
+      final e = event as GuildRoleUpdateEvent;
+      expect(e.guildId, 'g1');
+      expect(e.role.id, 'r2');
+    });
+
+    test('GUILD_ROLE_DELETE → GuildRoleDeleteEvent', () {
+      final data = <String, Object?>{'guild_id': 'g1', 'role_id': 'r1'};
+      final event = parser.parse('GUILD_ROLE_DELETE', data);
+
+      expect(event, isA<GuildRoleDeleteEvent>());
+      final e = event as GuildRoleDeleteEvent;
+      expect(e.guildId, 'g1');
+      expect(e.roleId, 'r1');
+    });
+
+    test('GUILD_ROLE_UPDATE_BULK → GuildRoleUpdateBulkEvent', () {
+      final data = <String, Object?>{
+        'guild_id': 'g1',
+        'roles': [_guildRoleJson(id: 'r1'), _guildRoleJson(id: 'r2')],
+      };
+      final event = parser.parse('GUILD_ROLE_UPDATE_BULK', data);
+
+      expect(event, isA<GuildRoleUpdateBulkEvent>());
+      final e = event as GuildRoleUpdateBulkEvent;
+      expect(e.guildId, 'g1');
+      expect(e.roles, hasLength(2));
+      expect(e.roles[0].id, 'r1');
+      expect(e.roles[1].id, 'r2');
+    });
+  });
+
+  group('Guild bans', () {
+    test('GUILD_BAN_ADD → GuildBanAddEvent', () {
+      final data = <String, Object?>{
+        'guild_id': 'g1',
+        'user': <String, Object?>{'id': 'u1'},
+      };
+      final event = parser.parse('GUILD_BAN_ADD', data);
+
+      expect(event, isA<GuildBanAddEvent>());
+      final e = event as GuildBanAddEvent;
+      expect(e.guildId, 'g1');
+      expect(e.userId, 'u1');
+    });
+
+    test('GUILD_BAN_REMOVE → GuildBanRemoveEvent', () {
+      final data = <String, Object?>{
+        'guild_id': 'g1',
+        'user': <String, Object?>{'id': 'u2'},
+      };
+      final event = parser.parse('GUILD_BAN_REMOVE', data);
+
+      expect(event, isA<GuildBanRemoveEvent>());
+      final e = event as GuildBanRemoveEvent;
+      expect(e.guildId, 'g1');
+      expect(e.userId, 'u2');
+    });
+  });
+
+  group('Guild emojis & stickers', () {
+    test('GUILD_EMOJIS_UPDATE → GuildEmojisUpdateEvent', () {
+      final data = <String, Object?>{
+        'guild_id': 'g1',
+        'emojis': [
+          {'id': 'e1', 'name': 'smile', 'animated': false, 'nsfw': false},
+          {'id': 'e2', 'name': 'wave', 'animated': true, 'nsfw': false},
+        ],
+      };
+      final event = parser.parse('GUILD_EMOJIS_UPDATE', data);
+
+      expect(event, isA<GuildEmojisUpdateEvent>());
+      final e = event as GuildEmojisUpdateEvent;
+      expect(e.guildId, 'g1');
+      expect(e.emojis, hasLength(2));
+      expect(e.emojis[0].id, 'e1');
+      expect(e.emojis[0].name, 'smile');
+      expect(e.emojis[0].animated, false);
+      expect(e.emojis[1].name, 'wave');
+      expect(e.emojis[1].animated, true);
+    });
+
+    test('GUILD_STICKERS_UPDATE → GuildStickersUpdateEvent', () {
+      final data = <String, Object?>{
+        'guild_id': 'g1',
+        'stickers': [
+          {
+            'id': 's1',
+            'name': 'cool',
+            'description': 'A cool sticker',
+            'tags': ['cool', 'nice'],
+            'animated': false,
+            'nsfw': false,
+          },
+        ],
+      };
+      final event = parser.parse('GUILD_STICKERS_UPDATE', data);
+
+      expect(event, isA<GuildStickersUpdateEvent>());
+      final e = event as GuildStickersUpdateEvent;
+      expect(e.guildId, 'g1');
+      expect(e.stickers, hasLength(1));
+      expect(e.stickers[0].id, 's1');
+      expect(e.stickers[0].name, 'cool');
+    });
+  });
+
+  group('Guild sync & members chunk', () {
+    test('GUILD_SYNC → GuildSyncEvent with GuildCreateData', () {
+      final data = _guildCreateJson(id: '600');
+      final event = parser.parse('GUILD_SYNC', data);
+
+      expect(event, isA<GuildSyncEvent>());
+      final e = event as GuildSyncEvent;
+      expect(e.guild.guild.id, '600');
+      expect(e.guild.channels, hasLength(1));
+    });
+
+    test('GUILD_MEMBERS_CHUNK → GuildMembersChunkEvent', () {
+      final data = <String, Object?>{
+        'guild_id': 'g1',
+        'members': [_guildMemberJson(userId: 'u1')],
+        'chunk_index': 0,
+        'chunk_count': 1,
+        'nonce': 'nonce123',
+      };
+      final event = parser.parse('GUILD_MEMBERS_CHUNK', data);
+
+      expect(event, isA<GuildMembersChunkEvent>());
+      final e = event as GuildMembersChunkEvent;
+      expect(e.guildId, 'g1');
+      expect(e.members, hasLength(1));
+      expect(e.members[0].user.id, 'u1');
+      expect(e.chunkIndex, 0);
+      expect(e.chunkCount, 1);
+      expect(e.nonce, 'nonce123');
+    });
+
+    test(
+      'GUILD_MEMBER_LIST_UPDATE → GuildMemberListUpdateEvent with SYNC op',
+      () {
+        final data = <String, Object?>{
+          'guild_id': 'g1',
+          'id': 'members',
+          'channel_id': 'ch1',
+          'member_count': 10,
+          'online_count': 5,
+          'groups': [
+            {'id': 'online', 'count': 5},
+            {'id': 'offline', 'count': 5},
+          ],
+          'ops': [
+            {
+              'op': 'SYNC',
+              'range': [0, 99],
+              'items': [
+                {
+                  'group': {'id': 'online', 'count': 5},
+                },
+                {
+                  'member': {
+                    ..._guildMemberJson(userId: 'u1'),
+                    'presence': {
+                      'status': 'online',
+                      'custom_status': {'text': 'Working'},
+                    },
+                  },
+                },
+              ],
+            },
+          ],
+        };
+        final event = parser.parse('GUILD_MEMBER_LIST_UPDATE', data);
+
+        expect(event, isA<GuildMemberListUpdateEvent>());
+        final e = event as GuildMemberListUpdateEvent;
+        expect(e.guildId, 'g1');
+        expect(e.id, 'members');
+        expect(e.channelId, 'ch1');
+        expect(e.memberCount, 10);
+        expect(e.onlineCount, 5);
+        expect(e.groups, hasLength(2));
+        expect(e.groups[0].id, 'online');
+        expect(e.groups[0].count, 5);
+        expect(e.groups[1].id, 'offline');
+        expect(e.ops, hasLength(1));
+        expect(e.ops[0].op, 'SYNC');
+        expect(e.ops[0].range, [0, 99]);
+        expect(e.ops[0].items, hasLength(2));
+        expect(e.ops[0].items![0].group, isNotNull);
+        expect(e.ops[0].items![0].group!.id, 'online');
+        expect(e.ops[0].items![1].member, isNotNull);
+        expect(e.ops[0].items![1].member!.member.user.id, 'u1');
+        expect(e.ops[0].items![1].member!.status, 'online');
+        expect(e.ops[0].items![1].member!.customStatus, 'Working');
+      },
+    );
+
+    test('GUILD_MEMBER_LIST_UPDATE with INSERT op', () {
+      final data = <String, Object?>{
+        'guild_id': 'g1',
+        'id': 'members',
+        'member_count': 11,
+        'online_count': 6,
+        'groups': [
+          {'id': 'online', 'count': 6},
+        ],
+        'ops': [
+          {
+            'op': 'INSERT',
+            'index': 3,
+            'item': {'member': _guildMemberJson(userId: 'u2')},
+          },
+        ],
+      };
+      final event = parser.parse('GUILD_MEMBER_LIST_UPDATE', data);
+
+      expect(event, isA<GuildMemberListUpdateEvent>());
+      final e = event as GuildMemberListUpdateEvent;
+      expect(e.ops[0].op, 'INSERT');
+      expect(e.ops[0].index, 3);
+      expect(e.ops[0].item, isNotNull);
+      expect(e.ops[0].item!.member!.member.user.id, 'u2');
+    });
+  });
+
+  group('Presence (new events)', () {
+    test('PRESENCE_UPDATE_BULK → PresenceUpdateBulkEvent', () {
+      final data = <String, Object?>{
+        'presences': [
+          {
+            'user': {'id': 'u1'},
+            'status': 'online',
+          },
+          {
+            'user': {'id': 'u2'},
+            'status': 'idle',
+          },
+        ],
+        'guild_id': 'g1',
+      };
+      final event = parser.parse('PRESENCE_UPDATE_BULK', data);
+
+      expect(event, isA<PresenceUpdateBulkEvent>());
+      final e = event as PresenceUpdateBulkEvent;
+      expect(e.presences, hasLength(2));
+      expect(e.guildId, 'g1');
+    });
+  });
+
+  group('Voice', () {
+    test('VOICE_STATE_UPDATE → VoiceStateUpdateEvent', () {
+      final data = <String, Object?>{
+        'user_id': 'u1',
+        'channel_id': 'ch1',
+        'guild_id': 'g1',
+        'session_id': 's1',
+        'self_mute': true,
+        'self_deaf': false,
+        'self_video': true,
+        'self_stream': false,
+        'mute': false,
+        'deaf': false,
+        'suppress': false,
+      };
+      final event = parser.parse('VOICE_STATE_UPDATE', data);
+
+      expect(event, isA<VoiceStateUpdateEvent>());
+      final e = event as VoiceStateUpdateEvent;
+      expect(e.state.userId, 'u1');
+      expect(e.state.channelId, 'ch1');
+      expect(e.state.guildId, 'g1');
+      expect(e.state.sessionId, 's1');
+      expect(e.state.selfMute, true);
+      expect(e.state.selfDeaf, false);
+      expect(e.state.selfVideo, true);
+      expect(e.state.selfStream, false);
+      expect(e.state.mute, false);
+      expect(e.state.deaf, false);
+      expect(e.state.suppress, false);
+    });
+
+    test('VOICE_STATE_UPDATE carries the embedded member', () {
+      final data = <String, Object?>{
+        'user_id': '100',
+        'channel_id': 'ch1',
+        'guild_id': 'g1',
+        'member': _guildMemberJson(),
+      };
+      final e =
+          parser.parse('VOICE_STATE_UPDATE', data) as VoiceStateUpdateEvent;
+
+      expect(e.member?.user.id, '100');
+    });
+
+    test('VOICE_STATE_UPDATE with a null member still parses', () {
+      final data = <String, Object?>{
+        'user_id': '100',
+        'channel_id': null,
+        'guild_id': 'g1',
+        'member': null,
+      };
+      final e =
+          parser.parse('VOICE_STATE_UPDATE', data) as VoiceStateUpdateEvent;
+
+      expect(e.state.userId, '100');
+      expect(e.member, isNull);
+    });
+
+    test('VOICE_STATE_UPDATE with null optional fields', () {
+      final data = <String, Object?>{'user_id': 'u1'};
+      final event = parser.parse('VOICE_STATE_UPDATE', data);
+
+      expect(event, isA<VoiceStateUpdateEvent>());
+      final e = event as VoiceStateUpdateEvent;
+      expect(e.state.userId, 'u1');
+      expect(e.state.channelId, isNull);
+      expect(e.state.guildId, isNull);
+      expect(e.state.selfMute, false);
+      expect(e.state.selfVideo, false);
+    });
+
+    test('VOICE_SERVER_UPDATE → VoiceServerUpdateEvent', () {
+      final data = <String, Object?>{
+        'token': 'tok',
+        'endpoint': 'wss://voice.example.com',
+        'connection_id': 'conn1',
+        'guild_id': 'g1',
+        'channel_id': 'ch1',
+      };
+      final event = parser.parse('VOICE_SERVER_UPDATE', data);
+
+      expect(event, isA<VoiceServerUpdateEvent>());
+      final e = event as VoiceServerUpdateEvent;
+      expect(e.token, 'tok');
+      expect(e.endpoint, 'wss://voice.example.com');
+      expect(e.connectionId, 'conn1');
+      expect(e.guildId, 'g1');
+      expect(e.channelId, 'ch1');
+    });
+
+    test('VOICE_SERVER_UPDATE with null guildId and channelId', () {
+      final data = <String, Object?>{
+        'token': 'tok',
+        'endpoint': 'wss://voice.example.com',
+        'connection_id': 'conn1',
+        'guild_id': null,
+        'channel_id': null,
+      };
+      final event = parser.parse('VOICE_SERVER_UPDATE', data);
+
+      expect(event, isA<VoiceServerUpdateEvent>());
+      final e = event as VoiceServerUpdateEvent;
+      expect(e.guildId, isNull);
+      expect(e.channelId, isNull);
+    });
+
+    test('ENTRANCE_SOUND_PLAY → EntranceSoundPlayEvent', () {
+      final data = <String, Object?>{
+        'user_id': 'u1',
+        'channel_id': 'ch1',
+        'guild_id': 'g1',
+        'sound_id': 's1',
+        'hash': 'abc',
+        'url': 'https://cdn.example/sound.ogg',
+        'duration_ms': 1500,
+        'content_type': 'audio/ogg',
+      };
+      final event = parser.parse('ENTRANCE_SOUND_PLAY', data);
+
+      expect(event, isA<EntranceSoundPlayEvent>());
+      final e = event as EntranceSoundPlayEvent;
+      expect(e.userId, 'u1');
+      expect(e.channelId, 'ch1');
+      expect(e.url, 'https://cdn.example/sound.ogg');
+      expect(e.durationMs, 1500);
+    });
+
+    test('GUILD_COUNTS_UPDATE → GuildCountsUpdateEvent', () {
+      final data = <String, Object?>{
+        'counts': [
+          {'guild_id': 'g1', 'member_count': 10, 'online_count': 3},
+        ],
+      };
+      final event = parser.parse('GUILD_COUNTS_UPDATE', data);
+
+      expect(event, isA<GuildCountsUpdateEvent>());
+      final e = event as GuildCountsUpdateEvent;
+      expect(e.counts, hasLength(1));
+      expect(e.counts.first.guildId, 'g1');
+      expect(e.counts.first.memberCount, 10);
+      expect(e.counts.first.onlineCount, 3);
+    });
+
+    test('CHANNEL_MEMBER_COUNTS_UPDATE → ChannelMemberCountsUpdateEvent', () {
+      final data = <String, Object?>{
+        'counts': [
+          {
+            'guild_id': 'g1',
+            'channel_id': 'ch1',
+            'member_count': 8,
+            'online_count': 2,
+          },
+        ],
+      };
+      final event = parser.parse('CHANNEL_MEMBER_COUNTS_UPDATE', data);
+
+      expect(event, isA<ChannelMemberCountsUpdateEvent>());
+      final e = event as ChannelMemberCountsUpdateEvent;
+      expect(e.counts, hasLength(1));
+      expect(e.counts.first.channelId, 'ch1');
+      expect(e.counts.first.memberCount, 8);
+    });
+  });
+
+  group('Calls', () {
+    test('CALL_CREATE → CallCreateEvent', () {
+      final data = <String, Object?>{
+        'channel_id': 'ch1',
+        'message_id': 'msg1',
+        'region': 'us-east',
+        'voice_states': [
+          {'user_id': 'u1', 'channel_id': 'ch1'},
+        ],
+        'ringing': ['u2'],
+      };
+      final event = parser.parse('CALL_CREATE', data);
+
+      expect(event, isA<CallCreateEvent>());
+      final e = event as CallCreateEvent;
+      expect(e.channelId, 'ch1');
+      expect(e.messageId, 'msg1');
+      expect(e.region, 'us-east');
+      expect(e.voiceStates, hasLength(1));
+      expect(e.voiceStates![0].userId, 'u1');
+      expect(e.ringing, ['u2']);
+    });
+
+    test('CALL_CREATE with null optional fields', () {
+      final data = <String, Object?>{'channel_id': 'ch1'};
+      final event = parser.parse('CALL_CREATE', data);
+
+      expect(event, isA<CallCreateEvent>());
+      final e = event as CallCreateEvent;
+      expect(e.channelId, 'ch1');
+      expect(e.messageId, isNull);
+      expect(e.region, isNull);
+      expect(e.voiceStates, isNull);
+      expect(e.ringing, isNull);
+    });
+
+    test('CALL_UPDATE → CallUpdateEvent', () {
+      final data = <String, Object?>{
+        'channel_id': 'ch1',
+        'message_id': 'msg2',
+        'region': 'eu-west',
+        'ringing': <String>[],
+        'voice_states': [
+          {'user_id': 'u1', 'channel_id': 'ch1'},
+          {'user_id': 'u2', 'channel_id': 'ch1'},
+        ],
+      };
+      final event = parser.parse('CALL_UPDATE', data);
+
+      expect(event, isA<CallUpdateEvent>());
+      final e = event as CallUpdateEvent;
+      expect(e.channelId, 'ch1');
+      expect(e.messageId, 'msg2');
+      expect(e.region, 'eu-west');
+      expect(e.voiceStates, hasLength(2));
+      expect(e.ringing, isEmpty);
+    });
+
+    test('CALL_UPDATE voice_states keep the per-connection version', () {
+      final data = <String, Object?>{
+        'channel_id': 'ch1',
+        'message_id': 'msg2',
+        'region': 'eu-west',
+        'ringing': <String>[],
+        'voice_states': [
+          {
+            'guild_id': null,
+            'channel_id': 'ch1',
+            'user_id': 'u1',
+            'connection_id': 'conn-1',
+            'session_id': 's1',
+            'member': null,
+            'mute': false,
+            'deaf': false,
+            'self_mute': true,
+            'self_deaf': false,
+            'self_video': false,
+            'self_stream': false,
+            'is_mobile': false,
+            'suppress': false,
+            'viewer_stream_keys': <String>[],
+            'e2ee_capable': false,
+            'region_id': null,
+            'server_id': null,
+            'version': 4,
+          },
+        ],
+      };
+      final event = parser.parse('CALL_UPDATE', data);
+
+      final e = event as CallUpdateEvent;
+      expect(e.voiceStates, hasLength(1));
+      expect(e.voiceStates![0].connectionId, 'conn-1');
+      expect(e.voiceStates![0].version, 4);
+    });
+
+    test('CALL_DELETE → CallDeleteEvent', () {
+      final data = <String, Object?>{'channel_id': 'ch1'};
+      final event = parser.parse('CALL_DELETE', data);
+
+      expect(event, isA<CallDeleteEvent>());
+      final e = event as CallDeleteEvent;
+      expect(e.channelId, 'ch1');
+      expect(e.unavailable, isFalse);
+    });
+
+    test('CALL_DELETE when the call becomes unavailable', () {
+      final data = <String, Object?>{'channel_id': 'ch1', 'unavailable': true};
+      final event = parser.parse('CALL_DELETE', data);
+
+      expect(event, isA<CallDeleteEvent>());
+      final e = event as CallDeleteEvent;
+      expect(e.channelId, 'ch1');
+      expect(e.unavailable, isTrue);
+    });
+  });
+
+  group('Invites', () {
+    test('INVITE_CREATE → InviteCreateEvent', () {
+      final data = <String, Object?>{
+        'code': 'abc123',
+        'guild_id': 'g1',
+        'channel_id': 'ch1',
+      };
+      final event = parser.parse('INVITE_CREATE', data);
+
+      expect(event, isA<InviteCreateEvent>());
+      final e = event as InviteCreateEvent;
+      expect(e.data['code'], 'abc123');
+    });
+
+    test('INVITE_DELETE → InviteDeleteEvent', () {
+      final data = <String, Object?>{'code': 'abc123', 'guild_id': 'g1'};
+      final event = parser.parse('INVITE_DELETE', data);
+
+      expect(event, isA<InviteDeleteEvent>());
+      final e = event as InviteDeleteEvent;
+      expect(e.code, 'abc123');
+      expect(e.guildId, 'g1');
+    });
+
+    test('INVITE_DELETE for a group DM invite', () {
+      final data = <String, Object?>{'code': 'abc123', 'channel_id': 'ch1'};
+      final event = parser.parse('INVITE_DELETE', data);
+
+      expect(event, isA<InviteDeleteEvent>());
+      final e = event as InviteDeleteEvent;
+      expect(e.code, 'abc123');
+      expect(e.guildId, isNull);
+    });
+  });
+
+  group('Saved messages & mentions', () {
+    test('SAVED_MESSAGE_CREATE → SavedMessageCreateEvent', () {
+      final data = _messageJson(id: '500', channelId: '200');
+      final event = parser.parse('SAVED_MESSAGE_CREATE', data);
+
+      expect(event, isA<SavedMessageCreateEvent>());
+      final e = event as SavedMessageCreateEvent;
+      expect(e.message.id, '500');
+    });
+
+    test('SAVED_MESSAGE_DELETE → SavedMessageDeleteEvent', () {
+      final data = <String, Object?>{'message_id': 'msg1'};
+      final event = parser.parse('SAVED_MESSAGE_DELETE', data);
+
+      expect(event, isA<SavedMessageDeleteEvent>());
+      final e = event as SavedMessageDeleteEvent;
+      expect(e.messageId, 'msg1');
+    });
+
+    test('RECENT_MENTION_DELETE → RecentMentionDeleteEvent', () {
+      final data = <String, Object?>{'message_id': 'msg2'};
+      final event = parser.parse('RECENT_MENTION_DELETE', data);
+
+      expect(event, isA<RecentMentionDeleteEvent>());
+      final e = event as RecentMentionDeleteEvent;
+      expect(e.messageId, 'msg2');
+    });
+  });
+
+  group('Misc', () {
+    test('WEBHOOKS_UPDATE → WebhooksUpdateEvent', () {
+      final data = <String, Object?>{'channel_id': 'ch1', 'guild_id': 'g1'};
+      final event = parser.parse('WEBHOOKS_UPDATE', data);
+
+      expect(event, isA<WebhooksUpdateEvent>());
+      final e = event as WebhooksUpdateEvent;
+      expect(e.channelId, 'ch1');
+      expect(e.guildId, 'g1');
+    });
+
+    test('FAVORITE_MEME_CREATE → FavoriteMemeCreateEvent', () {
+      final data = <String, Object?>{'id': 'meme1', 'url': 'https://meme.png'};
+      final event = parser.parse('FAVORITE_MEME_CREATE', data);
+
+      expect(event, isA<FavoriteMemeCreateEvent>());
+      final e = event as FavoriteMemeCreateEvent;
+      expect(e.data['id'], 'meme1');
+    });
+
+    test('FAVORITE_MEME_UPDATE → FavoriteMemeUpdateEvent', () {
+      final data = <String, Object?>{'id': 'meme1', 'url': 'https://meme2.png'};
+      final event = parser.parse('FAVORITE_MEME_UPDATE', data);
+
+      expect(event, isA<FavoriteMemeUpdateEvent>());
+    });
+
+    test('FAVORITE_MEME_DELETE → FavoriteMemeDeleteEvent', () {
+      final data = <String, Object?>{'id': 'meme1'};
+      final event = parser.parse('FAVORITE_MEME_DELETE', data);
+
+      expect(event, isA<FavoriteMemeDeleteEvent>());
+      final e = event as FavoriteMemeDeleteEvent;
+      expect(e.id, 'meme1');
+    });
+
+    test('FAVORITE_MEME_DELETE with meme_id → FavoriteMemeDeleteEvent', () {
+      final data = <String, Object?>{'meme_id': 'meme2'};
+      final event = parser.parse('FAVORITE_MEME_DELETE', data);
+
+      expect(event, isA<FavoriteMemeDeleteEvent>());
+      final e = event as FavoriteMemeDeleteEvent;
+      expect(e.id, 'meme2');
+    });
+  });
+
+  group('Unknown / fallback', () {
+    test('Unknown event type → UnknownGatewayEvent', () {
+      final data = <String, Object?>{'foo': 'bar'};
+      final event = parser.parse('TOTALLY_UNKNOWN_EVENT', data);
+
+      expect(event, isA<UnknownGatewayEvent>());
+      final e = event as UnknownGatewayEvent;
+      expect(e.eventType, 'TOTALLY_UNKNOWN_EVENT');
+      expect(e.data, data);
+      expect(e.parseError, isNull);
+    });
+
+    test('Malformed payload → UnknownGatewayEvent (fallback via catch)', () {
+      final data = <String, Object?>{'id': 1};
+      final event = parser.parse('MESSAGE_CREATE', data);
+
+      expect(event, isA<UnknownGatewayEvent>());
+      final e = event as UnknownGatewayEvent;
+      expect(e.eventType, 'MESSAGE_CREATE');
+      expect(e.data, data);
+      expect(e.parseError, isNotNull);
+    });
+  });
+
+  group('READY extended fields', () {
+    Map<String, Object?> minimalReadyPayload([
+      Map<String, Object?> overrides = const {},
+    ]) => {
+      'session_id': 'sess-test',
+      'user': _userPrivateJson(),
+      'guilds': <Object?>[],
+      'private_channels': <Object?>[],
+      'relationships': <Object?>[],
+      'presences': <Object?>[],
+      ...overrides,
+    };
+
+    test('READY from an older instance parses without newer fields', () {
+      final event = parser.parse('READY', {
+        'session_id': 'sess-test',
+        'user': <String, Object?>{'id': '42', 'username': 'old'},
+        'user_settings': <String, Object?>{'theme': 'dark'},
+      });
+
+      expect(event, isA<ReadyEvent>());
+      final ready = event as ReadyEvent;
+      expect(ready.user.id, '42');
+      expect(ready.user.username, 'old');
+      expect(ready.userSettings?.theme, 'dark');
+      expect(ready.rawGuilds, isEmpty);
+    });
+
+    test('relationships without an inline user take it from READY users', () {
+      final data = minimalReadyPayload({
+        'relationships': [
+          {'id': '100', 'type': 1, 'nickname': null},
+        ],
+        'users': [_userPartialJson(id: '100')],
+      });
+      final event = parser.parse('READY', data) as ReadyEvent;
+
+      expect(event.relationships, hasLength(1));
+      expect(event.relationships.single.user.id, '100');
+    });
+
+    test('notes — Map<String, String> parsed correctly', () {
+      final data = minimalReadyPayload({
+        'notes': {'user1': 'A friend', 'user2': 'A colleague'},
+      });
+      final event = parser.parse('READY', data) as ReadyEvent;
+
+      expect(event.notes, isA<Map<String, String>>());
+      expect(event.notes, hasLength(2));
+      expect(event.notes!['user1'], 'A friend');
+      expect(event.notes!['user2'], 'A colleague');
+    });
+
+    test(
+      'relationships keep pending outgoing when voice-share fields are omitted',
+      () {
+        final data = minimalReadyPayload({
+          'relationships': [
+            {
+              'id': '100',
+              'type': 4,
+              'user': _userPartialJson(id: '100'),
+              'nickname': null,
+            },
+          ],
+        });
+        final event = parser.parse('READY', data) as ReadyEvent;
+
+        expect(event.relationships, hasLength(1));
+        expect(event.relationships.single.id, '100');
+        expect(
+          event.relationships.single.type,
+          RelationshipTypes.outgoingRequest,
+        );
+        expect(event.relationships.single.shareVoiceActivity, isTrue);
+        expect(event.relationships.single.friendSharesVoiceActivity, isTrue);
+      },
+    );
+
+    test('pinned_dms — List<String> parsed correctly', () {
+      final data = minimalReadyPayload({
+        'pinned_dms': ['ch1', 'ch2', 'ch3'],
+      });
+      final event = parser.parse('READY', data) as ReadyEvent;
+
+      expect(event.pinnedDms, isA<List<String>>());
+      expect(event.pinnedDms, ['ch1', 'ch2', 'ch3']);
+    });
+
+    test('country_code — String parsed correctly', () {
+      final data = minimalReadyPayload({'country_code': 'US'});
+      final event = parser.parse('READY', data) as ReadyEvent;
+
+      expect(event.countryCode, 'US');
+    });
+
+    test('auth_session_id_hash — String parsed correctly', () {
+      final data = minimalReadyPayload({'auth_session_id_hash': 'abc123hash'});
+      final event = parser.parse('READY', data) as ReadyEvent;
+
+      expect(event.authSessionIdHash, 'abc123hash');
+    });
+
+    test('read_states — List<GatewayReadState> with field access', () {
+      final data = minimalReadyPayload({
+        'read_states': [
+          {
+            'id': 'ch100',
+            'last_message_id': 'msg999',
+            'mention_count': 3,
+            'last_pin_timestamp': '2026-01-15T00:00:00.000Z',
+          },
+          {'id': 'ch200', 'last_message_id': null, 'mention_count': 0},
+        ],
+      });
+      final event = parser.parse('READY', data) as ReadyEvent;
+
+      expect(event.readStates, hasLength(2));
+      expect(event.readStates[0], isA<GatewayReadState>());
+      expect(event.readStates[0].id, 'ch100');
+      expect(event.readStates[0].lastMessageId, 'msg999');
+      expect(event.readStates[0].mentionCount, 3);
+      expect(event.readStates[0].lastPinTimestamp, '2026-01-15T00:00:00.000Z');
+      expect(event.readStates[1].id, 'ch200');
+      expect(event.readStates[1].lastMessageId, isNull);
+      expect(event.readStates[1].mentionCount, 0);
+    });
+
+    test(
+      'favorite_memes — List<Map<String, dynamic>> preserved as raw maps',
+      () {
+        final data = minimalReadyPayload({
+          'favorite_memes': [
+            {'url': 'https://meme.example/1.png', 'name': 'doge'},
+            {'url': 'https://meme.example/2.png', 'name': 'nyan'},
+          ],
+        });
+        final event = parser.parse('READY', data) as ReadyEvent;
+
+        expect(event.favoriteMemes, isA<List<Map<String, dynamic>>>());
+        expect(event.favoriteMemes, hasLength(2));
+        expect(event.favoriteMemes![0]['url'], 'https://meme.example/1.png');
+        expect(event.favoriteMemes![1]['name'], 'nyan');
+      },
+    );
+
+    test('users — List<Map<String, dynamic>> preserved as raw maps', () {
+      final data = minimalReadyPayload({
+        'users': [
+          {'id': 'u1', 'username': 'alice'},
+          {'id': 'u2', 'username': 'bob'},
+        ],
+      });
+      final event = parser.parse('READY', data) as ReadyEvent;
+
+      expect(event.users, isA<List<Map<String, dynamic>>>());
+      expect(event.users, hasLength(2));
+      expect(event.users![0]['id'], 'u1');
+      expect(event.users![1]['username'], 'bob');
+    });
+
+    test('rtc_regions — List<Map<String, dynamic>> preserved as raw maps', () {
+      final data = minimalReadyPayload({
+        'rtc_regions': [
+          {'id': 'us-east', 'name': 'US East', 'optimal': true},
+          {'id': 'eu-west', 'name': 'EU West', 'optimal': false},
+        ],
+      });
+      final event = parser.parse('READY', data) as ReadyEvent;
+
+      expect(event.rtcRegions, isA<List<Map<String, dynamic>>>());
+      expect(event.rtcRegions, hasLength(2));
+      expect(event.rtcRegions![0]['id'], 'us-east');
+      expect(event.rtcRegions![1]['optimal'], false);
+    });
+
+    test(
+      'user_guild_settings — List<UserGuildSettingsResponse> parsed correctly',
+      () {
+        final data = minimalReadyPayload({
+          'user_guild_settings': [
+            {
+              'guild_id': 'g1',
+              'message_notifications': 0,
+              'muted': true,
+              'mute_config': null,
+              'mobile_push': true,
+              'suppress_everyone': false,
+              'suppress_roles': false,
+              'hide_muted_channels': false,
+              'channel_overrides': null,
+              'version': 1,
+            },
+            {
+              'guild_id': null,
+              'message_notifications': 1,
+              'muted': false,
+              'mute_config': null,
+              'mobile_push': false,
+              'suppress_everyone': true,
+              'suppress_roles': true,
+              'hide_muted_channels': true,
+              'channel_overrides': null,
+              'version': 2,
+            },
+          ],
+        });
+        final event = parser.parse('READY', data) as ReadyEvent;
+
+        expect(event.userGuildSettings, isA<List<UserGuildSettingsResponse>>());
+        expect(event.userGuildSettings, hasLength(2));
+        expect(event.userGuildSettings![0].guildId, 'g1');
+        expect(event.userGuildSettings![0].muted, true);
+        expect(
+          event.userGuildSettings![0].messageNotifications,
+          UserNotificationSettings.allMessages,
+        );
+        expect(event.userGuildSettings![0].version, 1);
+        expect(event.userGuildSettings![1].guildId, isNull);
+        expect(event.userGuildSettings![1].suppressEveryone, true);
+        expect(event.userGuildSettings![1].version, 2);
+      },
+    );
+
+    test('all new optional fields default to null when missing', () {
+      final data = minimalReadyPayload();
+      final event = parser.parse('READY', data) as ReadyEvent;
+
+      expect(event.notes, isNull);
+      expect(event.pinnedDms, isNull);
+      expect(event.countryCode, isNull);
+      expect(event.authSessionIdHash, isNull);
+      expect(event.favoriteMemes, isNull);
+      expect(event.users, isNull);
+      expect(event.rtcRegions, isNull);
+      expect(event.userGuildSettings, isNull);
+      expect(event.readStates, isEmpty);
+    });
+  });
+
+  group('Threads', () {
+    Map<String, Object?> threadJson({String id = '700', int type = 11}) => {
+      'id': id,
+      'type': type,
+      'guild_id': '300',
+      'parent_id': '200',
+      'owner_id': '100',
+      'name': 'thread',
+      'message_count': 2,
+      'member_count': 1,
+      'thread_metadata': {
+        'archived': false,
+        'auto_archive_duration': 1440,
+        'archive_timestamp': '2026-01-01T00:00:00.000Z',
+        'locked': false,
+        'create_timestamp': '2026-01-01T00:00:00.000Z',
+      },
+    };
+
+    Map<String, Object?> threadMemberJson({
+      String id = '700',
+      String userId = '100',
+    }) => {
+      'id': id,
+      'user_id': userId,
+      'join_timestamp': '2026-01-01T00:00:00.000Z',
+      'flags': 1,
+    };
+
+    test('THREAD_CREATE → ThreadCreateEvent with newly_created', () {
+      final event = parser.parse('THREAD_CREATE', {
+        ...threadJson(type: 12),
+        'newly_created': true,
+        'member': threadMemberJson(),
+      });
+
+      expect(event, isA<ThreadCreateEvent>());
+      final e = event as ThreadCreateEvent;
+      expect(e.channel.id, '700');
+      expect(e.channel.type, ChannelType.privateThread);
+      expect(e.channel.parentId, '200');
+      expect(e.channel.threadMetadata!.autoArchiveDuration, 1440);
+      expect(e.channel.member!.flags, 1);
+      expect(e.newlyCreated, true);
+    });
+
+    test('THREAD_CREATE without newly_created defaults to false', () {
+      final e =
+          parser.parse('THREAD_CREATE', threadJson()) as ThreadCreateEvent;
+
+      expect(e.newlyCreated, false);
+      expect(e.channel.type, ChannelType.publicThread);
+    });
+
+    test('THREAD_CREATE of an announcement thread keeps type 10', () {
+      final e =
+          parser.parse('THREAD_CREATE', threadJson(type: 10))
+              as ThreadCreateEvent;
+
+      expect(e.channel.type, ChannelType.announcementThread);
+    });
+
+    test('THREAD_UPDATE → ThreadUpdateEvent', () {
+      final event = parser.parse('THREAD_UPDATE', threadJson(id: '701'));
+
+      expect(event, isA<ThreadUpdateEvent>());
+      expect((event as ThreadUpdateEvent).channel.id, '701');
+    });
+
+    test('THREAD_DELETE → ThreadDeleteEvent', () {
+      final event = parser.parse('THREAD_DELETE', {
+        'id': '700',
+        'guild_id': '300',
+        'parent_id': '200',
+        'type': 11,
+      });
+
+      expect(event, isA<ThreadDeleteEvent>());
+      final e = event as ThreadDeleteEvent;
+      expect(e.id, '700');
+      expect(e.guildId, '300');
+      expect(e.parentId, '200');
+      expect(e.type, ChannelType.publicThread);
+    });
+
+    test('THREAD_LIST_SYNC → ThreadListSyncEvent', () {
+      final event = parser.parse('THREAD_LIST_SYNC', {
+        'guild_id': '300',
+        'channel_ids': ['200'],
+        'threads': [threadJson(), threadJson(id: '701')],
+        'members': [threadMemberJson()],
+      });
+
+      expect(event, isA<ThreadListSyncEvent>());
+      final e = event as ThreadListSyncEvent;
+      expect(e.guildId, '300');
+      expect(e.channelIds, ['200']);
+      expect(e.threads.map((t) => t.id), ['700', '701']);
+      expect(e.members.single.userId, '100');
+    });
+
+    test('THREAD_LIST_SYNC without channel_ids is a full sync', () {
+      final e =
+          parser.parse('THREAD_LIST_SYNC', {
+                'guild_id': '300',
+                'threads': <Object?>[],
+                'members': <Object?>[],
+              })
+              as ThreadListSyncEvent;
+
+      expect(e.channelIds, isNull);
+      expect(e.threads, isEmpty);
+    });
+
+    test('THREAD_MEMBER_UPDATE → ThreadMemberUpdateEvent', () {
+      final event = parser.parse('THREAD_MEMBER_UPDATE', {
+        ...threadMemberJson(),
+        'guild_id': '300',
+        'muted': true,
+        'mute_config': null,
+      });
+
+      expect(event, isA<ThreadMemberUpdateEvent>());
+      final e = event as ThreadMemberUpdateEvent;
+      expect(e.guildId, '300');
+      expect(e.member.id, '700');
+      expect(e.member.muted, true);
+    });
+
+    test('THREAD_MEMBERS_UPDATE → ThreadMembersUpdateEvent', () {
+      final event = parser.parse('THREAD_MEMBERS_UPDATE', {
+        'id': '700',
+        'guild_id': '300',
+        'member_count': 2,
+        'added_members': [
+          {
+            ...threadMemberJson(userId: '101'),
+            'member': _guildMemberJson(userId: '101'),
+            'presence': {
+              'user': {'id': '101'},
+              'status': 'online',
+            },
+          },
+          {
+            ...threadMemberJson(userId: '102'),
+            'member': null,
+            'presence': null,
+          },
+        ],
+        'removed_member_ids': ['103'],
+      });
+
+      expect(event, isA<ThreadMembersUpdateEvent>());
+      final e = event as ThreadMembersUpdateEvent;
+      expect(e.id, '700');
+      expect(e.memberCount, 2);
+      expect(e.addedMembers, hasLength(2));
+      expect(e.addedMembers![0].userId, '101');
+      expect(e.addedMembers![0].threadId, '700');
+      expect(e.addedMembers![0].member!.user.id, '101');
+      expect(e.addedMembers![0].presence!['status'], 'online');
+      expect(e.addedMembers![1].member, isNull);
+      expect(e.addedMembers![1].presence, isNull);
+      expect(e.removedMemberIds, ['103']);
+    });
+
+    test('THREAD_MEMBERS_UPDATE with only a count', () {
+      final e =
+          parser.parse('THREAD_MEMBERS_UPDATE', {
+                'id': '700',
+                'guild_id': '300',
+                'member_count': 0,
+              })
+              as ThreadMembersUpdateEvent;
+
+      expect(e.addedMembers, isNull);
+      expect(e.removedMemberIds, isNull);
+    });
+
+    test('THREAD_MEMBER_LIST_UPDATE → ThreadMemberListUpdateEvent', () {
+      final event = parser.parse('THREAD_MEMBER_LIST_UPDATE', {
+        'guild_id': '300',
+        'thread_id': '700',
+        'members': [
+          {
+            'user_id': '100',
+            'join_timestamp': '2026-01-01T00:00:00.000Z',
+            'flags': 0,
+            'member': _guildMemberJson(),
+            'presence': null,
+          },
+          {'user_id': '101', 'join_timestamp': null, 'flags': 0},
+        ],
+      });
+
+      expect(event, isA<ThreadMemberListUpdateEvent>());
+      final e = event as ThreadMemberListUpdateEvent;
+      expect(e.guildId, '300');
+      expect(e.threadId, '700');
+      expect(e.members.map((m) => m.userId), ['100', '101']);
+      expect(e.members[0].joinTimestamp, '2026-01-01T00:00:00.000Z');
+      expect(e.members[0].member!.user.id, '100');
+      expect(e.members[1].joinTimestamp, isNull);
+    });
+
+    test('FORUM_UNREADS → ForumUnreadsEvent', () {
+      final event = parser.parse('FORUM_UNREADS', {
+        'guild_id': '300',
+        'channel_id': '400',
+        'threads': [
+          {'thread_id': '700', 'count': 3},
+          {'thread_id': '701', 'missing': true},
+          {'thread_id': '702', 'count': 0},
+        ],
+      });
+
+      expect(event, isA<ForumUnreadsEvent>());
+      final e = event as ForumUnreadsEvent;
+      expect(e.guildId, '300');
+      expect(e.channelId, '400');
+      expect(e.threads.map((t) => t.threadId), ['700', '701', '702']);
+      expect(e.threads[0].count, 3);
+      expect(e.threads[0].missing, isFalse);
+      expect(e.threads[1].count, isNull);
+      expect(e.threads[1].missing, isTrue);
+      expect(e.threads[2].count, 0);
+    });
+
+    test('GUILD_CREATE without threads key leaves threads null', () {
+      final e =
+          parser.parse('GUILD_CREATE', _guildCreateJson()) as GuildCreateEvent;
+
+      expect(e.guild.threads, isNull);
+    });
+
+    test('GUILD_CREATE with empty threads is distinct from absent', () {
+      final e =
+          parser.parse('GUILD_CREATE', {
+                ..._guildCreateJson(),
+                'threads': <Object?>[],
+              })
+              as GuildCreateEvent;
+
+      expect(e.guild.threads, isNotNull);
+      expect(e.guild.threads, isEmpty);
+    });
+
+    test('GUILD_CREATE parses threads with the own member', () {
+      final e =
+          parser.parse('GUILD_CREATE', {
+                ..._guildCreateJson(),
+                'threads': [
+                  {
+                    ...threadJson(),
+                    'member': {
+                      'join_timestamp': '2026-01-01T00:00:00.000Z',
+                      'flags': 0,
+                    },
+                  },
+                ],
+              })
+              as GuildCreateEvent;
+
+      expect(e.guild.threads, hasLength(1));
+      expect(e.guild.threads![0].id, '700');
+      expect(e.guild.threads![0].member!.userId, isNull);
+    });
+
+    test('GUILD_SYNC carries threads', () {
+      final e =
+          parser.parse('GUILD_SYNC', {
+                ..._guildCreateJson(),
+                'threads': [threadJson()],
+              })
+              as GuildSyncEvent;
+
+      expect(e.guild.threads, hasLength(1));
+    });
+
+    test('MESSAGE_ACK carries read state flags', () {
+      final e =
+          parser.parse('MESSAGE_ACK', {
+                'channel_id': '700',
+                'message_id': 'msg1',
+                'flags': 1,
+              })
+              as MessageAckEvent;
+
+      expect(e.flags, 1);
+    });
+
+    test('READY read state flags and last_viewed', () {
+      final event =
+          parser.parse('READY', {
+                'session_id': 'sess-test',
+                'user': _userPrivateJson(),
+                'guilds': <Object?>[],
+                'private_channels': <Object?>[],
+                'relationships': <Object?>[],
+                'presences': <Object?>[],
+                'read_states': [
+                  {
+                    'id': '700',
+                    'mention_count': 0,
+                    'flags': 1,
+                    'last_viewed': 4200,
+                  },
+                  {'id': '200', 'mention_count': 0},
+                ],
+              })
+              as ReadyEvent;
+
+      expect(event.readStates[0].flags, 1);
+      expect(event.readStates[0].lastViewed, 4200);
+      expect(event.readStates[1].flags, isNull);
+      expect(event.readStates[1].lastViewed, isNull);
+    });
+  });
+
+  group('LazyRequestSubscription', () {
+    test('omits thread keys when null', () {
+      const sub = LazyRequestSubscription(active: true);
+
+      expect(sub.toJson(), {'active': true});
+    });
+
+    test('emits threads and thread_member_lists when set', () {
+      const sub = LazyRequestSubscription(
+        threads: true,
+        threadMemberLists: ['700'],
+      );
+
+      expect(sub.toJson(), {
+        'threads': true,
+        'thread_member_lists': ['700'],
+      });
+    });
+
+    test('emits threads false and empty lists explicitly', () {
+      const sub = LazyRequestSubscription(
+        threads: false,
+        threadMemberLists: <String>[],
+      );
+
+      expect(sub.toJson(), {
+        'threads': false,
+        'thread_member_lists': <String>[],
+      });
+    });
+  });
+}

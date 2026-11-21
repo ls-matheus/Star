@@ -1,0 +1,87 @@
+// coverage:ignore-file
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: type=lint, unused_import, invalid_annotation_target, unnecessary_import
+
+import 'package:json_annotation/json_annotation.dart';
+
+import 'guild_member_profile_flags.dart';
+import 'int32_type.dart';
+import 'mention_reply_preferences.dart';
+import 'user_partial_response.dart';
+
+part 'guild_member_response.g.dart';
+
+@JsonSerializable()
+class GuildMemberResponse {
+  const GuildMemberResponse({
+    required this.user,
+    required this.roles,
+    required this.joinedAt,
+    required this.mute,
+    required this.deaf,
+    this.nick,
+    this.avatar,
+    this.banner,
+    this.accentColor,
+    this.communicationDisabledUntil,
+    this.profileFlags,
+    this.mentionFlags,
+  });
+
+  factory GuildMemberResponse.fromJson(Map<String, Object?> json) =>
+      _$GuildMemberResponseFromJson(json);
+
+  /// The user this guild member represents
+  @JsonKey(defaultValue: _$missingUserPartialResponse)
+  final UserPartialResponse user;
+
+  /// The nickname of the member in this guild
+  @JsonKey(includeIfNull: false)
+  final String? nick;
+
+  /// The hash of the member guild-specific avatar
+  @JsonKey(includeIfNull: false)
+  final String? avatar;
+
+  /// The hash of the member guild-specific banner
+  @JsonKey(includeIfNull: false)
+  final String? banner;
+
+  /// The accent colour of the member guild profile as an integer
+  @JsonKey(includeIfNull: false, name: 'accent_color')
+  final Int32Type? accentColor;
+
+  /// Array of role IDs the member has
+  @JsonKey(defaultValue: <String>[])
+  final List<String> roles;
+
+  /// ISO8601 timestamp of when the user joined the guild
+  @JsonKey(name: 'joined_at', defaultValue: _$missingDateTime)
+  final DateTime joinedAt;
+
+  /// Whether the member is muted in voice channels
+  @JsonKey(defaultValue: false)
+  final bool mute;
+
+  /// Whether the member is deafened in voice channels
+  @JsonKey(defaultValue: false)
+  final bool deaf;
+
+  /// ISO8601 timestamp until which the member is timed out
+  @JsonKey(includeIfNull: false, name: 'communication_disabled_until')
+  final DateTime? communicationDisabledUntil;
+  @JsonKey(includeIfNull: false, name: 'profile_flags')
+  final GuildMemberProfileFlags? profileFlags;
+
+  /// Per-guild reply mention preference override; NO_PREFERENCE means inherit the user-level mention_flags.
+  @JsonKey(includeIfNull: false, name: 'mention_flags')
+  final MentionReplyPreferences? mentionFlags;
+
+  Map<String, Object?> toJson() => _$GuildMemberResponseToJson(this);
+}
+
+DateTime _$missingDateTime() =>
+    DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+
+UserPartialResponse _$missingUserPartialResponse() =>
+    UserPartialResponse.fromJson(const <String, dynamic>{});

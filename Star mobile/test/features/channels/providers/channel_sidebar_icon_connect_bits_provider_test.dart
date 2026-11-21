@@ -1,0 +1,202 @@
+import 'package:drift/drift.dart' hide isNotNull, isNull;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:star_app/core/database/star_database.dart' hide Channel;
+import 'package:star_app/core/permissions/channel_permission_cache_provider.dart';
+import 'package:star_app/core/permissions/permission.dart';
+import 'package:star_app/core/providers/app/account_user_id.dart';
+import 'package:star_app/core/providers/database_provider.dart';
+import 'package:star_app/core/router/star_router.dart';
+import 'package:star_app/features/channels/domain/channel.dart';
+import 'package:star_app/features/channels/presentation/widgets/channel_icon.dart';
+import 'package:star_app/features/channels/providers/channel_sidebar_icon_connect_bits_provider.dart';
+import 'package:star_app/features/guilds/domain/guild.dart';
+import 'package:star_app/features/guilds/providers/guild_list_view_model.dart';
+import 'package:star_app/features/settings/providers/view_models/user_settings_view_model.dart';
+
+import '../../../helpers/open_test_database.dart';
+
+const String _testAccountUserId = 'test-user-id';
+
+void main() {
+  group('channelSidebarIconConnectBitsProvider', () {
+    test('returns cached bits without recomputing', () async {
+      const String channelId = 'voice_1';
+      final int cachedBits = Permission.viewChannel.value;
+      final ProviderContainer container = ProviderContainer(
+        overrides: [
+          currentUserIdProvider.overrideWithValue(_testAccountUserId),
+          channelPermissionCacheProvider(_testAccountUserId).overrideWith(
+            () => _FixedChannelPermissionCache(<String, int>{
+              channelId: cachedBits,
+            }),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final int? bits = await container.read(
+        channelSidebarIconConnectBitsProvider(channelId).future,
+      );
+
+      expect(bits, cachedBits);
+    });
+
+    test('returns null while guild membership is not cacheable', () async {
+      final StarDatabase db = openTestDatabase();
+      const String guildId = 'guild_1';
+      const String channelId = 'voice_1';
+      const String userId = 'user_1';
+      await db.guildDao.upsertServer(
+        ServersCompanion.insert(id: guildId, name: 'Guild'),
+      );
+      await db.channelDao.upsertChannel(
+        ChannelsCompanion.insert(
+          id: channelId,
+          guildId: guildId,
+          name: 'locked',
+          type: const Value(2),
+        ),
+      );
+
+      final ProviderContainer container = ProviderContainer(
+        overrides: [
+          starDatabaseProvider.overrideWithValue(db),
+          guildListViewModelProvider.overrideWith(_EmptyGuildListViewModel.new),
+          userSettingsViewModelProvider.overrideWith(
+            () => _FixedUserSettingsViewModel(userId),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final int? bits = await container.read(
+        channelSidebarIconConnectBitsProvider(channelId).future,
+      );
+
+      expect(bits, isNull);
+    });
+
+    test(
+      'returns cached denied connect bits for restricted voice channel',
+      () async {
+        final StarDatabase db = openTestDatabase();
+        const String guildId = 'guild_1';
+        const String channelId = 'voice_1';
+        const String userId = 'user_1';
+        final String everyoneDenyConnect =
+            '[{"id":"guild_1","type":0,"allow":"0","deny":"${Permission.connect.value}"}]';
+        await db.guildDao.upsertServer(
+          ServersCompanion.insert(id: guildId, name: 'Guild'),
+        );
+        await db.channelDao.upsertChannel(
+          ChannelsCompanion.insert(
+            id: channelId,
+            guildId: guildId,
+            name: 'locked',
+            type: const Value(2),
+            permissionOverwritesJson: Value(everyoneDenyConnect),
+          ),
+        );
+        await db.roleDao.upsertRoles([
+          RolesCompanion.insert(
+            id: guildId,
+            guildId: guildId,
+            name: '@everyone',
+            permissions: Value(Permission.viewChannel.value.toString()),
+          ),
+        ]);
+        await db.memberDao.upsertMember(
+          MembersCompanion.insert(userId: userId, guildId: guildId),
+        );
+
+        final ProviderContainer container = ProviderContainer(
+          overrides: [
+            starDatabaseProvider.overrideWithValue(db),
+            guildListViewModelProvider.overrideWith(
+              () => _FixedGuildListViewModel(const <Guild>[
+                Guild(id: guildId, name: 'Guild'),
+              ]),
+            ),
+            userSettingsViewModelProvider.overrideWith(
+              () => _FixedUserSettingsViewModel(userId),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        await container
+            .read(
+              channelPermissionCacheProvider(
+                readAccountUserId(container),
+              ).notifier,
+            )
+            .rebuildChannel(channelId);
+
+        final int? bits = await container.read(
+          channelSidebarIconConnectBitsProvider(channelId).future,
+        );
+
+        expect(bits, Permission.viewChannel.value);
+        expect(
+          resolveChannelIconAccessOverlay(
+            channel: Channel(
+              id: channelId,
+              guildId: guildId,
+              name: 'locked',
+              type: ChannelType.guildVoice,
+              permissionOverwritesJson: everyoneDenyConnect,
+            ),
+            canConnectPermissionBits: bits,
+          ),
+          ChannelIconAccessOverlay.noConnect,
+        );
+      },
+    );
+  });
+}
+
+class _FixedChannelPermissionCache extends ChannelPermissionCache {
+  _FixedChannelPermissionCache(this._bits);
+
+  final Map<String, int> _bits;
+
+  @override
+  ChannelPermissionCaches build(String accountUserId) =>
+      ChannelPermissionCaches(effective: _bits);
+}
+
+class _EmptyGuildListViewModel extends GuildListViewModel {
+  @override
+  GuildListViewState build() => const GuildListViewState(guilds: <Guild>[]);
+}
+
+class _FixedGuildListViewModel extends GuildListViewModel {
+  _FixedGuildListViewModel(this._guilds);
+
+  final List<Guild> _guilds;
+
+  @override
+  GuildListViewState build() => GuildListViewState(guilds: _guilds);
+}
+
+class _FixedUserSettingsViewModel extends UserSettingsViewModel {
+  _FixedUserSettingsViewModel(this._userId);
+
+  final String _userId;
+
+  @override
+  UserSettingsViewState build() => UserSettingsViewState(
+    userId: _userId,
+    username: 'user',
+    displayName: 'user',
+    discriminator: '0001',
+    avatar: null,
+    avatarColor: null,
+    memberSince: null,
+    status: 'online',
+    messageDisplayCompact: false,
+    developerMode: false,
+    trustedDomains: const <String>[],
+  );
+}

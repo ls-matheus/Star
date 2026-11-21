@@ -1,0 +1,54 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
+part of 'connection_response.dart';
+
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
+
+ConnectionResponse _$ConnectionResponseFromJson(Map<String, dynamic> json) =>
+    $checkedCreate(
+      'ConnectionResponse',
+      json,
+      ($checkedConvert) {
+        final val = ConnectionResponse(
+          id: $checkedConvert('id', (v) => v as String? ?? ''),
+          type: $checkedConvert(
+            'type',
+            (v) => v == null
+                ? ConnectionType.$unknown
+                : ConnectionType.fromJson(v as String),
+          ),
+          name: $checkedConvert('name', (v) => v as String? ?? ''),
+          verified: $checkedConvert('verified', (v) => v as bool? ?? false),
+          visibilityFlags: $checkedConvert(
+            'visibility_flags',
+            (v) => (v as num?)?.toInt() ?? 0,
+          ),
+          sortOrder: $checkedConvert(
+            'sort_order',
+            (v) => (v as num?)?.toInt() ?? 0,
+          ),
+          providerId: $checkedConvert('provider_id', (v) => v as String?),
+          url: $checkedConvert('url', (v) => v as String?),
+        );
+        return val;
+      },
+      fieldKeyMap: const {
+        'visibilityFlags': 'visibility_flags',
+        'sortOrder': 'sort_order',
+        'providerId': 'provider_id',
+      },
+    );
+
+Map<String, dynamic> _$ConnectionResponseToJson(ConnectionResponse instance) =>
+    <String, dynamic>{
+      'id': instance.id,
+      'type': instance.type,
+      'name': instance.name,
+      'verified': instance.verified,
+      'visibility_flags': instance.visibilityFlags,
+      'sort_order': instance.sortOrder,
+      'provider_id': instance.providerId,
+      'url': instance.url,
+    };

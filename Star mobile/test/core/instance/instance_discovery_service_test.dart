@@ -1,0 +1,529 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:star_app/core/instance/instance_config_snapshot.dart';
+import 'package:star_app/core/instance/instance_constants.dart';
+import 'package:star_app/core/instance/instance_discovery_service.dart';
+
+void main() {
+  group('InstanceDiscoveryService', () {
+    Map<String, dynamic> buildDiscovery({int apiCodeVersion = 1}) {
+      return <String, dynamic>{
+        'api_code_version': apiCodeVersion,
+        'endpoints': <String, dynamic>{
+          'api': 'https://chat.example.com/api',
+          'api_client': 'https://chat.example.com/v1',
+          'api_public': 'https://chat.example.com/api',
+          'gateway': 'wss://gateway.chat.example.com',
+          'media': 'https://media.chat.example.com',
+          'static_cdn': 'https://static.chat.example.com',
+          'marketing': 'https://chat.example.com',
+          'admin': 'https://chat.example.com/admin',
+          'invite': 'https://chat.example.com',
+          'gift': 'https://chat.example.com',
+          'webapp': 'https://chat.example.com',
+        },
+        'captcha': <String, dynamic>{
+          'provider': 'none',
+          'hcaptcha_site_key': null,
+          'turnstile_site_key': null,
+        },
+        'features': <String, dynamic>{
+          'voice_enabled': true,
+          'stripe_enabled': false,
+          'premium_enabled': false,
+          'stripe_serviceable': false,
+          'self_hosted': true,
+          'presigned_attachment_uploads': true,
+          'emails_enabled': true,
+        },
+        'registration': <String, dynamic>{
+          'mode': 'open',
+          'admin_registration_urls_enabled': false,
+        },
+        'community': <String, dynamic>{
+          'single_community': false,
+          'single_community_guild_id': null,
+          'direct_messages_disabled': false,
+          'guild_create_access': true,
+        },
+        'services': <String, dynamic>{
+          'gif_enabled': true,
+          'youtube_enabled': true,
+          'bluesky_enabled': false,
+        },
+        'gif': <String, dynamic>{
+          'provider': 'tenor',
+          'display_name': 'Tenor',
+          'attribution_required': false,
+        },
+        'sso': <String, dynamic>{
+          'enabled': false,
+          'enforced': false,
+          'display_name': null,
+          'redirect_uri': '',
+        },
+        'limits': <String, dynamic>{
+          'version': 2,
+          'traitDefinitions': <String>[],
+          'rules': <Map<String, dynamic>>[],
+          'defaultsHash': 'hash',
+        },
+        'push': <String, dynamic>{'public_vapid_key': null},
+        'app_public': <String, dynamic>{
+          'branding': <String, dynamic>{
+            'product_name': 'Star',
+            'icon_url': null,
+            'symbol_url': null,
+            'logo_url': null,
+            'wordmark_url': null,
+            'favicon_url': null,
+            'theme_color': null,
+            'premium_product_name': 'Plutonium',
+            'premium_info_url': null,
+          },
+          'setup': <String, dynamic>{'configured': true, 'admin_url': null},
+          'legal': <String, dynamic>{'terms_url': null, 'privacy_url': null},
+          'registration': <String, dynamic>{'collect_date_of_birth': false},
+        },
+      };
+    }
+
+    Dio buildDio({
+      required Map<String, dynamic> responseJson,
+      int statusCode = 200,
+      String expectedPath = '/api/.well-known/star',
+    }) {
+      return Dio()
+        ..httpClientAdapter = _DiscoveryAdapter(
+          responseJson: responseJson,
+          statusCode: statusCode,
+          expectedPath: expectedPath,
+        );
+    }
+
+    test('connectToEndpoint returns snapshot on success', () async {
+      final InstanceDiscoveryService service = InstanceDiscoveryService(
+        dio: buildDio(responseJson: buildDiscovery()),
+      );
+
+      final snapshot = await service.connectToEndpoint('chat.example.com');
+
+      expect(snapshot.apiBaseUrl, 'https://chat.example.com/v1');
+      expect(snapshot.gatewayUrl, 'wss://gateway.chat.example.com');
+      expect(snapshot.displayDomain, 'chat.example.com');
+    });
+
+    for (final MapEntry<String, String> endpoint in <String, String>{
+      'gateway': 'wss://gateway.evil.example',
+      'api_client': 'https://evil.example/v1',
+    }.entries) {
+      test('connectToEndpoint rejects a foreign ${endpoint.key} host', () {
+        final Map<String, dynamic> discovery = buildDiscovery();
+        (discovery['endpoints'] as Map<String, dynamic>)[endpoint.key] =
+            endpoint.value;
+        final InstanceDiscoveryService service = InstanceDiscoveryService(
+          dio: buildDio(responseJson: discovery),
+        );
+
+        expect(
+          service.connectToEndpoint('chat.example.com'),
+          throwsA(isA<InstanceDiscoveryException>()),
+        );
+      });
+    }
+
+    test('connectToEndpoint accepts servers without premium fields', () async {
+      final Map<String, dynamic> discovery = buildDiscovery();
+      (discovery['features'] as Map<String, dynamic>)
+        ..remove('premium_enabled')
+        ..remove('stripe_serviceable');
+      ((discovery['app_public'] as Map<String, dynamic>)['branding']
+              as Map<String, dynamic>)
+          .remove('premium_product_name');
+      final InstanceDiscoveryService service = InstanceDiscoveryService(
+        dio: buildDio(responseJson: discovery),
+      );
+
+      final snapshot = await service.connectToEndpoint('chat.example.com');
+
+      expect(snapshot.apiBaseUrl, 'https://chat.example.com/v1');
+      expect(snapshot.wellKnown?.features.premiumEnabled, isFalse);
+    });
+
+    test('connectToEndpoint throws on 404', () {
+      final InstanceDiscoveryService service = InstanceDiscoveryService(
+        dio: buildDio(responseJson: <String, dynamic>{}, statusCode: 404),
+      );
+
+      expect(
+        () => service.connectToEndpoint('chat.example.com'),
+        throwsA(isA<InstanceDiscoveryException>()),
+      );
+    });
+
+    test('connectToEndpoint throws on incompatible api code version', () {
+      final InstanceDiscoveryService service = InstanceDiscoveryService(
+        dio: buildDio(responseJson: buildDiscovery(apiCodeVersion: 0)),
+      );
+
+      expect(
+        () => service.connectToEndpoint('chat.example.com'),
+        throwsA(
+          predicate<InstanceDiscoveryException>(
+            (InstanceDiscoveryException error) =>
+                error.reason == InstanceDiscoveryFailureReason.instanceOutdated,
+          ),
+        ),
+      );
+    });
+
+    test('connectToEndpoint throws on unsupported codename', () {
+      final InstanceDiscoveryService service = InstanceDiscoveryService(
+        dio: buildDio(
+          responseJson: <String, dynamic>{
+            ...buildDiscovery(),
+            'codename': 'future-gen',
+          },
+        ),
+      );
+
+      expect(
+        () => service.connectToEndpoint('chat.example.com'),
+        throwsA(
+          predicate<InstanceDiscoveryException>(
+            (InstanceDiscoveryException error) =>
+                error.reason ==
+                InstanceDiscoveryFailureReason.requiresNewerClient,
+          ),
+        ),
+      );
+    });
+
+    test(
+      'connectToEndpoint short-circuits official input without HTTP',
+      () async {
+        final InstanceDiscoveryService service = InstanceDiscoveryService(
+          dio: buildDio(responseJson: buildDiscovery()),
+        );
+
+        final InstanceConfigSnapshot snapshot = await service.connectToEndpoint(
+          'star.invalid',
+        );
+
+        expect(snapshot.apiBaseUrl, InstanceConstants.defaultApiBaseUrl);
+        expect(
+          snapshot.displayDomain,
+          InstanceConstants.defaultInstanceInputUrl,
+        );
+      },
+    );
+
+    test('connectToEndpoint short-circuits star.invalid without HTTP', () async {
+      final InstanceDiscoveryService service = InstanceDiscoveryService(
+        dio: buildDio(responseJson: buildDiscovery()),
+      );
+
+      final InstanceConfigSnapshot snapshot = await service.connectToEndpoint(
+        'star.invalid',
+      );
+
+      expect(snapshot.apiBaseUrl, InstanceConstants.defaultApiBaseUrl);
+      expect(snapshot.displayDomain, InstanceConstants.defaultInstanceInputUrl);
+    });
+
+    test('rejects http for public hosts when the flag is on', () async {
+      final _CountingAdapter adapter = _CountingAdapter();
+      final InstanceDiscoveryService service = InstanceDiscoveryService(
+        dio: Dio()..httpClientAdapter = adapter,
+        rejectPublicCleartext: true,
+      );
+
+      await expectLater(
+        service.connectToEndpoint('http://chat.example.com'),
+        throwsA(
+          predicate<InstanceDiscoveryException>(
+            (InstanceDiscoveryException error) =>
+                error.reason ==
+                InstanceDiscoveryFailureReason.insecureConnection,
+          ),
+        ),
+      );
+      expect(adapter.requests, 0);
+    });
+
+    test('allows http for localhost subdomains when the flag is on', () async {
+      final Map<String, dynamic> discovery = buildDiscovery();
+      final Map<String, dynamic> endpoints =
+          discovery['endpoints'] as Map<String, dynamic>;
+      for (final String key in endpoints.keys.toList()) {
+        endpoints[key] = (endpoints[key] as String)
+            .replaceFirst('https://', 'http://')
+            .replaceFirst('wss://', 'ws://')
+            .replaceFirst('chat.example.com', 'chat.localhost:8088');
+      }
+      final InstanceDiscoveryService service = InstanceDiscoveryService(
+        dio: buildDio(responseJson: discovery),
+        rejectPublicCleartext: true,
+      );
+
+      final InstanceConfigSnapshot snapshot = await service.connectToEndpoint(
+        'http://chat.localhost:8088',
+      );
+
+      expect(snapshot.apiBaseUrl, 'http://chat.localhost:8088/v1');
+    });
+
+    test('allows http for public hosts when the flag is off', () async {
+      final InstanceDiscoveryService service = InstanceDiscoveryService(
+        dio: buildDio(responseJson: buildDiscovery()),
+        rejectPublicCleartext: false,
+      );
+
+      final InstanceConfigSnapshot snapshot = await service.connectToEndpoint(
+        'http://chat.example.com',
+      );
+
+      expect(snapshot.apiBaseUrl, 'https://chat.example.com/v1');
+    });
+
+    test(
+      'connectToEndpoint resolves official api_public from well-known',
+      () async {
+        final InstanceDiscoveryService service = InstanceDiscoveryService(
+          dio: buildDio(responseJson: buildOfficialDiscovery()),
+        );
+
+        final InstanceConfigSnapshot snapshot = await service.connectToEndpoint(
+          'chat.example.com',
+        );
+
+        expect(snapshot.apiBaseUrl, InstanceConstants.defaultApiBaseUrl);
+        expect(
+          snapshot.displayDomain,
+          InstanceConstants.defaultInstanceInputUrl,
+        );
+      },
+    );
+
+    test(
+      'retries a local instance once the local network prompt is answered',
+      () async {
+        final TestWidgetsFlutterBinding binding =
+            TestWidgetsFlutterBinding.ensureInitialized()
+              ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+        final Map<String, dynamic> discovery = buildDiscovery();
+        (discovery['endpoints'] as Map<String, dynamic>)
+          ..['api_client'] = 'http://192.168.1.20:8080/v1'
+          ..['gateway'] = 'ws://192.168.1.20:8080/gateway';
+        final _UnreachableOnceAdapter adapter = _UnreachableOnceAdapter(
+          discovery,
+        );
+        final InstanceDiscoveryService service = InstanceDiscoveryService(
+          dio: Dio()..httpClientAdapter = adapter,
+          waitForLocalNetworkPrompt: waitForSystemPromptAnswer,
+        );
+
+        final Future<InstanceConfigSnapshot> connect = service
+            .connectToEndpoint('http://192.168.1.20:8080');
+        await pumpEventQueue();
+        binding
+          ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+          ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+
+        expect((await connect).apiBaseUrl, 'http://192.168.1.20:8080/v1');
+        expect(adapter.requests, 2);
+      },
+    );
+
+    test(
+      'reports an unreachable local instance when no prompt appears',
+      () async {
+        TestWidgetsFlutterBinding.ensureInitialized()
+            .handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+        final _UnreachableOnceAdapter adapter = _UnreachableOnceAdapter(
+          buildDiscovery(),
+        );
+        final InstanceDiscoveryService service = InstanceDiscoveryService(
+          dio: Dio()..httpClientAdapter = adapter,
+          waitForLocalNetworkPrompt: waitForSystemPromptAnswer,
+        );
+
+        await expectLater(
+          service.connectToEndpoint('http://192.168.1.20:8080'),
+          throwsA(isA<InstanceDiscoveryException>()),
+        );
+        expect(adapter.requests, 1);
+      },
+    );
+  });
+}
+
+Map<String, dynamic> buildOfficialDiscovery({int apiCodeVersion = 1}) {
+  return <String, dynamic>{
+    'api_code_version': apiCodeVersion,
+    'endpoints': <String, dynamic>{
+      'api': 'https://star.invalid/api',
+      'api_client': 'https://star.invalid/api/v1',
+      'api_public': 'https://star.invalid/api',
+      'gateway': 'wss://gateway.star.invalid',
+      'media': 'https://starusercontent.com',
+      'static_cdn': 'https://starstatic.com',
+      'marketing': 'https://star.invalid',
+      'admin': 'https://admin.star.invalid',
+      'invite': 'https://star.gg',
+      'gift': 'https://star.gift',
+      'webapp': 'https://web.star.invalid',
+    },
+    'captcha': <String, dynamic>{
+      'provider': 'none',
+      'hcaptcha_site_key': null,
+      'turnstile_site_key': null,
+    },
+    'features': <String, dynamic>{
+      'voice_enabled': true,
+      'stripe_enabled': true,
+      'premium_enabled': true,
+      'stripe_serviceable': true,
+      'self_hosted': false,
+      'presigned_attachment_uploads': true,
+      'emails_enabled': true,
+    },
+    'registration': <String, dynamic>{
+      'mode': 'open',
+      'admin_registration_urls_enabled': true,
+    },
+    'community': <String, dynamic>{
+      'single_community': false,
+      'single_community_guild_id': null,
+      'direct_messages_disabled': false,
+      'guild_create_access': true,
+    },
+    'services': <String, dynamic>{
+      'gif_enabled': true,
+      'youtube_enabled': true,
+      'bluesky_enabled': true,
+    },
+    'gif': <String, dynamic>{
+      'provider': 'klipy',
+      'display_name': 'KLIPY',
+      'attribution_required': true,
+    },
+    'sso': <String, dynamic>{
+      'enabled': false,
+      'enforced': false,
+      'display_name': null,
+      'redirect_uri': '',
+    },
+    'limits': <String, dynamic>{
+      'version': 2,
+      'traitDefinitions': <String>[],
+      'rules': <Map<String, dynamic>>[],
+      'defaultsHash': 'hash',
+    },
+    'push': <String, dynamic>{'public_vapid_key': null},
+    'app_public': <String, dynamic>{
+      'branding': <String, dynamic>{
+        'product_name': 'Star',
+        'icon_url': null,
+        'symbol_url': null,
+        'logo_url': null,
+        'wordmark_url': null,
+        'favicon_url': null,
+        'theme_color': null,
+        'premium_product_name': 'Plutonium',
+        'premium_info_url': null,
+      },
+      'setup': <String, dynamic>{'configured': true, 'admin_url': null},
+      'legal': <String, dynamic>{'terms_url': null, 'privacy_url': null},
+      'registration': <String, dynamic>{'collect_date_of_birth': true},
+    },
+  };
+}
+
+class _DiscoveryAdapter implements HttpClientAdapter {
+  const _DiscoveryAdapter({
+    required this.responseJson,
+    required this.statusCode,
+    this.expectedPath = '/api/.well-known/star',
+  });
+
+  final Map<String, dynamic> responseJson;
+  final int statusCode;
+  final String expectedPath;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) {
+    expect(options.method, 'GET');
+    expect(options.uri.path, expectedPath);
+
+    return Future<ResponseBody>.value(
+      ResponseBody.fromString(
+        jsonEncode(responseJson),
+        statusCode,
+        headers: <String, List<String>>{
+          Headers.contentTypeHeader: <String>[Headers.jsonContentType],
+        },
+      ),
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _CountingAdapter implements HttpClientAdapter {
+  int requests = 0;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requests++;
+    return ResponseBody.fromString('{}', 404);
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _UnreachableOnceAdapter implements HttpClientAdapter {
+  _UnreachableOnceAdapter(this.responseJson);
+
+  final Map<String, dynamic> responseJson;
+  int requests = 0;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requests++;
+    if (requests == 1) {
+      throw DioException.connectionError(
+        requestOptions: options,
+        reason: 'No route to host',
+      );
+    }
+    return ResponseBody.fromString(
+      jsonEncode(responseJson),
+      200,
+      headers: <String, List<String>>{
+        Headers.contentTypeHeader: <String>[Headers.jsonContentType],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}

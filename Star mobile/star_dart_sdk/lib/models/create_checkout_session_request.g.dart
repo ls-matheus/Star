@@ -1,0 +1,67 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
+part of 'create_checkout_session_request.dart';
+
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
+
+CreateCheckoutSessionRequest _$CreateCheckoutSessionRequestFromJson(
+  Map<String, dynamic> json,
+) => $checkedCreate(
+  'CreateCheckoutSessionRequest',
+  json,
+  ($checkedConvert) {
+    final val = CreateCheckoutSessionRequest(
+      priceId: $checkedConvert('price_id', (v) => v as String? ?? ''),
+      countryCode: $checkedConvert('country_code', (v) => v as String?),
+      clientGeoipCountryCode: $checkedConvert(
+        'client_geoip_country_code',
+        (v) => v as String?,
+      ),
+      euWithdrawalWaiverAccepted: $checkedConvert(
+        'eu_withdrawal_waiver_accepted',
+        (v) => v as bool?,
+      ),
+      paymentMethod: $checkedConvert(
+        'payment_method',
+        (v) =>
+            v == null ? null : CheckoutPaymentMethodEnum.fromJson(v as String),
+      ),
+      isBusiness: $checkedConvert('is_business', (v) => v as bool?),
+      cnpj: $checkedConvert('cnpj', (v) => v as CnpjSchema?),
+      distribution: $checkedConvert(
+        'distribution',
+        (v) => v as DistributionQueryParam?,
+      ),
+      distributionToken: $checkedConvert(
+        'distribution_token',
+        (v) => v as DistributionTokenParam?,
+      ),
+    );
+    return val;
+  },
+  fieldKeyMap: const {
+    'priceId': 'price_id',
+    'countryCode': 'country_code',
+    'clientGeoipCountryCode': 'client_geoip_country_code',
+    'euWithdrawalWaiverAccepted': 'eu_withdrawal_waiver_accepted',
+    'paymentMethod': 'payment_method',
+    'isBusiness': 'is_business',
+    'distributionToken': 'distribution_token',
+  },
+);
+
+Map<String, dynamic> _$CreateCheckoutSessionRequestToJson(
+  CreateCheckoutSessionRequest instance,
+) => <String, dynamic>{
+  'price_id': instance.priceId,
+  'country_code': ?instance.countryCode,
+  'client_geoip_country_code': ?instance.clientGeoipCountryCode,
+  'eu_withdrawal_waiver_accepted': ?instance.euWithdrawalWaiverAccepted,
+  'payment_method': ?instance.paymentMethod,
+  'is_business': ?instance.isBusiness,
+  'cnpj': ?instance.cnpj,
+  'distribution': ?instance.distribution,
+  'distribution_token': ?instance.distributionToken,
+};

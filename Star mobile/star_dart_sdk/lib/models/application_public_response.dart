@@ -1,0 +1,67 @@
+// coverage:ignore-file
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: type=lint, unused_import, invalid_annotation_target, unnecessary_import
+
+import 'package:json_annotation/json_annotation.dart';
+
+import 'application_public_response_bot.dart';
+import 'snowflake_string_type.dart';
+import 'user_partial_response.dart';
+
+part 'application_public_response.g.dart';
+
+@JsonSerializable()
+class ApplicationPublicResponse {
+  const ApplicationPublicResponse({
+    required this.id,
+    required this.name,
+    required this.icon,
+    required this.description,
+    required this.redirectUris,
+    required this.scopes,
+    required this.botPublic,
+    required this.bot,
+    this.currentUser,
+  });
+
+  factory ApplicationPublicResponse.fromJson(Map<String, Object?> json) =>
+      _$ApplicationPublicResponseFromJson(json);
+
+  /// The unique identifier of the application
+  @JsonKey(defaultValue: '')
+  final SnowflakeStringType id;
+
+  /// The name of the application
+  @JsonKey(defaultValue: '')
+  final String name;
+
+  /// The icon hash of the application
+  @JsonKey(includeIfNull: true)
+  final String? icon;
+
+  /// The description of the application
+  @JsonKey(includeIfNull: true)
+  final String? description;
+
+  /// The registered redirect URIs for OAuth2
+  @JsonKey(name: 'redirect_uris', defaultValue: <String>[])
+  final List<String> redirectUris;
+
+  /// The available OAuth2 scopes
+  @JsonKey(defaultValue: <String>[])
+  final List<String> scopes;
+
+  /// Whether the bot can be invited by anyone
+  @JsonKey(name: 'bot_public', defaultValue: false)
+  final bool botPublic;
+
+  /// Detailed bot user metadata
+  @JsonKey(includeIfNull: true)
+  final ApplicationPublicResponseBot? bot;
+
+  /// Partial user data for the authenticated requester, when a session token is present
+  @JsonKey(includeIfNull: false, name: 'current_user')
+  final UserPartialResponse? currentUser;
+
+  Map<String, Object?> toJson() => _$ApplicationPublicResponseToJson(this);
+}
