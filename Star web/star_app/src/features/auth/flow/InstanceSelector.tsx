@@ -30,7 +30,6 @@ import {
 	InstanceDiscoveryStatus,
 	InstanceSelectorStep,
 } from '@app/features/auth/flow/instance_selector/InstanceSelectorTypes';
-import {enterDevSession} from '@app/features/dev_session/DevSessionState';
 import {
 	BACK_DESCRIPTOR,
 	CONTINUE_DESCRIPTOR,
@@ -43,13 +42,13 @@ import {TextInput} from '@app/features/ui/components/form/FormInput';
 import {ArrowLeftIcon, ArrowRightIcon} from '@app/features/ui/icons/DirectionalIcons';
 import {SteppedCarousel} from '@app/features/ui/stepped_carousel/SteppedCarousel';
 import {flxElementClassName} from '@app/lib/react';
+import type {DesktopKnownInstanceRecord} from '@star/desktop_ipc/src/KnownInstanceContract';
+import {NETWORK_ENDPOINT_INPUT_MAX_BYTES} from '@star/instance_bootstrap/src/NetworkOrigin';
+import {officialMarketingOrigin} from '@star/instance_bootstrap/src/OfficialInstance';
 import type {I18n} from '@lingui/core';
 import {msg} from '@lingui/core/macro';
 import {useLingui} from '@lingui/react/macro';
 import {GlobeIcon} from '@phosphor-icons/react';
-import type {DesktopKnownInstanceRecord} from '@star/desktop_ipc/src/KnownInstanceContract';
-import {NETWORK_ENDPOINT_INPUT_MAX_BYTES} from '@star/instance_bootstrap/src/NetworkOrigin';
-import {officialMarketingOrigin} from '@star/instance_bootstrap/src/OfficialInstance';
 import {observer} from 'mobx-react-lite';
 import {
 	type AriaAttributes,
@@ -355,8 +354,11 @@ export const InstanceSelector = observer(function InstanceSelector({
 	);
 	const handleAddInstance = useCallback(() => {
 		discoveryRequestOwner.cancel();
-		enterDevSession();
-	}, [discoveryRequestOwner]);
+		onChange('');
+		updateDiscoveryStatus(InstanceDiscoveryStatus.IDLE);
+		setDiscoveryError(null);
+		setStep(InstanceSelectorStep.ADD);
+	}, [discoveryRequestOwner, onChange, updateDiscoveryStatus]);
 	const handleBackToPicker = useCallback(() => {
 		discoveryRequestOwner.cancel();
 		updateDiscoveryStatus(InstanceDiscoveryStatus.IDLE);

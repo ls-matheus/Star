@@ -21,8 +21,6 @@ import RuntimeCrash from '@app/features/app/state/RuntimeCrash';
 import {AuthLoadingState} from '@app/features/auth/flow/AuthLoadingState';
 import {AuthRouteLoadError} from '@app/features/auth/flow/AuthRouteLoadError';
 import Accounts from '@app/features/auth/state/Accounts';
-import {getDevSessionActive, subscribeDevSession} from '@app/features/dev_session/DevSessionState';
-import {DevWorkspace} from '@app/features/dev_session/DevWorkspace';
 import {AppI18nProvider} from '@app/features/i18n/components/AppI18nProvider';
 import {
 	createNamedLoadableComponent,
@@ -49,12 +47,12 @@ import {UNFOCUSED_FULLY_INTERACTIVE_CLASS} from '@app/features/ui/utils/WindowFo
 import UserSettings from '@app/features/user/state/UserSettings';
 import {useNativeTitleBar} from '@app/features/window/hooks/useNativeTitleBar';
 import {useWindowEventListeners} from '@app/features/window/hooks/useWindowEventListeners';
+import {ThemeTypes} from '@star/constants/src/UserConstants';
 import {i18n} from '@lingui/core';
 import {IconContext} from '@phosphor-icons/react';
-import {ThemeTypes} from '@star/constants/src/UserConstants';
 import {observer} from 'mobx-react-lite';
 import type React from 'react';
-import {type ComponentType, type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore} from 'react';
+import {type ComponentType, type ReactNode, useEffect, useMemo, useRef, useState} from 'react';
 
 interface AuthRootProps {
 	loadApp: () => Promise<ComponentType>;
@@ -177,7 +175,6 @@ function SignedInLoadError(props: LoadableErrorProps): React.ReactElement {
 }
 
 export const AuthRoot = observer(({loadApp}: AuthRootProps): React.ReactElement => {
-	const devSessionActive = useSyncExternalStore(subscribeDevSession, getDevSessionActive, () => false);
 	const [SignedInApp] = useState(() =>
 		createNamedLoadableComponent<Record<string, never>>({
 			displayName: 'SignedInApp',
@@ -205,19 +202,6 @@ export const AuthRoot = observer(({loadApp}: AuthRootProps): React.ReactElement 
 			}
 		};
 	}, []);
-	if (devSessionActive) {
-		return (
-			<AppI18nProvider i18n={i18n}>
-				<IconContext.Provider value={{color: 'currentColor', weight: 'fill'}}>
-					<RouterProvider router={authRouter}>
-						<AuthWrapper>
-							<DevWorkspace />
-						</AuthWrapper>
-					</RouterProvider>
-				</IconContext.Provider>
-			</AppI18nProvider>
-		);
-	}
 	if (Accounts.currentAccount !== null) {
 		return <SignedInApp data-flx="app.auth-root.signed-in-app" />;
 	}
