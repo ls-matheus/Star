@@ -1,0 +1,503 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+import {createHash} from 'node:crypto';
+import type {ApiContext} from '@app/api/ApiContext';
+import {type ApplicationID, createApplicationID, type UserID} from '@app/api/BrandedTypes';
+import {Config} from '@app/api/Config';
+import type {
+	OAuth2AccessTokenRow,
+	OAuth2AuthorizationCodeRow,
+	OAuth2RefreshTokenRow,
+} from '@app/api/database/types/OAuth2Types';
+import {Logger} from '@app/api/Logger';
+import type {Application} from '@app/api/models/Application';
+import type {OAuth2AuthorizationCode} from '@app/api/models/OAuth2AuthorizationCode';
+import {filterOAuth2ScopeSet, isOAuth2Scope, parseOAuth2Scope, sortOAuth2Scopes} from '@app/api/oauth/OAuth2ScopeUtils';
+import {ACCESS_TOKEN_TTL_SECONDS} from '@app/api/oauth/OAuth2TokenConstants';
+import type {ApplicationRepository} from '@app/api/oauth/repositories/ApplicationRepository';
+import type {OAuth2TokenRepository} from '@app/api/oauth/repositories/OAuth2TokenRepository';
+import {isSignInRefused} from '@app/api/user/UserHelpers';
+import {mapUserToOAuthResponse} from '@app/api/user/UserMappers';
+import {randomBase64Url} from '@app/api/utils/SecretHash';
+import type {StoredSecretVerifier} from '@app/api/utils/StoredSecret';
+import {ADMIN_OAUTH2_APPLICATION_ID} from '@star/constants/src/Core';
+import {InvalidRequestError} from '@star/errors/src/domains/core/InvalidRequestError';
+import {InvalidTokenError} from '@star/errors/src/domains/core/InvalidTokenError';
+import {BotIsPrivateError} from '@star/errors/src/domains/oauth/BotIsPrivateError';
+import {InvalidClientError} from '@star/errors/src/domains/oauth/InvalidClientError';
+import {InvalidClientSecretError} from '@star/errors/src/domains/oauth/InvalidClientSecretError';
+import {InvalidGrantError} from '@star/errors/src/domains/oauth/InvalidGrantError';
+import {InvalidRedirectUriError} from '@star/errors/src/domains/oauth/InvalidRedirectUriError';
+import {InvalidScopeError} from '@star/errors/src/domains/oauth/InvalidScopeError';
+import {MissingClientSecretError} from '@star/errors/src/domains/oauth/MissingClientSecretError';
+import {MissingRedirectUriError} from '@star/errors/src/domains/oauth/MissingRedirectUriError';
+
+const ADMIN_SSO_TOKEN_SCOPES = ['identify', 'email'];
+const ADMIN_APPLICATION_ID = createApplicationID(ADMIN_OAUTH2_APPLICATION_ID);
+const S256_CODE_CHALLENGE = /^[A-Za-z0-9_-]{43}$/;
+
+function normalizeRedirectUri(value: string | null | undefined): string | null {
+	if (!value) return null;
+	try {
+		return new URL(value).toString();
+	} catch {
+		return null;
+	}
+}
+
+function validateCodeChallenge(challenge: string | undefined, method: 'S256' | undefined): void {
+	if (challenge === undefined && method === undefined) return;
+	if (method !== 'S256' || challenge === undefined || !S256_CODE_CHALLENGE.test(challenge)) {
+		throw new InvalidRequestError();
+	}
+}
+
+function codeVerifierMatches(authCode: OAuth2AuthorizationCode, verifier: string | undefined): boolean {
+	if (!authCode.codeChallenge) return true;
+	if (authCode.codeChallengeMethod !== 'S256' || !verifier) return false;
+	return createHash('sha256').update(verifier).digest('base64url') === authCode.codeChallenge;
+}
+
+interface OAuth2ServiceDeps {
+	applicationRepository: ApplicationRepository;
+	oauth2TokenRepository: OAuth2TokenRepository;
+	storedSecrets: StoredSecretVerifier;
+}
+
+export class OAuth2Service {
+	private applications: ApplicationRepository;
+	private tokens: OAuth2TokenRepository;
+	private storedSecrets: StoredSecretVerifier;
+
+	constructor(
+		private readonly apiContext: ApiContext,
+		deps: OAuth2ServiceDeps,
+	) {
+		this.applications = deps.applicationRepository;
+		this.tokens = deps.oauth2TokenRepository;
+		this.storedSecrets = deps.storedSecrets;
+	}
+
+	async clientSecretMatches(application: Application, clientSecret: string): Promise<boolean> {
+		if (!application.clientSecretHash) return true;
+		return this.storedSecrets.matches(
+			`client_secret:${application.applicationId}`,
+			clientSecret,
+			application.clientSecretHash,
+		);
+	}
+
+	private async findActiveUser(userId: UserID) {
+		const user = await this.apiContext.services.users.findUnique(userId);
+		return user && !isSignInRefused(user) ? user : null;
+	}
+
+	private validateRedirectUri(application: Application, redirectUri: string): boolean {
+		if (application.oauth2RedirectUris.size === 0) {
+			return false;
+		}
+		return application.oauth2RedirectUris.has(redirectUri);
+	}
+
+	async resolveErrorRedirectBase(clientId: string, redirectUri?: string): Promise<string> {
+		if (!redirectUri) {
+			return Config.endpoints.webApp;
+		}
+		let parsedClientId: ApplicationID;
+		try {
+			parsedClientId = BigInt(clientId) as ApplicationID;
+		} catch {
+			return Config.endpoints.webApp;
+		}
+		const application = await this.applications.getApplication(parsedClientId);
+		if (!application || !this.validateRedirectUri(application, redirectUri)) {
+			return Config.endpoints.webApp;
+		}
+		return redirectUri;
+	}
+
+	async authorizeAndConsent(params: {
+		clientId: string;
+		redirectUri?: string;
+		scope: string;
+		state?: string;
+		codeChallenge?: string;
+		codeChallengeMethod?: 'S256';
+		userId: UserID;
+	}): Promise<{
+		redirectTo: string;
+	}> {
+		let parsedClientId: ApplicationID;
+		try {
+			parsedClientId = BigInt(params.clientId) as ApplicationID;
+		} catch {
+			throw new InvalidClientError();
+		}
+		const application = await this.applications.getApplication(parsedClientId);
+		if (!application) {
+			throw new InvalidClientError();
+		}
+		validateCodeChallenge(params.codeChallenge, params.codeChallengeMethod);
+		const scopeSet = new Set<string>(parseOAuth2Scope(params.scope));
+		for (const s of scopeSet) {
+			if (!isOAuth2Scope(s)) {
+				throw new InvalidScopeError();
+			}
+		}
+		if (scopeSet.has('bot') && !application.botIsPublic && params.userId !== application.ownerUserId) {
+			throw new BotIsPrivateError();
+		}
+		const isBotOnly = scopeSet.size === 1 && scopeSet.has('bot');
+		const redirectUri = params.redirectUri;
+		const requireRedirect = !isBotOnly || application.botRequireCodeGrant;
+		if (!redirectUri && requireRedirect) {
+			throw new MissingRedirectUriError();
+		}
+		if (redirectUri && !this.validateRedirectUri(application, redirectUri)) {
+			throw new InvalidRedirectUriError();
+		}
+		const resolvedRedirectUri = redirectUri ?? Config.endpoints.webApp;
+		let loc: URL;
+		try {
+			loc = new URL(resolvedRedirectUri);
+		} catch {
+			throw new InvalidRequestError();
+		}
+		const codeRow: OAuth2AuthorizationCodeRow = {
+			code: randomBase64Url(32),
+			application_id: application.applicationId,
+			user_id: params.userId,
+			redirect_uri: loc.toString(),
+			scope: scopeSet,
+			nonce: null,
+			code_challenge: params.codeChallenge ?? null,
+			code_challenge_method: params.codeChallengeMethod ?? null,
+			created_at: new Date(),
+		};
+		await this.tokens.createAuthorizationCode(codeRow);
+		loc.searchParams.set('code', codeRow.code);
+		if (params.state) {
+			loc.searchParams.set('state', params.state);
+		}
+		return {redirectTo: loc.toString()};
+	}
+
+	private basicAuth(credentialsHeader?: string): {
+		clientId: string;
+		clientSecret: string;
+	} | null {
+		if (!credentialsHeader) {
+			return null;
+		}
+		const m = /^Basic\s+(.+)$/.exec(credentialsHeader);
+		if (!m) {
+			return null;
+		}
+		const decoded = Buffer.from(m[1], 'base64').toString('utf8');
+		const idx = decoded.indexOf(':');
+		if (idx < 0) {
+			return null;
+		}
+		return {
+			clientId: decoded.slice(0, idx),
+			clientSecret: decoded.slice(idx + 1),
+		};
+	}
+
+	private async issueTokens(args: {application: Application; userId: UserID; scope: Set<string>}): Promise<{
+		accessToken: OAuth2AccessTokenRow;
+		refreshToken: OAuth2RefreshTokenRow | null;
+		token_type: 'Bearer';
+		expires_in: number;
+		scope?: string;
+	}> {
+		const scope = filterOAuth2ScopeSet(args.scope);
+		const accessToken: OAuth2AccessTokenRow = {
+			token_: randomBase64Url(32),
+			application_id: args.application.applicationId,
+			user_id: args.userId,
+			scope,
+			created_at: new Date(),
+		};
+		const createdAccess = await this.tokens.createAccessToken(accessToken);
+		return {
+			accessToken: createdAccess.toRow(),
+			refreshToken: await this.issueRefreshToken(args.application, args.userId, scope),
+			token_type: 'Bearer',
+			expires_in: ACCESS_TOKEN_TTL_SECONDS,
+			scope: sortOAuth2Scopes(scope).join(' '),
+		};
+	}
+
+	private async issueRefreshToken(
+		application: Application,
+		userId: UserID,
+		scope: Set<string>,
+	): Promise<OAuth2RefreshTokenRow | null> {
+		if (application.applicationId === ADMIN_APPLICATION_ID) {
+			return null;
+		}
+		const created = await this.tokens.createRefreshToken({
+			token_: randomBase64Url(32),
+			application_id: application.applicationId,
+			user_id: userId,
+			scope,
+			created_at: new Date(),
+		});
+		return created.toRow();
+	}
+
+	async authenticateClient(args: {
+		authorizationHeader?: string;
+		clientId?: string;
+		clientSecret?: string;
+	}): Promise<Application> {
+		const basic = this.basicAuth(args.authorizationHeader);
+		const clientId = args.clientId ?? basic?.clientId ?? '';
+		const clientSecret = args.clientSecret ?? basic?.clientSecret;
+		let parsedClientId: ApplicationID;
+		try {
+			parsedClientId = BigInt(clientId) as ApplicationID;
+		} catch {
+			throw new InvalidClientError();
+		}
+		const application = await this.applications.getApplication(parsedClientId);
+		if (!application) {
+			Logger.debug({client_id_len: clientId.length}, 'OAuth2 client authentication: unknown application');
+			throw new InvalidClientError();
+		}
+		if (!clientSecret) {
+			Logger.debug(
+				{application_id: application.applicationId.toString()},
+				'OAuth2 client authentication: missing client_secret',
+			);
+			throw new MissingClientSecretError();
+		}
+		if (!(await this.clientSecretMatches(application, clientSecret))) {
+			Logger.debug(
+				{application_id: application.applicationId.toString()},
+				'OAuth2 client authentication: client_secret verification failed',
+			);
+			throw new InvalidClientSecretError();
+		}
+		return application;
+	}
+
+	async issueAdminSsoTokens(
+		application: Application,
+		userId: UserID,
+	): Promise<{
+		access_token: string;
+		token_type: 'Bearer';
+		expires_in: number;
+		scope: string;
+	}> {
+		const res = await this.issueTokens({application, userId, scope: new Set(ADMIN_SSO_TOKEN_SCOPES)});
+		return {
+			access_token: res.accessToken.token_,
+			token_type: 'Bearer',
+			expires_in: res.expires_in,
+			scope: res.scope ?? '',
+		};
+	}
+
+	async tokenExchange(params: {
+		headersAuthorization?: string;
+		grantType: 'authorization_code' | 'refresh_token';
+		code?: string;
+		refreshToken?: string;
+		redirectUri?: string;
+		clientId?: string;
+		clientSecret?: string;
+		codeVerifier?: string;
+	}): Promise<{
+		access_token: string;
+		token_type: 'Bearer';
+		expires_in: number;
+		scope?: string;
+		refresh_token?: string;
+	}> {
+		Logger.debug(
+			{
+				grant_type: params.grantType,
+				client_id_present: !!params.clientId || /^Basic\s+/.test(params.headersAuthorization ?? ''),
+				has_basic_auth: /^Basic\s+/.test(params.headersAuthorization ?? ''),
+				code_present: !!params.code,
+				refresh_token_present: !!params.refreshToken,
+				redirect_uri_present: !!params.redirectUri,
+			},
+			'OAuth2 tokenExchange start',
+		);
+		const application = await this.authenticateClient({
+			authorizationHeader: params.headersAuthorization,
+			clientId: params.clientId,
+			clientSecret: params.clientSecret,
+		});
+		if (params.grantType === 'authorization_code') {
+			const code = params.code!;
+			const authCode = await this.tokens.getAuthorizationCode(code);
+			if (!authCode) {
+				Logger.debug({code_len: code.length}, 'OAuth2 tokenExchange: authorization code not found');
+				throw new InvalidGrantError();
+			}
+			if (authCode.applicationId !== application.applicationId) {
+				Logger.debug(
+					{application_id: application.applicationId.toString()},
+					'OAuth2 tokenExchange: code application mismatch',
+				);
+				throw new InvalidGrantError();
+			}
+			if (!(await this.tokens.consumeAuthorizationCode(code, authCode.applicationId))) {
+				Logger.debug({code_len: code.length}, 'OAuth2 tokenExchange: authorization code already redeemed');
+				throw new InvalidGrantError();
+			}
+			const expectedRedirectUri = normalizeRedirectUri(authCode.redirectUri);
+			const providedRedirectUri = normalizeRedirectUri(params.redirectUri);
+			if (expectedRedirectUri === null || expectedRedirectUri !== providedRedirectUri) {
+				Logger.debug(
+					{expected: expectedRedirectUri, got: providedRedirectUri},
+					'OAuth2 tokenExchange: redirect_uri mismatch',
+				);
+				throw new InvalidGrantError();
+			}
+			if (!codeVerifierMatches(authCode, params.codeVerifier)) {
+				Logger.debug({code_len: code.length}, 'OAuth2 tokenExchange: code_verifier mismatch');
+				throw new InvalidGrantError();
+			}
+			if (!(await this.findActiveUser(authCode.userId))) {
+				throw new InvalidGrantError();
+			}
+			const res = await this.issueTokens({
+				application,
+				userId: authCode.userId,
+				scope: authCode.scope,
+			});
+			return this.tokenResponse(res);
+		}
+		const refresh = await this.tokens.getRefreshToken(params.refreshToken!);
+		if (!refresh) {
+			throw new InvalidGrantError();
+		}
+		if (refresh.applicationId !== application.applicationId || refresh.applicationId === ADMIN_APPLICATION_ID) {
+			throw new InvalidGrantError();
+		}
+		if (!(await this.findActiveUser(refresh.userId))) {
+			throw new InvalidGrantError();
+		}
+		if (!(await this.tokens.consumeRefreshToken(params.refreshToken!, refresh.applicationId, refresh.userId))) {
+			throw new InvalidGrantError();
+		}
+		const res = await this.issueTokens({
+			application,
+			userId: refresh.userId,
+			scope: refresh.scope,
+		});
+		return this.tokenResponse(res);
+	}
+
+	private tokenResponse(res: Awaited<ReturnType<OAuth2Service['issueTokens']>>): {
+		access_token: string;
+		token_type: 'Bearer';
+		expires_in: number;
+		scope?: string;
+		refresh_token?: string;
+	} {
+		return {
+			access_token: res.accessToken.token_,
+			token_type: 'Bearer',
+			expires_in: res.expires_in,
+			scope: res.scope,
+			...(res.refreshToken ? {refresh_token: res.refreshToken.token_} : {}),
+		};
+	}
+
+	async userInfo(accessToken: string) {
+		const token = await this.tokens.getAccessToken(accessToken);
+		if (!token) {
+			throw new InvalidTokenError();
+		}
+		const application = await this.applications.getApplication(token.applicationId);
+		if (!application) {
+			throw new InvalidTokenError();
+		}
+		const user = await this.findActiveUser(token.userId);
+		if (!user) {
+			throw new InvalidTokenError();
+		}
+		const includeEmail = token.scope.has('email');
+		return mapUserToOAuthResponse(user, {includeEmail});
+	}
+
+	async introspect(
+		tokenStr: string,
+		applicationId: ApplicationID,
+	): Promise<{
+		active: boolean;
+		client_id?: string;
+		sub?: string;
+		scope?: string;
+		token_type?: string;
+		exp?: number;
+		iat?: number;
+	}> {
+		const accessToken = await this.tokens.getAccessToken(tokenStr);
+		if (accessToken && accessToken.applicationId === applicationId) {
+			if (!(await this.findActiveUser(accessToken.userId))) {
+				return {active: false};
+			}
+			return {
+				active: true,
+				client_id: accessToken.applicationId.toString(),
+				sub: accessToken.userId.toString(),
+				scope: sortOAuth2Scopes(filterOAuth2ScopeSet(accessToken.scope)).join(' '),
+				token_type: 'Bearer',
+				exp: Math.floor((accessToken.createdAt.getTime() + ACCESS_TOKEN_TTL_SECONDS * 1000) / 1000),
+				iat: Math.floor(accessToken.createdAt.getTime() / 1000),
+			};
+		}
+		const refreshToken = await this.tokens.getRefreshToken(tokenStr);
+		if (refreshToken && refreshToken.applicationId === applicationId) {
+			if (!(await this.findActiveUser(refreshToken.userId))) {
+				return {active: false};
+			}
+			return {
+				active: true,
+				client_id: refreshToken.applicationId.toString(),
+				sub: refreshToken.userId.toString(),
+				scope: sortOAuth2Scopes(filterOAuth2ScopeSet(refreshToken.scope)).join(' '),
+				token_type: 'refresh_token',
+				iat: Math.floor(refreshToken.createdAt.getTime() / 1000),
+			};
+		}
+		return {active: false};
+	}
+
+	async revoke(
+		tokenStr: string,
+		tokenTypeHint: 'access_token' | 'refresh_token' | undefined,
+		auth: {
+			clientId: ApplicationID;
+			clientSecret: string;
+		},
+	): Promise<void> {
+		const application = await this.applications.getApplication(auth.clientId);
+		if (!application) {
+			throw new InvalidClientError();
+		}
+		if (!(await this.clientSecretMatches(application, auth.clientSecret))) {
+			throw new InvalidClientSecretError();
+		}
+		if (tokenTypeHint === 'refresh_token') {
+			const refresh = await this.tokens.getRefreshToken(tokenStr);
+			if (refresh && refresh.applicationId === application.applicationId) {
+				await this.tokens.deleteAllTokensForUserAndApplication(refresh.userId, application.applicationId);
+				return;
+			}
+		}
+		const access = await this.tokens.getAccessToken(tokenStr);
+		if (access && access.applicationId === application.applicationId) {
+			await this.tokens.deleteAllTokensForUserAndApplication(access.userId, application.applicationId);
+			return;
+		}
+	}
+}

@@ -1,0 +1,23 @@
+{
+	"name": "@star/instance_bootstrap",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"exports": {
+		"./src/*": "./src/*",
+		"./*": "./*"
+	},
+	"scripts": {
+		"test": "node --test 'src/**/*.test.mjs'",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@star/constants": "workspace:*",
+		"@star/limits": "workspace:*",
+		"@star/schema": "workspace:*"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"typescript": "catalog:ts7"
+	}
+}

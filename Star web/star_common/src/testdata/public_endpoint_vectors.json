@@ -1,0 +1,440 @@
+[
+	{
+		"url": "https://star.example",
+		"base_domain": "star.example",
+		"public_port": 443,
+		"normalized": "https://star.example"
+	},
+	{
+		"url": "https://star.example/media",
+		"base_domain": "star.example",
+		"public_port": 443,
+		"normalized": "https://star.example/media"
+	},
+	{
+		"url": "https://star.example/admin",
+		"base_domain": "star.example",
+		"public_port": 443,
+		"normalized": "https://star.example/admin"
+	},
+	{
+		"url": "https://star.example/admin/oauth2_callback",
+		"base_domain": "star.example",
+		"public_port": 443,
+		"normalized": "https://star.example/admin/oauth2_callback"
+	},
+	{
+		"url": "wss://star.example/gateway",
+		"base_domain": "star.example",
+		"public_port": 443,
+		"normalized": "wss://star.example/gateway"
+	},
+	{
+		"url": "http://star.example",
+		"base_domain": "star.example",
+		"public_port": 80,
+		"normalized": "http://star.example"
+	},
+	{
+		"url": "http://star.example/media",
+		"base_domain": "star.example",
+		"public_port": 80,
+		"normalized": "http://star.example/media"
+	},
+	{
+		"url": "ws://star.example/gateway",
+		"base_domain": "star.example",
+		"public_port": 80,
+		"normalized": "ws://star.example/gateway"
+	},
+	{
+		"url": "http://star.example",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "http://star.example:19080"
+	},
+	{
+		"url": "http://star.example/",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "http://star.example:19080/"
+	},
+	{
+		"url": "http://star.example/media",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "http://star.example:19080/media"
+	},
+	{
+		"url": "http://star.example/api",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "http://star.example:19080/api"
+	},
+	{
+		"url": "http://star.example/admin",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "http://star.example:19080/admin"
+	},
+	{
+		"url": "http://star.example/admin/oauth2_callback",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "http://star.example:19080/admin/oauth2_callback"
+	},
+	{
+		"url": "ws://star.example/gateway",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "ws://star.example:19080/gateway"
+	},
+	{
+		"url": "https://star.example/admin/oauth2_callback",
+		"base_domain": "star.example",
+		"public_port": 8443,
+		"normalized": "https://star.example:8443/admin/oauth2_callback"
+	},
+	{
+		"url": "wss://star.example/gateway",
+		"base_domain": "star.example",
+		"public_port": 8443,
+		"normalized": "wss://star.example:8443/gateway"
+	},
+	{
+		"url": "https://star.example",
+		"base_domain": "star.example",
+		"public_port": 8443,
+		"normalized": "https://star.example:8443"
+	},
+	{
+		"url": "http://star.example/media",
+		"base_domain": "star.example",
+		"public_port": 443,
+		"normalized": "http://star.example:443/media"
+	},
+	{
+		"url": "https://star.example/media",
+		"base_domain": "star.example",
+		"public_port": 80,
+		"normalized": "https://star.example:80/media"
+	},
+	{
+		"url": "ws://star.example/gateway",
+		"base_domain": "star.example",
+		"public_port": 443,
+		"normalized": "ws://star.example:443/gateway"
+	},
+	{
+		"url": "wss://star.example/gateway",
+		"base_domain": "star.example",
+		"public_port": 80,
+		"normalized": "wss://star.example:80/gateway"
+	},
+	{
+		"url": "http://star.example/media",
+		"base_domain": "star.example",
+		"public_port": null,
+		"normalized": "http://star.example/media"
+	},
+	{
+		"url": "http://star.example/media",
+		"base_domain": "star.example",
+		"public_port": 0,
+		"normalized": "http://star.example/media"
+	},
+	{
+		"url": "http://star.example/media",
+		"base_domain": "",
+		"public_port": 19080,
+		"normalized": "http://star.example/media"
+	},
+	{
+		"url": "http://star.example/media",
+		"base_domain": "   ",
+		"public_port": 19080,
+		"normalized": "http://star.example/media"
+	},
+	{
+		"url": "http://star.example:19080/media",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "http://star.example:19080/media"
+	},
+	{
+		"url": "http://star.example:8080/media",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "http://star.example:8080/media"
+	},
+	{
+		"url": "https://star.example:443/media",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "https://star.example:443/media"
+	},
+	{
+		"url": "http://star.example:80/media",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "http://star.example:80/media"
+	},
+	{
+		"url": "https://star.example:8443/admin/oauth2_callback",
+		"base_domain": "star.example",
+		"public_port": 8443,
+		"normalized": "https://star.example:8443/admin/oauth2_callback"
+	},
+	{
+		"url": "ws://star.example:19080/gateway",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "ws://star.example:19080/gateway"
+	},
+	{
+		"url": "http://star.example:8080?a=1",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "http://star.example:8080?a=1"
+	},
+	{
+		"url": "https://cdn.example.net/assets",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "https://cdn.example.net/assets"
+	},
+	{
+		"url": "https://media.example.net",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "https://media.example.net"
+	},
+	{
+		"url": "https://sub.star.example/media",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "https://sub.star.example/media"
+	},
+	{
+		"url": "https://star.example/media",
+		"base_domain": "example",
+		"public_port": 19080,
+		"normalized": "https://star.example/media"
+	},
+	{
+		"url": "https://star.example.evil.net/media",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "https://star.example.evil.net/media"
+	},
+	{
+		"url": "http://api:8080",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "http://api:8080"
+	},
+	{
+		"url": "http://media-proxy:8080",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "http://media-proxy:8080"
+	},
+	{
+		"url": "http://STAR.example/Media",
+		"base_domain": "Star.Example",
+		"public_port": 19080,
+		"normalized": "http://STAR.example:19080/Media"
+	},
+	{
+		"url": "HTTPS://star.example/media",
+		"base_domain": "star.example",
+		"public_port": 8443,
+		"normalized": "HTTPS://star.example:8443/media"
+	},
+	{
+		"url": "http://star.example./media",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "http://star.example.:19080/media"
+	},
+	{
+		"url": "http://star.example/media",
+		"base_domain": "star.example.",
+		"public_port": 19080,
+		"normalized": "http://star.example:19080/media"
+	},
+	{
+		"url": "http://star.example./media",
+		"base_domain": "star.example.",
+		"public_port": 19080,
+		"normalized": "http://star.example.:19080/media"
+	},
+	{
+		"url": "http://star.example?a=1",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "http://star.example:19080?a=1"
+	},
+	{
+		"url": "http://star.example#top",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "http://star.example:19080#top"
+	},
+	{
+		"url": "http://star.example/media/x.png?v=1#frag",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "http://star.example:19080/media/x.png?v=1#frag"
+	},
+	{
+		"url": "http://star.example/media/",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "http://star.example:19080/media/"
+	},
+	{
+		"url": "http://star.example/a%20b",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "http://star.example:19080/a%20b"
+	},
+	{
+		"url": "http://star.example#/media",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "http://star.example:19080#/media"
+	},
+	{
+		"url": "http://user:pass@star.example/media",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "http://user:pass@star.example:19080/media"
+	},
+	{
+		"url": "http://user:pass@star.example:19080/media",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "http://user:pass@star.example:19080/media"
+	},
+	{
+		"url": "http://user:p@ss@star.example/media",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "http://user:p@ss@star.example:19080/media"
+	},
+	{
+		"url": "http://[::1]/media",
+		"base_domain": "[::1]",
+		"public_port": 19080,
+		"normalized": "http://[::1]:19080/media"
+	},
+	{
+		"url": "http://[::1]:8080/media",
+		"base_domain": "[::1]",
+		"public_port": 19080,
+		"normalized": "http://[::1]:8080/media"
+	},
+	{
+		"url": "http://127.0.0.1/media",
+		"base_domain": "127.0.0.1",
+		"public_port": 19080,
+		"normalized": "http://127.0.0.1:19080/media"
+	},
+	{
+		"url": "http://[2001:db8::1]/media",
+		"base_domain": "[2001:db8::1]",
+		"public_port": 19080,
+		"normalized": "http://[2001:db8::1]:19080/media"
+	},
+	{
+		"url": "http://[2001:DB8::1]/media",
+		"base_domain": "[2001:db8::1]",
+		"public_port": 19080,
+		"normalized": "http://[2001:DB8::1]:19080/media"
+	},
+	{
+		"url": "",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": ""
+	},
+	{
+		"url": "/api",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "/api"
+	},
+	{
+		"url": "star.example/media",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "star.example/media"
+	},
+	{
+		"url": "not a url",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "not a url"
+	},
+	{
+		"url": "://x",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "://x"
+	},
+	{
+		"url": "file:///x",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "file:///x"
+	},
+	{
+		"url": "mailto:a@star.example",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "mailto:a@star.example"
+	},
+	{
+		"url": "http://star.example\\evil",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "http://star.example:19080\\evil"
+	},
+	{
+		"url": "https://star.example:/media",
+		"base_domain": "star.example",
+		"public_port": 8443,
+		"normalized": "https://star.example:/media"
+	},
+	{
+		"url": "//star.example/media",
+		"base_domain": "star.example",
+		"public_port": 19080,
+		"normalized": "//star.example/media"
+	},
+	{
+		"url": "https:star.example/media",
+		"base_domain": "star.example",
+		"public_port": 8443,
+		"normalized": "https:star.example/media"
+	},
+	{
+		"url": "https:/star.example/media",
+		"base_domain": "star.example",
+		"public_port": 8443,
+		"normalized": "https:/star.example/media"
+	},
+	{
+		"url": "https:////star.example/media",
+		"base_domain": "star.example",
+		"public_port": 8443,
+		"normalized": "https:////star.example/media"
+	},
+	{
+		"url": "android:apk-key-hash:9NrCFDLVR8_ObZC-EWzaRA",
+		"base_domain": "star.example",
+		"public_port": 8443,
+		"normalized": "android:apk-key-hash:9NrCFDLVR8_ObZC-EWzaRA"
+	}
+]
