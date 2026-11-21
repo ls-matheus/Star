@@ -100,6 +100,12 @@ For deployment artifacts, release naming, checksums, and troubleshooting, see th
 
 This repository provides repeatable build and publication tooling, but **successful compilation is not an end-to-end quality or security certification**. Installation tests across supported devices, store signing, macOS notarization, production TLS, and public-server hardening require separate validation. See the [engineering audit](docs/engineering-audit.md) for the current risks and follow-up work.
 
+## Commercial distribution and upstream rights
+
+Star is an independent, modified distribution of software associated with Fluxer and its Flutter client. It is **not affiliated with or endorsed by Fluxer Platform AB**. The AGPL-licensed source, CC BY-SA-licensed artwork, and other third-party materials have separate compliance requirements. A Star filename or new logo does not by itself establish that an asset is independently owned.
+
+**Not cleared for unrestricted commercial distribution:** read the [commercial compliance audit and release gate](docs/commercial-compliance.md) before selling binaries or offering a public hosted service. The checklist includes corresponding source offers, in-app notices, brand provenance, and third-party licenses. This repository does not claim legal certification or blanket trademark permission.
+
 ## Contributing and security
 
 - Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.

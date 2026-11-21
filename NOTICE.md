@@ -8,6 +8,14 @@ The existing [Docker integration documentation](Docker/README.md) identifies the
 
 The integrated source directories preserve their own copyright notices, licenses, attribution, and dependency information. This repository does **not** claim that the upstream maintainers endorse this distribution.
 
+## Trademark and commercial distribution boundaries
+
+Fluxer Platform AB states in its [governance policy](https://github.com/fluxerapp/fluxer/blob/main/.github/GOVERNANCE.md) that substantive forks must use their own name and logo. The AGPL and the CC BY-SA 4.0 artwork license **do not grant trademark rights**. The Star name does not imply affiliation, approval, or endorsement by Fluxer Platform AB.
+
+Fluxer-owned artwork is covered by a **separate CC BY-SA 4.0 license**, including the files described in [the Web static asset license](Star%20web/star_static/LICENSE) and [Server static asset license](Star%20Server/star_static/LICENSE). The [Web third-party asset inventory](Star%20web/star_static/THIRD_PARTY_LICENSES.md) and [Server inventory](Star%20Server/star_static/THIRD_PARTY_LICENSES.md) also describe emoji, fonts, media and other third-party material. Some assets have been renamed or adapted for Star; renaming does not establish independent ownership. Retain copyright attribution, license links and modification notices as applicable.
+
+**Commercial distribution has not received a legal clearance.** Consult the [commercial compliance review and release checklist](docs/commercial-compliance.md) before selling, hosting publicly, or distributing packages.
+
 ## Licensing
 
 The root [LICENSE](LICENSE) contains the GNU Affero General Public License v3 text. Additional terms, including the mobile source's [App Store exception](Star%20mobile/LICENSE-APPSTORE-EXCEPTION), may apply to specific components.

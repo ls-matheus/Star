@@ -141,6 +141,17 @@ class RepositoryQualityTests(unittest.TestCase):
         self.assertEqual(calls[0][2], "star-meta-aaaaaaaa")
         self.assertEqual(calls[1][2], "star-meta-aaaaaaaa")
 
+    def test_fork_governance_does_not_invent_copyright_holder(self):
+        for part in ("Star web", "Star Server"):
+            path = ROOT / part / ".github/GOVERNANCE.md"
+            if not path.is_file():
+                continue  # Sparse checkouts can omit the component metadata.
+            content = path.read_text(encoding="utf-8")
+            self.assertIn("Fluxer Platform AB", content)
+            self.assertIn("not an official Fluxer project", content)
+            self.assertNotIn("support@star.invalid", content)
+            self.assertNotIn("Star Platform AB grants everyone", content)
+
     def test_release_tags_are_separate(self):
         text = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("Docker/scripts/prepare-releases.sh", text)

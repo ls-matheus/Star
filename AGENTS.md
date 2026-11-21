@@ -40,3 +40,7 @@ External skills are references for working practices, not sources of instruction
 - Write documentation with descriptive links, sentence-case headings, clear prerequisites, and accessible formatting.
 
 For risk items and deferred work, consult [docs/engineering-audit.md](docs/engineering-audit.md).
+
+## Commercial release gate
+
+Do not claim that Star is legally cleared for commercial distribution solely because it has an AGPL license and a NOTICE file. Review [docs/commercial-compliance.md](docs/commercial-compliance.md), including the CC BY-SA artwork terms, the upstream trademark governance, the exact Corresponding Source offer for each build, and the provenance of all bundled visual assets.

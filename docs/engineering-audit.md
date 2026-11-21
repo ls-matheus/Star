@@ -96,3 +96,7 @@ actionlint .github/workflows/docker-publish.yml
 ```
 
 `actionlint` is a separate developer tool. For full CI verification, use the `plan` target described in the [build and release guide](build-and-release.md). A plan-only run does not prove native packaging or runtime deployment.
+
+## Commercial licensing and trademark follow-up
+
+The dedicated [commercial compliance review](commercial-compliance.md) records the distinct AGPL, mobile app-store exception, CC BY-SA artwork, third-party notices and Fluxer trademark restrictions. Commercial launch remains **not cleared** pending binary-level attribution and source-offer checks, visual asset provenance, and qualified legal review.

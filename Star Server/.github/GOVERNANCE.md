@@ -1,25 +1,19 @@
-# Governance
+# Star fork governance and upstream rights
 
-Star Platform AB has final authority over the project's roadmap, architecture, releases and merge decisions. The project has no voting body or elected technical committee.
+This directory is part of the independently maintained Star integration at https://github.com/ls-matheus/Star. It is not an official Fluxer project. The repository maintainer controls changes to this fork only; no authority over Fluxer or its trademarks is claimed.
 
-Maintainers are Star Platform AB staff who have write access to the repository. Star Platform AB resolves any disagreements between maintainers.
+## Copyright and licensing
 
-External contributions do not grant voting rights, commit access, employment or decision-making authority. Maintainers may seek advice from external contributors and may choose to act on it.
+Original authors and contributors retain their copyright. Code covered by the GNU Affero General Public License v3 remains subject to its applicable license, notices, source availability and modification requirements. Additional component permissions and artwork/third-party licenses remain in force. See the root [NOTICE](../../NOTICE.md), [license](../../LICENSE), and [commercial compliance review](../../docs/commercial-compliance.md).
 
-## Licence and contributor rights
+This document does **not** claim that a company named Star Platform AB exists or owns the upstream code, name, or artwork. No copyright assignment, trademark ownership, or endorsement is implied by the fork's project name.
 
-Source code owned by Star Platform AB in this repository is distributed under the [GNU Affero General Public License, version 3.0 or later](https://github.com/starapp/star/blob/main/LICENSE). The licence permits its use, modification and redistribution subject to its terms.
+## Fluxer name and marks
 
-Fluxer Platform AB does not require contributors to sign a contributor licence agreement or assign their copyright. Contributors retain the copyright in their work.
+Fluxer Platform AB's [official governance](https://github.com/fluxerapp/fluxer/blob/main/.github/GOVERNANCE.md) states that the Fluxer name and logo are its trademarks. Substantively modified forks must use a distinct name and logo; uses outside its stated permissions require authorization. The upstream governance gives contact information for trademark permission requests.
 
-Every commit made by a contributor must include the [Developer Certificate of Origin](https://developercertificate.org) sign-off required by the [contributing guidelines](https://github.com/starapp/star/blob/main/.github/CONTRIBUTING.md). Pull requests opened by Star repository automation are exempt from this requirement.
+Star must not misrepresent itself as Fluxer, an official successor, or an endorsed build. Using a Star filename for artwork does not establish that its design is original or free of third-party rights.
 
-## Name and marks
+## Contributions
 
-Star and the Star logo are trademarks of Star Platform AB. Neither the AGPL nor the CC BY-SA 4.0 licence on Star artwork grants trademark rights. Star Platform AB grants everyone the following permissions.
-
-- You may distribute unmodified builds of Star, or builds with light patches, under the Star name and logo. Light patches are changes for packaging, portability, security and bug fixes, configuration defaults and translations. Linux distributions, nixpkgs, Flathub and container images are all covered.
-- A self-hosted instance running such a build may show the Star name and logo under the instance's own name and domain, as long as it does not imply affiliation with or endorsement by Star Platform AB.
-- You may refer to Star by name to describe compatibility, for example "works with Star".
-
-Forks with substantive functional changes must use their own name and logo. Any other use needs permission from Star Platform AB. Contact support@star.invalid.
+Contributions to this fork follow the root [contribution guidelines](../../CONTRIBUTING.md), subject to existing licenses and copyright notices. Commercial redistribution requires the [release compliance checklist](../../docs/commercial-compliance.md) to be completed and reviewed.
