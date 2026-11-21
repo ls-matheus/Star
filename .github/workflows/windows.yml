@@ -14,10 +14,6 @@ on:
 permissions:
   contents: write
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
   desktop:
     name: 'Windows'
@@ -93,7 +89,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p star_desktop/dist/renderer
-          tar -xzf "$RUNNER_TEMP/star-desktop-renderer/desktop-renderer.tar.gz" -C star_desktop/dist/renderer
+          # Git Bash reports RUNNER_TEMP as a Windows drive path (D:\...), and
+          # GNU tar treats its colon as a remote host unless we convert it.
+          archive="$(cygpath -u "$RUNNER_TEMP")/star-desktop-renderer/desktop-renderer.tar.gz"
+          test -s "$archive"
+          tar -xzf "$archive" -C star_desktop/dist/renderer
           test -s star_desktop/dist/renderer/index.html
           test -s star_desktop/dist/renderer/version.json
           test -d star_desktop/dist/renderer/assets

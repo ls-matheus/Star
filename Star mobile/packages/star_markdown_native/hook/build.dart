@@ -10,9 +10,22 @@ void main(List<String> args) async {
     }
     final code = input.config.code;
     final triple = _rustTriple(code);
-    final crateRoot = input.packageRoot.resolve(
-      '../../star/packages/markdown_parser/rust/',
-    );
+    // The Docker Android builder may mount the shared Rust workspace outside
+    // the Flutter package tree. Native macOS/Windows builds keep the fallback.
+    final sharedRootPath = Platform.environment['STAR_SHARED_RUST_WORKSPACE'];
+    final sharedRoot = sharedRootPath == null || sharedRootPath.trim().isEmpty
+        ? input.packageRoot.resolve('../../star/')
+        : Directory(sharedRootPath).uri;
+    final crateRoot = sharedRoot.resolve('packages/markdown_parser/rust/');
+    final cratePath = crateRoot.toFilePath();
+    if (!await File.fromUri(crateRoot.resolve('Cargo.toml')).exists()) {
+      throw StateError(
+        'Rust Markdown crate missing at $cratePath; '
+        'workspace root: ${sharedRoot.toFilePath()}',
+      );
+    }
+    final configuredCargo = Platform.environment['CARGO']?.trim() ?? '';
+    final cargoExecutable = configuredCargo.isEmpty ? 'cargo' : configuredCargo;
     final targetDir = input.outputDirectoryShared.resolve('cargo-target/');
 
     final environment = <String, String>{
@@ -38,23 +51,23 @@ void main(List<String> args) async {
     final ProcessResult result;
     try {
       result = await Process.run(
-        'cargo',
+        cargoExecutable,
         <String>['build', '--release', '--locked', '--lib', '--target', triple],
-        workingDirectory: crateRoot.toFilePath(),
+        workingDirectory: cratePath,
         environment: environment,
       );
     } on ProcessException catch (error) {
       throw ProcessException(
         error.executable,
         error.arguments,
-        'Failed to launch cargo. Install rustup and run '
-        '`rustup target add $triple`. (${error.message})',
+        'Failed to launch Cargo at $cargoExecutable in $cratePath '
+        'for Rust target $triple: ${error.message}',
         error.errorCode,
       );
     }
     if (result.exitCode != 0) {
       throw ProcessException(
-        'cargo',
+        cargoExecutable,
         <String>['build', '--target', triple],
         'cargo build failed for $triple:\n${result.stderr}\n${result.stdout}',
         result.exitCode,
@@ -75,9 +88,7 @@ void main(List<String> args) async {
       ),
     );
     output.dependencies.add(crateRoot.resolve('Cargo.toml'));
-    output.dependencies.add(
-      input.packageRoot.resolve('../../star/Cargo.lock'),
-    );
+    output.dependencies.add(sharedRoot.resolve('Cargo.lock'));
     final sources = Directory.fromUri(crateRoot.resolve('src/'));
     await for (final entity in sources.list(recursive: true)) {
       if (entity is File) {

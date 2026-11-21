@@ -28,6 +28,21 @@ tar -C /source-web \
   --exclude='*.keystore' -cf - . | tar -C /work/shared-star -xf -
 ln -s /work/shared-star /work/star
 
+# Native-assets build hooks run through Flutter/Dart subprocesses, whose PATH
+# may differ from the interactive container shell. Use an absolute Cargo path.
+export CARGO=/usr/local/cargo/bin/cargo
+export STAR_SHARED_RUST_WORKSPACE=/work/star
+test -x "$CARGO" || { echo "Missing Rust Cargo executable: $CARGO" >&2; exit 2; }
+test -f "$STAR_SHARED_RUST_WORKSPACE/packages/markdown_parser/rust/Cargo.toml" || {
+  echo "Missing shared Rust parser crate under $STAR_SHARED_RUST_WORKSPACE" >&2
+  exit 2
+}
+test -f "$STAR_SHARED_RUST_WORKSPACE/Cargo.lock" || {
+  echo "Missing shared Cargo.lock under $STAR_SHARED_RUST_WORKSPACE" >&2
+  exit 2
+}
+echo "Native assets: Cargo $CARGO, Rust workspace $STAR_SHARED_RUST_WORKSPACE"
+
 cd /work
 # The publicly tracked debug key is only used for test APKs, not release signing.
 if [ -f /source/android/app/debug.keystore ]; then
