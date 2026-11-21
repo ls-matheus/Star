@@ -53,7 +53,7 @@ Para compilar o Android experimentalmente sem alterar o codigo original:
 # APK de teste, quando a compilacao funcionar, em output/mobile/
 ```
 
-O mobile usa Flutter 3.44.0 e Rust 1.98.1 em container Linux, fontes montadas somente para
+O mobile usa Flutter 3.50.0 (atualizado da imagem-base 3.44.0) e Rust 1.98.1 em container Linux, fontes montadas somente para
 leitura, copia temporaria e flavor OSS/UnifiedPush. O pacote **nao implementa
 assinatura de distribuicao**, nao gera IPA e nao incorpora chaves ou contas da
 Google/Apple. Para iOS, compile e assine com Flutter/Xcode em macOS.

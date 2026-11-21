@@ -4,6 +4,16 @@
 FROM ghcr.io/cirruslabs/flutter:3.44.0@sha256:46691e311715845de03a3ba4753a475476936805b29431b1f00f1816981033f8
 
 USER root
+# The original 3.44.0 base has Dart 3.12; riverpod_lint requires Dart >=3.13.
+# Upgrade the Flutter SDK inside the Android-capable Cirrus base to the exact
+# version already used by Star's native Android GitHub Actions workflow.
+ENV FLUTTER_VERSION=3.50.0
+RUN git -C "$FLUTTER_HOME" fetch --depth 1 origin "refs/tags/${FLUTTER_VERSION}:refs/tags/${FLUTTER_VERSION}" \
+    && git -C "$FLUTTER_HOME" checkout --detach "$FLUTTER_VERSION" \
+    && test "$(git -C "$FLUTTER_HOME" rev-parse HEAD)" = "ab2912035e160d9cad6306df307576da6128ebdb" \
+    && flutter precache --android \
+    && flutter --version
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential ca-certificates clang cmake curl file git libssl-dev \
       ninja-build perl pkg-config python3 rsync unzip wget zip \
