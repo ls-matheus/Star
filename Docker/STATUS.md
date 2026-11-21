@@ -1,14 +1,15 @@
 # Estado da integracao Docker / GitHub Actions
 
 ## Preparado no repositorio
-- Quatro imagens GHCR: server em workflow proprio, web-assets/desktop-renderer/mobile-builder no workflow de Apps.
-- Uma prerelease por commit, criada antes dos builds.
-- Cada imagem inclui um manifesto JSON com digest imutavel na mesma Release assim que seu proprio job termina.
-- APK debug produzido dentro da imagem mobile-builder, a partir dos fontes montados somente para leitura.
-- DMG e EXE produzidos nos runners macOS/Windows usando assets extraidos da imagem desktop-renderer.
-- O Server so recompila quando fontes de Star Server mudam, ou manualmente, e nao e pre-requisito dos demais builds.
-- Workflows nativos de Mac e Windows mantem execucao manual.
-- Configuracao local Docker/Compose nao contem segredos em arquivos versionados.
+- Um unico workflow ativo em .github/workflows/docker-publish.yml.
+- Jobs Web, Desktop e Mobile independentes. Server e acionado por alteracao
+  nos fontes ou sob demanda, sem bloquear os instaladores.
+- Prerelease por commit criada antes dos builds.
+- Upload direto de APK, DMG, ZIP e EXE na Release com verificacao de presenca.
+- Manifestos JSON de imagens no GHCR, e imagem Docker exportada para a Release
+  em .docker.tar.zst (dividida em partes de ate 1400 MiB se necessario).
+- Modo manual backfill para preencher Releases anteriores sem recompilar imagens.
+- Nao ha segredos em arquivos versionados.
 
 ## Limites e verificacoes pendentes
 - Mac original continua sem Docker Engine; nao houve build local.

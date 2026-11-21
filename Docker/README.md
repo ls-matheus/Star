@@ -100,53 +100,55 @@ Os arquivos-fonte foram documentados como fork de `fluxerapp/fluxer` (AGPL),
 distribuicao do codigo, inclusive em servidor de rede, deve respeitar
 AGPL e licencas de arte/terceiros.
 
-## GitHub Actions: quatro imagens, tres instaladores, sem fila do Server
+## GitHub Actions: um unico workflow, artefatos na Release
 
-O workflow
-[`Docker Images and Apps (GHCR)`](https://github.com/ls-matheus/Star/actions/workflows/docker-publish.yml)
-valida os builds de Web, Desktop e Mobile e cria a prerelease
-`star-build-<SHA>` para o commit.
+O unico workflow ativo sera **Star - Docker Images and Apps**:
+https://github.com/ls-matheus/Star/actions/workflows/docker-publish.yml
 
-O Server tem seu proprio workflow,
-[`Server Docker Image (GHCR)`](https://github.com/ls-matheus/Star/actions/workflows/docker-server.yml),
-acionado em mudancas de `Star Server/**` ou manualmente. Assim, corrigir
-Flutter, Electron ou frontend **nao recompila o Server** e nao ocupa um runner
-adicional com o seu build demorado.
+- Push na branch main: executa os jobs de Apps quando mudam arquivos Web,
+  Mobile, Docker ou CI. O Server so inicia se mudar algo em Star Server.
+  Um commit que altera ambos pode executar os builds em paralelo.
+- Execucao manual (Run workflow): escolha **apps**, **server** ou **all**.
+  O Server nunca e pre-requisito de APK, DMG ou EXE.
+- **backfill**: informe o SHA de uma Release existente (8 caracteres) para
+  anexar os arquivos Docker dessa compilacao sem rebuildar imagens.
 
-As quatro imagens GHCR sao independentes; as tres imagens de aplicativos
-sao construidas em paralelo no workflow de Apps:
+Para cada commit, a prerelease **star-build-SHA** e criada logo apos a
+validacao. Cada resultado vai para essa mesma Release **assim que seu proprio
+job termina**, sem aguardar os outros:
 
-| Imagem GHCR | Conteudo | Dependente |
-| --- | --- | --- |
-| `ghcr.io/ls-matheus/star-server` | Servidor monolitico Star (inclui web) | Sem bloqueio dos demais jobs; uso futuro em VM |
-| `ghcr.io/ls-matheus/star-web-assets` | Assets da Web standalone | Publicacao imediata do manifesto |
-| `ghcr.io/ls-matheus/star-desktop-renderer` | Renderer Electron compilado no Docker | DMG macOS e EXE Windows |
-| `ghcr.io/ls-matheus/star-mobile-builder` | Toolchain Flutter/Rust/Android | APK Android debug |
+| Build independente | Publicacao na GitHub Release |
+| --- | --- |
+| Web | Manifesto imutavel e arquivo Docker comprimido |
+| Desktop renderer | Manifesto e imagem Docker; DMG e ZIP Mac Intel e EXE Windows |
+| Mobile builder | Manifesto e imagem Docker; APK Android ARM64 DEBUG |
+| Server (quando solicitado ou modificado) | Manifesto e imagem Docker, sem bloquear apps |
 
-**O Server nao bloqueia nem reinicia por alteracoes de Web, Mobile ou Desktop.**
-Cada imagem publica um JSON (`star-<componente>-<SHA>.json`) com tag e digest
-SHA-256 na Release assim que o respectivo build termina. O corpo da imagem
-fica no GHCR, nao como arquivo enorme dentro da Release.
+O GitHub Container Registry (GHCR) tambem recebe as imagens originais com
+tags associadas ao commit e seus digests SHA-256.
 
-### Instalares derivados das imagens
+### Como baixar as imagens Docker
 
-- **APK Android ARM64 de teste:** `docker run` usa a imagem
-  `star-mobile-builder` publicada, mais os fontes de `Star mobile` e
-  `Star web` montados somente para leitura. O APK debug vai diretamente
-  para a mesma Release quando a compilacao concluir. Nao esta assinado
-  para distribuicao comercial.
-- **DMG Mac Intel e EXE Windows x64:** o CI extrai o renderer de dentro
-  da imagem `star-desktop-renderer`, envia-o como artifact temporario e
-  conclui o empacotamento com Electron e addons nativos nos respectivos
-  runners do macOS/Windows. Os instaladores resultantes sao anexados
-  individualmente a mesma Release, sem aguardar Server ou Android.
+Cada imagem gera um arquivo **.docker.tar.zst** diretamente na Release.
+Se ultrapassar o limite de 2 GiB por arquivo do GitHub, sera dividida em
+**.docker.tar.zst.part-aa**, **part-ab**, etc. O job publica ainda os arquivos
+**.docker.sha256** (verificacao) e **.docker.README.txt** (comandos para importar
+a imagem no Docker). Todos os arquivos de uma imagem devem ser baixados juntos.
+Para uso conectado, tambem e possivel fazer Docker pull pelo digest no JSON
+da Release.
 
-Os workflows nativos `Android`, `Mac` e `Windows` continuam disponiveis
-para execucao manual, independentemente do novo pipeline Docker.
+A compactacao e a publicacao dos arquivos Docker acontecem em jobs
+independentes, depois de cada imagem estar no GHCR. Elas nunca atrasam o
+empacotamento do APK nem dos instaladores macOS/Windows.
 
-`Star web` e `Star Server` contem copies completas de um monorepo:
-Docker nao sincroniza alteracoes entre eles. Builds no GHCR usam o codigo
-presente no GitHub para o commit escolhido.
+### Instaladores
+
+O APK de teste e compilado pela imagem mobile-builder com fontes montados
+somente para leitura. O renderer desktop e extraido da imagem Docker, e os
+runners nativos de macOS/Windows compilam os modulos Electron do proprio OS.
+Os instaladores sao enviados **diretamente** para a Release e sua presenca
+e verificada por nome depois do upload. O APK e debug, sem assinatura para loja;
+os instaladores desktop tambem nao tem certificado comercial/notarizacao.
 
 ### Instalacao local opcional
 

@@ -1,38 +1,94 @@
-# Star CI: independent Docker images followed by native installers.
-# The Server image has its own workflow, so it never uses app CI runners.
-name: Docker Images and Apps (GHCR)
+# The ONE Star workflow: independent image builds plus APK/DMG/EXE.
+# Server is an opt-in/changed-files job, never a dependency of app builds.
+name: Star - Docker Images and Apps
 
 on:
   push:
     branches: [main]
     paths:
       - '.github/workflows/docker-publish.yml'
-      - '.github/workflows/docker-component.yml'
-      - '.github/workflows/mac.yml'
-      - '.github/workflows/windows.yml'
       - '.github/workflows/star-electron-builder.cjs'
       - 'Docker/**'
       - 'Star web/**'
       - 'Star mobile/**'
+      - 'Star Server/**'
   pull_request:
     branches: [main]
     paths:
       - '.github/workflows/docker-publish.yml'
-      - '.github/workflows/docker-component.yml'
-      - '.github/workflows/mac.yml'
-      - '.github/workflows/windows.yml'
       - '.github/workflows/star-electron-builder.cjs'
       - 'Docker/**'
       - 'Star web/**'
       - 'Star mobile/**'
+      - 'Star Server/**'
   workflow_dispatch:
+    inputs:
+      target:
+        description: "What to build? Server stays independent of apps."
+        required: true
+        type: choice
+        default: apps
+        options: [apps, server, all, backfill]
+      release_sha:
+        description: "Existing release commit SHA for backfill (first 8 hex chars)"
+        required: false
+        type: string
 
 permissions:
   contents: read
 
-# Do not cancel/serialize older long-running server builds on subsequent pushes.
-
 jobs:
+  detect:
+    name: Determine independent build targets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      apps: ${{ steps.flags.outputs.apps }}
+      server: ${{ steps.flags.outputs.server }}
+    steps:
+      - name: Checkout full history for changed-file detection
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Choose build targets
+        id: flags
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          SELECTED: ${{ inputs.target || 'apps' }}
+        run: |
+          set -euo pipefail
+          apps=false
+          server=false
+          if [[ "$EVENT" == 'workflow_dispatch' ]]; then
+            case "$SELECTED" in
+              apps) apps=true ;;
+              server) server=true ;;
+              all) apps=true; server=true ;;
+              backfill) : ;;
+              *) echo "Invalid build target: $SELECTED" >&2; exit 2 ;;
+            esac
+          elif [[ "$EVENT" == 'push' ]]; then
+            if [[ -n "$BEFORE" && "$BEFORE" != "0000000000000000000000000000000000000000" ]]; then
+              changes="$(git diff --name-only "$BEFORE" "$GITHUB_SHA")"
+            else
+              changes="$(git ls-tree -r --name-only "$GITHUB_SHA")"
+            fi
+            while IFS= read -r file; do
+              case "$file" in
+                "Star Server/"*) server=true ;;
+                "Star web/"*|"Star mobile/"*|"Docker/"*|".github/workflows/"*)
+                  apps=true ;;
+              esac
+            done <<< "$changes"
+          fi
+          echo "apps=$apps" >> "$GITHUB_OUTPUT"
+          echo "server=$server" >> "$GITHUB_OUTPUT"
+          echo "Build apps=$apps, server=$server" >> "$GITHUB_STEP_SUMMARY"
+
   validate:
     name: Validate Docker and packaging inputs
     runs-on: ubuntu-24.04
@@ -48,28 +104,30 @@ jobs:
         run: |
           set -euo pipefail
           bash -n Docker/star.sh Docker/INICIAR-STAR.command Docker/scripts/build-android.sh
+          bash -n Docker/scripts/publish-docker-release.sh
           grep -q 'AS desktop-renderer' 'Star web/star_app_proxy/Dockerfile'
           test -f 'Star mobile/pubspec.yaml'
+          test -f 'Star Server/packaging/monolith/Dockerfile'
           if git ls-files --error-unmatch Docker/.env >/dev/null 2>&1; then
             echo 'Do not commit private Docker/.env' >&2
             exit 1
           fi
           cp Docker/.env.example Docker/.env
+          trap 'rm -f Docker/.env' EXIT
           docker compose -f Docker/compose.yaml config --quiet
           docker compose -f Docker/compose.ghcr.yaml config --quiet
-          rm Docker/.env
           echo 'Configuration and syntax verified.'
 
   prepare-release:
-    name: Create versioned prerelease
-    if: github.event_name != 'pull_request'
-    needs: validate
+    name: Create GitHub Release before independent builds
+    if: github.event_name != 'pull_request' && inputs.target != 'backfill'
+    needs: [validate, detect]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write
     steps:
-      - name: Create the release early, before any image builds
+      - name: Create or reuse the same SHA-specific release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -77,62 +135,428 @@ jobs:
         run: |
           set -euo pipefail
           tag="star-build-${GITHUB_SHA:0:8}"
-          title="Star Build ${GITHUB_SHA:0:8}"
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --target "$GITHUB_SHA" \
-              --title "$title" --prerelease \
-              --notes 'Os resultados sao anexados individualmente quando terminam. Server usa workflow independente; Web, Mobile Builder e Desktop Renderer sao imagens independentes no GHCR. O APK debug usa a imagem Mobile Builder; os instaladores DMG e EXE usam o Desktop Renderer compilado no Docker e finalizam nos sistemas operacionais nativos. O Server nao bloqueia os outros artefatos. Aplicativos nao assinados para distribuicao comercial.' ||
+            gh release create "$tag" --target "$GITHUB_SHA"               --title "Star Build ${GITHUB_SHA:0:8}" --prerelease               --notes "Arquivos APK de teste, EXE, DMG e ZIP sao enviados diretamente para esta Release assim que ficam prontos. Imagens Docker sao publicadas como tags imutaveis no GHCR e exportadas em arquivos .docker.tar.zst (ou partes numeradas), sem bloquear os instaladores. O Server so roda quando o codigo dele muda ou quando solicitado manualmente. Instaladores ainda nao possuem assinatura comercial." ||
               gh release view "$tag" >/dev/null
           fi
 
-  # All four image jobs depend ONLY on the release preparation, never each other.
   web-image:
-    name: Web assets image (independent)
-    if: github.event_name != 'pull_request'
-    needs: prepare-release
+    name: Publish image web-assets
+    if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.apps == 'true' }}
+    needs: [prepare-release, detect]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
     permissions:
       contents: write
       packages: write
-    uses: ./.github/workflows/docker-component.yml
-    with:
-      component: web-assets
-      context: './Star web'
-      dockerfile: './Star web/star_app_proxy/Dockerfile'
-      target: app-assets
-      build_args: |
-        BUNDLE_LOCAL_ASSETS=true
-        PUBLIC_ASSET_BASE_URL=
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate immutable and latest tags
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/star-web-assets
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,format=short,prefix=sha-
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.licenses=AGPL-3.0-or-later
+
+      - name: Build and push component
+        id: image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: './Star web'
+          file: './Star web/star_app_proxy/Dockerfile'
+          target: app-assets
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BUNDLE_LOCAL_ASSETS=true
+            PUBLIC_ASSET_BASE_URL=
+            BUILD_VERSION=0.0.${{ github.run_number }}
+          cache-from: type=gha,scope=web-assets
+          cache-to: type=gha,scope=web-assets,mode=min
+          provenance: true
+
+      - name: Attach this image to the release immediately
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COMPONENT: web-assets
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          [[ "$IMAGE_DIGEST" =~ ^sha256:[[:xdigit:]]{64}$ ]] || {
+            echo "Invalid or missing image digest" >&2
+            exit 1
+          }
+          tag="star-build-${GITHUB_SHA:0:8}"
+          name="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/star-${COMPONENT}"
+          versioned_tag="sha-${GITHUB_SHA:0:7}"
+          filename="star-${COMPONENT}-${GITHUB_SHA:0:8}.json"
+
+          jq -n \
+            --arg component "$COMPONENT" \
+            --arg commit "$GITHUB_SHA" \
+            --arg name "$name" \
+            --arg tag "$versioned_tag" \
+            --arg digest "$IMAGE_DIGEST" \
+            --arg published "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{
+              schema_version: 1,
+              component: $component,
+              source_commit: $commit,
+              platform: "linux/amd64",
+              published_at: $published,
+              registry: "ghcr.io",
+              image: $name,
+              tag: ($name + ":" + $tag),
+              digest: $digest,
+              immutable_image: ($name + "@" + $digest),
+              pull_command: ("docker pull " + $name + "@" + $digest)
+            }' > "$filename"
+          gh release upload "$tag" "$filename" --clobber
+
+          echo "Published ${name}@${IMAGE_DIGEST}" >> "$GITHUB_STEP_SUMMARY"
 
   desktop-image:
-    name: Desktop renderer image (independent)
-    if: github.event_name != 'pull_request'
-    needs: prepare-release
+    name: Publish image desktop-renderer
+    if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.apps == 'true' }}
+    needs: [prepare-release, detect]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
     permissions:
       contents: write
       packages: write
-    uses: ./.github/workflows/docker-component.yml
-    with:
-      component: desktop-renderer
-      context: './Star web'
-      dockerfile: './Star web/star_app_proxy/Dockerfile'
-      target: desktop-renderer
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate immutable and latest tags
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/star-desktop-renderer
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,format=short,prefix=sha-
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.licenses=AGPL-3.0-or-later
+
+      - name: Build and push component
+        id: image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: './Star web'
+          file: './Star web/star_app_proxy/Dockerfile'
+          target: desktop-renderer
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BUILD_VERSION=0.0.${{ github.run_number }}
+          cache-from: type=gha,scope=desktop-renderer
+          cache-to: type=gha,scope=desktop-renderer,mode=min
+          provenance: true
+
+      - name: Attach this image to the release immediately
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COMPONENT: desktop-renderer
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          [[ "$IMAGE_DIGEST" =~ ^sha256:[[:xdigit:]]{64}$ ]] || {
+            echo "Invalid or missing image digest" >&2
+            exit 1
+          }
+          tag="star-build-${GITHUB_SHA:0:8}"
+          name="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/star-${COMPONENT}"
+          versioned_tag="sha-${GITHUB_SHA:0:7}"
+          filename="star-${COMPONENT}-${GITHUB_SHA:0:8}.json"
+
+          jq -n \
+            --arg component "$COMPONENT" \
+            --arg commit "$GITHUB_SHA" \
+            --arg name "$name" \
+            --arg tag "$versioned_tag" \
+            --arg digest "$IMAGE_DIGEST" \
+            --arg published "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{
+              schema_version: 1,
+              component: $component,
+              source_commit: $commit,
+              platform: "linux/amd64",
+              published_at: $published,
+              registry: "ghcr.io",
+              image: $name,
+              tag: ($name + ":" + $tag),
+              digest: $digest,
+              immutable_image: ($name + "@" + $digest),
+              pull_command: ("docker pull " + $name + "@" + $digest)
+            }' > "$filename"
+          gh release upload "$tag" "$filename" --clobber
+
+          echo "Published ${name}@${IMAGE_DIGEST}" >> "$GITHUB_STEP_SUMMARY"
+
+      # Native DMG/EXE runners cannot run Linux containers. Extract the
+      # immutable renderer image on Linux and transport *its contents* to them.
+      - name: Extract desktop renderer from published OCI image
+        shell: bash
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/star-desktop-renderer@${IMAGE_DIGEST}"
+          docker pull "$image"
+          cid="$(docker create "$image")"
+          trap 'docker rm "$cid" >/dev/null 2>&1 || true' EXIT
+          mkdir -p "$RUNNER_TEMP/desktop-renderer"
+          docker cp "$cid:/renderer/." "$RUNNER_TEMP/desktop-renderer/"
+          test -s "$RUNNER_TEMP/desktop-renderer/index.html"
+          test -s "$RUNNER_TEMP/desktop-renderer/version.json"
+          test -d "$RUNNER_TEMP/desktop-renderer/assets"
+          tar -czf "$RUNNER_TEMP/desktop-renderer.tar.gz" -C "$RUNNER_TEMP/desktop-renderer" .
+
+      - name: Export compiled renderer for macOS and Windows jobs
+        uses: actions/upload-artifact@v4
+        with:
+          name: star-desktop-renderer
+          path: ${{ runner.temp }}/desktop-renderer.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
 
   mobile-image:
-    name: Android builder image (independent)
-    if: github.event_name != 'pull_request'
-    needs: prepare-release
+    name: Publish image mobile-builder
+    if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.apps == 'true' }}
+    needs: [prepare-release, detect]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
     permissions:
       contents: write
       packages: write
-    uses: ./.github/workflows/docker-component.yml
-    with:
-      component: mobile-builder
-      context: './Docker'
-      dockerfile: './Docker/Dockerfile.mobile'
-      target: ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
-  # Uses the exact just-built GHCR image, rather than installing Flutter again
-  # on a different runner. A *debug* test APK is published, not store-signed.
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate immutable and latest tags
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/star-mobile-builder
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,format=short,prefix=sha-
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.licenses=AGPL-3.0-or-later
+
+      - name: Build and push component
+        id: image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: './Docker'
+          file: './Docker/Dockerfile.mobile'
+          target: ''
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BUILD_VERSION=0.0.${{ github.run_number }}
+          cache-from: type=gha,scope=mobile-builder
+          cache-to: type=gha,scope=mobile-builder,mode=min
+          provenance: true
+
+      - name: Attach this image to the release immediately
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COMPONENT: mobile-builder
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          [[ "$IMAGE_DIGEST" =~ ^sha256:[[:xdigit:]]{64}$ ]] || {
+            echo "Invalid or missing image digest" >&2
+            exit 1
+          }
+          tag="star-build-${GITHUB_SHA:0:8}"
+          name="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/star-${COMPONENT}"
+          versioned_tag="sha-${GITHUB_SHA:0:7}"
+          filename="star-${COMPONENT}-${GITHUB_SHA:0:8}.json"
+
+          jq -n \
+            --arg component "$COMPONENT" \
+            --arg commit "$GITHUB_SHA" \
+            --arg name "$name" \
+            --arg tag "$versioned_tag" \
+            --arg digest "$IMAGE_DIGEST" \
+            --arg published "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{
+              schema_version: 1,
+              component: $component,
+              source_commit: $commit,
+              platform: "linux/amd64",
+              published_at: $published,
+              registry: "ghcr.io",
+              image: $name,
+              tag: ($name + ":" + $tag),
+              digest: $digest,
+              immutable_image: ($name + "@" + $digest),
+              pull_command: ("docker pull " + $name + "@" + $digest)
+            }' > "$filename"
+          gh release upload "$tag" "$filename" --clobber
+
+          echo "Published ${name}@${IMAGE_DIGEST}" >> "$GITHUB_STEP_SUMMARY"
+
+  server-image:
+    name: Publish image server
+    if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.server == 'true' }}
+    needs: [prepare-release, detect]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate immutable and latest tags
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/star-server
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,format=short,prefix=sha-
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.licenses=AGPL-3.0-or-later
+
+      - name: Build and push component
+        id: image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: './Star Server'
+          file: './Star Server/packaging/monolith/Dockerfile'
+          target: runtime
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            SOURCE=export
+            PROFILE=release-fast
+            CARGO_BUILD_JOBS=2
+            BUILD_VERSION=0.0.${{ github.run_number }}
+          cache-from: type=gha,scope=server
+          cache-to: type=gha,scope=server,mode=min
+          provenance: true
+
+      - name: Attach this image to the release immediately
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COMPONENT: server
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          [[ "$IMAGE_DIGEST" =~ ^sha256:[[:xdigit:]]{64}$ ]] || {
+            echo "Invalid or missing image digest" >&2
+            exit 1
+          }
+          tag="star-build-${GITHUB_SHA:0:8}"
+          name="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/star-${COMPONENT}"
+          versioned_tag="sha-${GITHUB_SHA:0:7}"
+          filename="star-${COMPONENT}-${GITHUB_SHA:0:8}.json"
+
+          jq -n \
+            --arg component "$COMPONENT" \
+            --arg commit "$GITHUB_SHA" \
+            --arg name "$name" \
+            --arg tag "$versioned_tag" \
+            --arg digest "$IMAGE_DIGEST" \
+            --arg published "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{
+              schema_version: 1,
+              component: $component,
+              source_commit: $commit,
+              platform: "linux/amd64",
+              published_at: $published,
+              registry: "ghcr.io",
+              image: $name,
+              tag: ($name + ":" + $tag),
+              digest: $digest,
+              immutable_image: ($name + "@" + $digest),
+              pull_command: ("docker pull " + $name + "@" + $digest)
+            }' > "$filename"
+          gh release upload "$tag" "$filename" --clobber
+
+          echo "Published ${name}@${IMAGE_DIGEST}" >> "$GITHUB_STEP_SUMMARY"
+
   apk:
     name: APK from Mobile Builder image
     if: github.event_name != 'pull_request'
@@ -188,26 +612,421 @@ jobs:
           set -euo pipefail
           tag="star-build-${GITHUB_SHA:0:8}"
           gh release upload "$tag" "$RUNNER_TEMP/star-apk/Star-Android-ARM64-DEBUG.apk" --clobber
-          echo "Debug APK attached to $tag" >> "$GITHUB_STEP_SUMMARY"
+          gh release view "$tag" --json assets --jq '.assets[].name' |
+            grep -Fxq 'Star-Android-ARM64-DEBUG.apk'
+          echo "Verified debug APK in GitHub Release $tag" >> "$GITHUB_STEP_SUMMARY"
 
-  # Native Electron addons and installer wrappers must be built on their own OS.
-  # The renderer asset comes from the published desktop-renderer OCI image.
-  dmg:
-    name: DMG from Desktop Renderer image
-    if: github.event_name != 'pull_request'
-    needs: desktop-image
+  archive-web-assets:
+    name: Attach Docker archive web-assets to Release
+    if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.apps == 'true' }}
+    needs: [web-image, detect]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
     permissions:
       contents: write
-    uses: ./.github/workflows/mac.yml
-    with:
-      use_renderer_image: true
+      packages: read
+    steps:
+      - name: Checkout release exporter
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Authenticate to GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Export compressed Docker image and upload to GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COMPONENT: web-assets
+        run: bash Docker/scripts/publish-docker-release.sh
+
+  archive-desktop-renderer:
+    name: Attach Docker archive desktop-renderer to Release
+    if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.apps == 'true' }}
+    needs: [desktop-image, detect]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: write
+      packages: read
+    steps:
+      - name: Checkout release exporter
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Authenticate to GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Export compressed Docker image and upload to GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COMPONENT: desktop-renderer
+        run: bash Docker/scripts/publish-docker-release.sh
+
+  archive-mobile-builder:
+    name: Attach Docker archive mobile-builder to Release
+    if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.apps == 'true' }}
+    needs: [mobile-image, detect]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: write
+      packages: read
+    steps:
+      - name: Checkout release exporter
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Authenticate to GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Export compressed Docker image and upload to GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COMPONENT: mobile-builder
+        run: bash Docker/scripts/publish-docker-release.sh
+
+  archive-server:
+    name: Attach Docker archive server to Release
+    if: ${{ github.event_name != 'pull_request' && needs.detect.outputs.server == 'true' }}
+    needs: [server-image, detect]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: write
+      packages: read
+    steps:
+      - name: Checkout release exporter
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Authenticate to GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Export compressed Docker image and upload to GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COMPONENT: server
+        run: bash Docker/scripts/publish-docker-release.sh
+
+
+  archive-backfill:
+    name: Backfill existing Release Docker archive (${{ matrix.component }})
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'backfill'
+    needs: [validate, detect]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [web-assets, desktop-renderer, mobile-builder]
+    permissions:
+      contents: write
+      packages: read
+    steps:
+      - name: Validate existing Release selection
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[[:xdigit:]]{8,40}$ ]] || {
+            echo "Supply release_sha, e.g. 2aa31175, when target=backfill" >&2
+            exit 2
+          }
+      - name: Checkout exporter
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Authenticate to GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Export original immutable image to existing GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          COMPONENT: ${{ matrix.component }}
+        run: bash Docker/scripts/publish-docker-release.sh
+
+  dmg:
+    if: github.event_name != 'pull_request'
+    needs: desktop-image
+    name: DMG macOS x64
+    runs-on: macos-15-intel
+    timeout-minutes: 180
+    permissions:
+      contents: write
+    env:
+      CI: 'true'
+      BUILD_CHANNEL: stable
+      BUILD_VERSION: '0.0.${{ github.run_number }}'
+      STAR_OFFLINE: '1'
+      ELECTRON_ARCH: x64
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      STAR_SKIP_NATIVE: 'false'
+    defaults:
+      run:
+        shell: bash
+        working-directory: starweb
+    steps:
+      - name: Checkout Star
+        uses: actions/checkout@v4
+      - name: Normalizar o caminho sem espacos
+        working-directory: .
+        run: |
+          set -euo pipefail
+          test -f 'Star web/Cargo.toml'
+          mv 'Star web' starweb
+          test -f starweb/star_desktop/package.json
+      - name: pnpm 11.27.0
+        uses: pnpm/action-setup@v4
+        with:
+          version: '11.27.0'
+          run_install: false
+      - name: Node.js 26 e cache pnpm
+        uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+          cache: pnpm
+          cache-dependency-path: starweb/pnpm-lock.yaml
+      - name: Rust 1.98.1 e WebAssembly
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.98.1'
+          targets: wasm32-unknown-unknown
+      - name: Cache Rust e WebAssembly
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: starweb -> target
+          key: macos-release
+      - name: Preparar LLVM WebAssembly no macOS
+        run: |
+          set -euo pipefail
+          brew list --versions llvm >/dev/null 2>&1 || brew install llvm
+          llvm_bin="$(brew --prefix llvm)/bin"
+          echo "$llvm_bin" >> "$GITHUB_PATH"
+          echo "CC_wasm32_unknown_unknown=$llvm_bin/clang" >> "$GITHUB_ENV"
+          echo "AR_wasm32_unknown_unknown=$llvm_bin/llvm-ar" >> "$GITHUB_ENV"
+
+      - name: Instalar dependencias do frontend
+        run: pnpm install --frozen-lockfile --filter 'star_desktop...' --filter 'star_app...'
+      - name: Download renderer exported from published Docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: star-desktop-renderer
+          path: ${{ runner.temp }}/star-desktop-renderer
+
+      - name: Install shared renderer from OCI image
+        run: |
+          set -euo pipefail
+          mkdir -p star_desktop/dist/renderer
+          tar -xzf "$RUNNER_TEMP/star-desktop-renderer/desktop-renderer.tar.gz" -C star_desktop/dist/renderer
+          test -s star_desktop/dist/renderer/index.html
+          test -s star_desktop/dist/renderer/version.json
+          test -d star_desktop/dist/renderer/assets
+
+      - name: Compilar frontend, WASM e Electron
+        env:
+          NODE_ENV: production
+          PNPM_CONFIG_SHELL_EMULATOR: 'false'
+        run: |
+          set -euo pipefail
+          # Renderer was compiled by the published Docker image, not rebuilt.
+          pnpm --filter star_desktop build --use-shared-renderer
+      - name: Empacotar DMG e ZIP Mac Intel
+        env:
+          NODE_ENV: production
+        run: |
+          set -euo pipefail
+          pnpm --filter star_desktop exec electron-builder             --config ../../.github/workflows/star-electron-builder.cjs             --mac dmg zip --x64 --publish never
+      - name: Disponibilizar instaladores macOS
+        uses: actions/upload-artifact@v4
+        with:
+          name: Star-macOS-Intel-DMG-${{ github.run_number }}
+          path: |
+            starweb/star_desktop/dist-electron/*.dmg
+            starweb/star_desktop/dist-electron/*.zip
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Publicar em Releases sem README nem notas
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          assets=(star_desktop/dist-electron/*.dmg star_desktop/dist-electron/*.zip)
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo 'Instaladores ausentes. Release nao criada.' >&2
+            exit 1
+          fi
+          tag="star-build-${GITHUB_SHA:0:8}"
+          title="Star Build ${GITHUB_SHA:0:8}"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --target "$GITHUB_SHA" --title "$title" --notes '' --prerelease ||
+              gh release view "$tag" >/dev/null
+          fi
+          gh release upload "$tag" "${assets[@]}" --clobber
+          published="$(gh release view "$tag" --json assets --jq '.assets[].name')"
+          for asset in "${assets[@]}"; do
+            grep -Fxq "$(basename "$asset")" <<< "$published"
+          done
+          echo "Verificado na GitHub Release: https://github.com/$GH_REPO/releases/tag/$tag"
 
   exe:
-    name: EXE from Desktop Renderer image
     if: github.event_name != 'pull_request'
     needs: desktop-image
+    name: EXE Windows x64
+    runs-on: windows-2025
+    timeout-minutes: 180
     permissions:
       contents: write
-    uses: ./.github/workflows/windows.yml
-    with:
-      use_renderer_image: true
+    env:
+      CI: 'true'
+      BUILD_CHANNEL: stable
+      BUILD_VERSION: '0.0.${{ github.run_number }}'
+      STAR_OFFLINE: '1'
+      ELECTRON_ARCH: x64
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      STAR_SKIP_NATIVE: 'false'
+    defaults:
+      run:
+        shell: bash
+        working-directory: starweb
+    steps:
+      - name: Checkout Star
+        uses: actions/checkout@v4
+      - name: Normalizar o caminho sem espacos
+        working-directory: .
+        run: |
+          set -euo pipefail
+          test -f 'Star web/Cargo.toml'
+          mv 'Star web' starweb
+          test -f starweb/star_desktop/package.json
+      - name: pnpm 11.27.0
+        uses: pnpm/action-setup@v4
+        with:
+          version: '11.27.0'
+          run_install: false
+      - name: Node.js 26 e cache pnpm
+        uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+          cache: pnpm
+          cache-dependency-path: starweb/pnpm-lock.yaml
+      - name: Rust 1.98.1 e WebAssembly
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.98.1'
+          targets: wasm32-unknown-unknown
+      - name: Cache Rust e WebAssembly
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: starweb -> target
+          key: windows-release
+      - name: Preparar LLVM WebAssembly no Windows
+        run: |
+          set -euo pipefail
+          if [ ! -x '/c/Program Files/LLVM/bin/clang.exe' ]; then
+            choco install llvm -y --no-progress
+          fi
+          llvm_dir='C:\Program Files\LLVM\bin'
+          echo "$llvm_dir" >> "$GITHUB_PATH"
+          echo "CC_wasm32_unknown_unknown=$llvm_dir\clang.exe" >> "$GITHUB_ENV"
+          echo "AR_wasm32_unknown_unknown=$llvm_dir\llvm-ar.exe" >> "$GITHUB_ENV"
+
+      - name: Instalar dependencias do frontend
+        run: pnpm install --frozen-lockfile --filter 'star_desktop...' --filter 'star_app...'
+      - name: Download renderer exported from published Docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: star-desktop-renderer
+          path: ${{ runner.temp }}/star-desktop-renderer
+
+      - name: Install shared renderer from OCI image
+        run: |
+          set -euo pipefail
+          mkdir -p star_desktop/dist/renderer
+          # Git Bash reports RUNNER_TEMP as a Windows drive path (D:\...), and
+          # GNU tar treats its colon as a remote host unless we convert it.
+          archive="$(cygpath -u "$RUNNER_TEMP")/star-desktop-renderer/desktop-renderer.tar.gz"
+          test -s "$archive"
+          tar -xzf "$archive" -C star_desktop/dist/renderer
+          test -s star_desktop/dist/renderer/index.html
+          test -s star_desktop/dist/renderer/version.json
+          test -d star_desktop/dist/renderer/assets
+
+      - name: Compilar frontend, WASM e Electron
+        env:
+          NODE_ENV: production
+          PNPM_CONFIG_SHELL_EMULATOR: 'true'
+        run: |
+          set -euo pipefail
+          # Renderer was compiled by the published Docker image, not rebuilt.
+          pnpm --filter star_desktop build --use-shared-renderer
+      - name: Empacotar EXE Windows
+        env:
+          NODE_ENV: production
+          PNPM_CONFIG_SHELL_EMULATOR: 'true'
+        run: |
+          set -euo pipefail
+          pnpm --filter star_desktop exec electron-builder             --config ../../.github/workflows/star-electron-builder.cjs             --win nsis portable --x64 --publish never
+      - name: Disponibilizar EXE Windows
+        uses: actions/upload-artifact@v4
+        with:
+          name: Star-Windows-EXE-${{ github.run_number }}
+          path: starweb/star_desktop/dist-electron/*.exe
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Publicar em Releases sem README nem notas
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          assets=(star_desktop/dist-electron/*.exe)
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo 'Instaladores ausentes. Release nao criada.' >&2
+            exit 1
+          fi
+          tag="star-build-${GITHUB_SHA:0:8}"
+          title="Star Build ${GITHUB_SHA:0:8}"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --target "$GITHUB_SHA" --title "$title" --notes '' --prerelease ||
+              gh release view "$tag" >/dev/null
+          fi
+          gh release upload "$tag" "${assets[@]}" --clobber
+          published="$(gh release view "$tag" --json assets --jq '.assets[].name')"
+          for asset in "${assets[@]}"; do
+            grep -Fxq "$(basename "$asset")" <<< "$published"
+          done
+          echo "Verificado na GitHub Release: https://github.com/$GH_REPO/releases/tag/$tag"
