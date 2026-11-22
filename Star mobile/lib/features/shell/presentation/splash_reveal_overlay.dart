@@ -21,7 +21,7 @@ class SplashRevealOverlay {
   static const double shellStartScale = 1.1;
   static const double symbolViewBox = 512;
   static const Duration totalDuration = Duration(milliseconds: 800);
-  static const Duration cartoonDuration = Duration(milliseconds: 980);
+  static const Duration cartoonDuration = Duration(milliseconds: 1650);
   static const Duration fadeOnlyDuration = Duration(milliseconds: 350);
   static const Duration reducedMotionDuration = Duration(milliseconds: 300);
   static const int maxTickMicros = 32000;
@@ -318,7 +318,7 @@ Widget _buildGoldCartoonFrame({
 }) {
     const double iconSize = SplashRevealOverlay.logoSize;
     final double vanishProgress = Curves.easeInCubic.transform(
-      ((progress - 0.84) / 0.16).clamp(0.0, 1.0),
+      ((progress - 0.88) / 0.12).clamp(0.0, 1.0),
     );
 
     // Accessible reduced-motion behavior: no scaling, bouncing, or movement.
@@ -351,33 +351,33 @@ Widget _buildGoldCartoonFrame({
       );
     }
 
-    final double bounceProgress = ((progress - 0.58) / 0.25).clamp(
+    final double bounceProgress = ((progress - 0.62) / 0.26).clamp(
       0.0,
       1.0,
     );
     final double starScale;
-    if (progress < 0.58) {
+    if (progress < 0.62) {
       starScale = 1;
-    } else if (progress < 0.70) {
+    } else if (progress < 0.75) {
       starScale = lerpDouble(
         1,
         1.17,
         Curves.easeOutBack.transform(
-          ((progress - 0.58) / 0.12).clamp(0.0, 1.0),
+          ((progress - 0.62) / 0.13).clamp(0.0, 1.0),
         ),
       )!;
-    } else if (progress < 0.84) {
+    } else if (progress < 0.88) {
       starScale = lerpDouble(
         1.17,
         0.92,
         Curves.bounceOut.transform(
-          ((progress - 0.70) / 0.14).clamp(0.0, 1.0),
+          ((progress - 0.75) / 0.13).clamp(0.0, 1.0),
         ),
       )!;
     } else {
       starScale = 0.92 * (1 - vanishProgress);
     }
-    final double hop = -20 *
+    final double hop = -32 *
         math.sin(math.pi * bounceProgress) *
         (1 - bounceProgress);
 
@@ -523,10 +523,10 @@ class _GoldCartoonBackdropPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final double shrink = Curves.easeInOutCubic.transform(
-      (progress / 0.58).clamp(0.0, 1.0),
+      ((progress - 0.12) / 0.50).clamp(0.0, 1.0),
     );
     final double vanish = Curves.easeInCubic.transform(
-      ((progress - 0.84) / 0.16).clamp(0.0, 1.0),
+      ((progress - 0.88) / 0.12).clamp(0.0, 1.0),
     );
     final Offset center = Offset.lerp(
       size.center(Offset.zero),
@@ -535,16 +535,16 @@ class _GoldCartoonBackdropPainter extends CustomPainter {
     )!;
     const double badgeDiameter = 116;
     final double exitScale = lerpDouble(1, 0.18, vanish)!;
-    final double width =
-        lerpDouble(size.width, badgeDiameter, shrink)! * exitScale;
-    final double height =
-        lerpDouble(size.height, badgeDiameter, shrink)! * exitScale;
+    final double fullDiameter = math.sqrt(size.width * size.width + size.height * size.height) * 1.15;
+    final double diameter = lerpDouble(fullDiameter, badgeDiameter, shrink)! * exitScale;
+    final double width = diameter;
+    final double height = diameter;
     final Rect box = Rect.fromCenter(
       center: center,
       width: width,
       height: height,
     );
-    final double cornerRadius = math.min(width, height) * 0.5 * shrink;
+    final double cornerRadius = diameter / 2;
     canvas.drawRRect(
       RRect.fromRectAndRadius(box, Radius.circular(cornerRadius)),
       Paint()
