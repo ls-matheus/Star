@@ -44,3 +44,14 @@ For risk items and deferred work, consult [docs/engineering-audit.md](docs/engin
 ## Commercial release gate
 
 Do not claim that Star is legally cleared for commercial distribution solely because it has an AGPL license and a NOTICE file. Review [docs/commercial-compliance.md](docs/commercial-compliance.md), including the CC BY-SA artwork terms, the upstream trademark governance, the exact Corresponding Source offer for each build, and the provenance of all bundled visual assets.
+
+## Visual design discipline
+
+Use the supplied [Star brand assets](docs/brand/README.md), not text emoji or substitute drawings, for logos and decorative star marks. For visual changes, inspect the relevant source and existing layout, prefer a small verified change, and review readability, tap targets, safe areas, dark/light contrast, platform conventions, and reduced-motion behavior.
+
+- Use the **gold SVG wordmark** for the default Star instance and the original rounded-square icon for stable macOS builds. Preserve alternate branding for independent instances.
+- Use bundled **Cherry Bomb One** for display headings, **IBM Plex Sans** for messages and controls, and **IBM Plex Mono** for code. Never replace long chat text with a decorative font.
+- For macOS, keep the custom window chrome and traffic-light controls; the visible name in its titlebar is intentionally omitted, while the OS/app identity remains intact.
+- Avoid using decorative star emoji as substitutes for branded assets. Do not alter emojis within user messages or Unicode emoji support.
+- The user's supplied `design.txt` catalogs React animation/UI references; treat them as optional inspiration, not as a reason to introduce heavy dependencies or animations into a small Flutter/Electron design change.
+- Apply the Superpowers practices above: inspect first, add a failing regression test, implement narrowly, verify the relevant build output, then document any unverified platforms.

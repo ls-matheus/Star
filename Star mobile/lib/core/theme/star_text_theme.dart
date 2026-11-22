@@ -33,9 +33,9 @@ class StarTextTheme extends ThemeExtension<StarTextTheme> {
   factory StarTextTheme.fromColors(StarColorTheme colors) {
     return StarTextTheme(
       heading: TextStyle(
-        fontFamily: StarFonts.sans,
+        fontFamily: StarFonts.brand,
         fontSize: 20,
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.w400,
         color: colors.textPrimary,
       ),
       channelName: TextStyle(

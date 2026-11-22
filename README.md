@@ -1,6 +1,6 @@
 # Star
 
-![Star brand: symbol and Cherry Bomb One wordmark](docs/brand/star-logo-badge.svg)
+![Star - dourado oficial](docs/brand/star-logo-horizontal-gold.svg)
 
 [![Build and release](https://github.com/ls-matheus/Star/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/ls-matheus/Star/actions/workflows/docker-publish.yml)
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE)

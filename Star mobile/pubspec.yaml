@@ -255,6 +255,10 @@ flutter:
   # https://flutter.dev/to/asset-from-package
 
   fonts:
+    - family: CherryBombOne
+      fonts:
+        - asset: assets/fonts/CherryBombOne-Regular.ttf
+          weight: 400
     - family: IBMPlexSans
       fonts:
         - asset: assets/fonts/IBMPlexSans-Regular.ttf

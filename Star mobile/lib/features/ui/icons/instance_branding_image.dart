@@ -176,9 +176,8 @@ class _FallbackWordmark extends StatelessWidget {
         image: true,
         child: ExcludeSemantics(
           child: SvgPicture.asset(
-            Assets.starWordmarkMonochrome,
+            Assets.starLogoText,
             height: height,
-            theme: SvgTheme(currentColor: color),
           ),
         ),
       );

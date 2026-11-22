@@ -115,7 +115,7 @@ export function buildNativeTitlebarStartupHtml(
 	const brand = `<div class="${NATIVE_TITLEBAR_CLASS.left}">${mark}</div>`;
 	const spacer = `<div class="${NATIVE_TITLEBAR_CLASS.spacer}"></div>`;
 	if (layout === 'macos') {
-		return `${spacer}${brand}`;
+		return spacer;
 	}
 	return `${brand}${spacer}${nativeTitlebarControlsHtml()}`;
 }

@@ -59,11 +59,7 @@ class NativeTitlebar extends StatelessWidget {
               const DragToMoveArea(child: SizedBox.expand()),
               Row(
                 children: isMacOS
-                    ? const [
-                        Spacer(),
-                        _Wordmark(),
-                        SizedBox(width: _kTitlebarInset),
-                      ]
+                    ? const [Spacer()]
                     : const [
                         SizedBox(width: _kTitlebarInset),
                         _Wordmark(),
