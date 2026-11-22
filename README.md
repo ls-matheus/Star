@@ -1,5 +1,7 @@
 # Star
 
+![Star brand: symbol and Cherry Bomb One wordmark](docs/brand/star-logo-badge.svg)
+
 [![Build and release](https://github.com/ls-matheus/Star/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/ls-matheus/Star/actions/workflows/docker-publish.yml)
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE)
 
@@ -7,7 +9,7 @@
 
 > **Status: technical preview.** The downloadable applications are testing builds, not production-certified releases. Android currently publishes an ARM64 debug APK; Windows and macOS packages are x64 builds without commercial code signing or notarization. The self-hosting configuration is intended for local development, not a public internet deployment.
 
-[Downloads](#downloads) · [Get started](#get-started) · [Architecture](docs/architecture.md) · [Build and release guide](docs/build-and-release.md) · [Português](docs/pt-BR/README.md)
+[Downloads](#downloads) · [Get started](#get-started) · [Architecture](docs/architecture.md) · [Build and release guide](docs/build-and-release.md) · [Brand identity](docs/brand/README.md) · [Português](docs/pt-BR/README.md)
 
 ## What's in the repository
 
