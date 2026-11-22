@@ -77,7 +77,7 @@ StarColorTheme buildLightColorTheme({double saturationFactor = 1.0}) {
     ],
   ).build(saturationFactor: saturationFactor);
 
-  final brandPrimary = tone(StarColorFamilies.brand, 55);
+  final brandPrimary = const Color(0xFF936000);
   final statusOnline = tone(
     StarColorFamilies.statusOnline,
     40,
@@ -85,7 +85,7 @@ StarColorTheme buildLightColorTheme({double saturationFactor = 1.0}) {
   );
   final statusIdle = toneDirect(hue: 45, saturation: 90, lightness: 45);
   final statusDnd = toneDirect(hue: 359, saturation: 70, lightness: 50);
-  final textLink = tone(StarColorFamilies.link, 45);
+  final textLink = const Color(0xFF936000);
   final textSecondary = lightText['textSecondary']!;
   final textPrimary = lightText['textPrimary']!;
   final backgroundSecondary = lightSurface['backgroundSecondary']!;
@@ -118,7 +118,7 @@ StarColorTheme buildLightColorTheme({double saturationFactor = 1.0}) {
   );
 
   return StarColorTheme(
-    backgroundPrimary: backgroundPrimary,
+    backgroundPrimary: const Color(0xFFFFFFFF),
     backgroundSecondary: backgroundSecondary,
     backgroundSecondaryLighter: lightSurface['backgroundSecondaryLighter']!,
     backgroundSecondaryAlt: backgroundSecondaryAlt,
@@ -141,8 +141,8 @@ StarColorTheme buildLightColorTheme({double saturationFactor = 1.0}) {
     ),
 
     brandPrimary: brandPrimary,
-    brandSecondary: tone(StarColorFamilies.brand, 49, saturation: 60),
-    brandPrimaryLight: toneDirect(hue: 242, saturation: 100, lightness: 84),
+    brandSecondary: const Color(0xFFB87A00),
+    brandPrimaryLight: const Color(0xFFEDD082),
     brandPrimaryFill: toneDirect(
       hue: 0,
       saturation: 0,
@@ -239,12 +239,8 @@ StarColorTheme buildLightColorTheme({double saturationFactor = 1.0}) {
       alpha: 0.4,
     ),
 
-    buttonPrimaryFill: toneDirect(hue: 139, saturation: 55, lightness: 44),
-    buttonPrimaryActiveFill: toneDirect(
-      hue: 136,
-      saturation: 60,
-      lightness: 38,
-    ),
+    buttonPrimaryFill: const Color(0xFF936000),
+    buttonPrimaryActiveFill: const Color(0xFF704900),
     buttonPrimaryText: toneDirect(
       hue: 0,
       saturation: 0,

@@ -1,7 +1,11 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:star_app/core/constants/assets.dart';
 import 'package:star_app/core/theme/color_utils.dart';
 import 'package:star_app/features/ui/background/starfield_background.dart';
 import 'package:star_app/features/ui/icons/instance_branding_image.dart';
@@ -17,6 +21,7 @@ class SplashRevealOverlay {
   static const double shellStartScale = 1.1;
   static const double symbolViewBox = 512;
   static const Duration totalDuration = Duration(milliseconds: 800);
+  static const Duration cartoonDuration = Duration(milliseconds: 980);
   static const Duration fadeOnlyDuration = Duration(milliseconds: 350);
   static const Duration reducedMotionDuration = Duration(milliseconds: 300);
   static const int maxTickMicros = 32000;
@@ -33,6 +38,7 @@ class SplashRevealOverlay {
     required Color logoBrandSymbolColor,
     required Offset logoCenterGlobal,
     required bool useLogoZoomTransition,
+    bool useGoldCartoonTransition = false,
     VoidCallback? onComplete,
     bool? animationsEnabled,
   }) {
@@ -58,6 +64,8 @@ class SplashRevealOverlay {
 
     final Duration revealDuration = !enabled
         ? SplashRevealOverlay.reducedMotionDuration
+        : useGoldCartoonTransition
+        ? SplashRevealOverlay.cartoonDuration
         : useLogoZoomTransition
         ? SplashRevealOverlay.totalDuration
         : SplashRevealOverlay.fadeOnlyDuration;
@@ -69,6 +77,7 @@ class SplashRevealOverlay {
           logoBrandSymbolColor: logoBrandSymbolColor,
           logoCenterGlobal: logoCenterGlobal,
           useLogoZoomTransition: useLogoZoomTransition,
+          useGoldCartoonTransition: useGoldCartoonTransition,
           reducedMotion: !enabled,
           onComplete: finish,
           onDispose: () {
@@ -93,6 +102,7 @@ class _SplashRevealOverlayWidget extends StatefulWidget {
     required this.logoBrandSymbolColor,
     required this.logoCenterGlobal,
     required this.useLogoZoomTransition,
+    required this.useGoldCartoonTransition,
     required this.reducedMotion,
     required this.onComplete,
     this.onDispose,
@@ -103,6 +113,7 @@ class _SplashRevealOverlayWidget extends StatefulWidget {
   final Color logoBrandSymbolColor;
   final Offset logoCenterGlobal;
   final bool useLogoZoomTransition;
+  final bool useGoldCartoonTransition;
   final bool reducedMotion;
   final VoidCallback onComplete;
   final VoidCallback? onDispose;
@@ -121,6 +132,9 @@ class _SplashRevealOverlayWidgetState extends State<_SplashRevealOverlayWidget>
   Duration get _duration {
     if (widget.reducedMotion) {
       return SplashRevealOverlay.reducedMotionDuration;
+    }
+    if (widget.useGoldCartoonTransition) {
+      return SplashRevealOverlay.cartoonDuration;
     }
     if (!widget.useLogoZoomTransition) {
       return SplashRevealOverlay.fadeOnlyDuration;
@@ -198,8 +212,19 @@ class _SplashRevealOverlayWidgetState extends State<_SplashRevealOverlayWidget>
     return (fill: fill, symbol: symbol);
   }
 
+  // The exit cover starts as the full banner-gold screen, shrinks smoothly
+  // into a circular badge around the authentic white SVG, then bounces once
+  // and dissolves. This is an opt-in path; desktop legacy reveal is preserved.
+
   @override
   Widget build(BuildContext context) {
+    if (widget.useGoldCartoonTransition) {
+      return _buildGoldCartoonFrame(
+        progress: _progress,
+        center: _localCenter(),
+        reducedMotion: widget.reducedMotion,
+      );
+    }
     final Offset center = _localCenter();
     final bool expandPhase = _isExpandPhase();
     final double scale = splashRevealLogoScale(
@@ -284,6 +309,253 @@ class _SplashRevealOverlayWidgetState extends State<_SplashRevealOverlayWidget>
       ),
     );
   }
+}
+
+Widget _buildGoldCartoonFrame({
+  required double progress,
+  required Offset center,
+  required bool reducedMotion,
+}) {
+    const double iconSize = SplashRevealOverlay.logoSize;
+    final double vanishProgress = Curves.easeInCubic.transform(
+      ((progress - 0.84) / 0.16).clamp(0.0, 1.0),
+    );
+
+    // Accessible reduced-motion behavior: no scaling, bouncing, or movement.
+    if (reducedMotion) {
+      return ExcludeSemantics(
+        child: IgnorePointer(
+          child: Opacity(
+            opacity: 1 - Curves.easeOut.transform(progress),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                const ColoredBox(color: Color(0xFFD68F00)),
+                Positioned(
+                  left: center.dx - iconSize / 2,
+                  top: center.dy - iconSize / 2,
+                  width: iconSize,
+                  height: iconSize,
+                  child: SvgPicture.asset(
+                    Assets.starSymbol,
+                    colorFilter: const ColorFilter.mode(
+                      Colors.white,
+                      BlendMode.srcIn,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final double bounceProgress = ((progress - 0.58) / 0.25).clamp(
+      0.0,
+      1.0,
+    );
+    final double starScale;
+    if (progress < 0.58) {
+      starScale = 1;
+    } else if (progress < 0.70) {
+      starScale = lerpDouble(
+        1,
+        1.17,
+        Curves.easeOutBack.transform(
+          ((progress - 0.58) / 0.12).clamp(0.0, 1.0),
+        ),
+      )!;
+    } else if (progress < 0.84) {
+      starScale = lerpDouble(
+        1.17,
+        0.92,
+        Curves.bounceOut.transform(
+          ((progress - 0.70) / 0.14).clamp(0.0, 1.0),
+        ),
+      )!;
+    } else {
+      starScale = 0.92 * (1 - vanishProgress);
+    }
+    final double hop = -20 *
+        math.sin(math.pi * bounceProgress) *
+        (1 - bounceProgress);
+
+    return ExcludeSemantics(
+      child: IgnorePointer(
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            CustomPaint(
+              painter: _GoldCartoonBackdropPainter(
+                progress: progress,
+                logoCenter: center,
+              ),
+            ),
+            Positioned(
+              left: center.dx - iconSize / 2,
+              top: center.dy - iconSize / 2,
+              width: iconSize,
+              height: iconSize,
+              child: Opacity(
+                opacity: 1 - vanishProgress,
+                child: Transform.translate(
+                  offset: Offset(0, hop),
+                  child: Transform.scale(
+                    scale: starScale,
+                    child: SvgPicture.asset(
+                      Assets.starSymbol,
+                      colorFilter: const ColorFilter.mode(
+                        Colors.white,
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
+/// Plays the same official gold-to-white-star exit on the first phone sign-in.
+///
+/// Unauthenticated users start at /login (not /loading), so the authenticated
+/// splash overlay is never shown for them. Painting a gold layer in the first
+/// Flutter frame prevents a white flash after Android's native splash.
+class StarGoldLaunchTransition extends StatefulWidget {
+  const StarGoldLaunchTransition({required this.child, super.key});
+
+  final Widget child;
+  static bool _played = false;
+
+  @override
+  State<StarGoldLaunchTransition> createState() =>
+      _StarGoldLaunchTransitionState();
+}
+
+class _StarGoldLaunchTransitionState extends State<StarGoldLaunchTransition>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final bool _shouldPlay;
+  bool _finished = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _shouldPlay = !StarGoldLaunchTransition._played;
+    StarGoldLaunchTransition._played = true;
+    _controller = AnimationController(
+      vsync: this,
+      duration: SplashRevealOverlay.cartoonDuration,
+    );
+    _controller.addStatusListener((AnimationStatus status) {
+      if (status == AnimationStatus.completed && mounted) {
+        setState(() => _finished = true);
+      }
+    });
+    if (_shouldPlay) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        if (MediaQuery.disableAnimationsOf(context)) {
+          _controller.duration = SplashRevealOverlay.reducedMotionDuration;
+        }
+        _controller.forward();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_shouldPlay || _finished) {
+      return widget.child;
+    }
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarIconBrightness: Brightness.light,
+        systemNavigationBarContrastEnforced: false,
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          widget.child,
+          Positioned.fill(
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (BuildContext ctx, Widget? _) {
+                return _buildGoldCartoonFrame(
+                  progress: _controller.value,
+                  center: MediaQuery.sizeOf(ctx).center(Offset.zero),
+                  reducedMotion: MediaQuery.disableAnimationsOf(ctx),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GoldCartoonBackdropPainter extends CustomPainter {
+  _GoldCartoonBackdropPainter({
+    required this.progress,
+    required this.logoCenter,
+  });
+
+  final double progress;
+  final Offset logoCenter;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double shrink = Curves.easeInOutCubic.transform(
+      (progress / 0.58).clamp(0.0, 1.0),
+    );
+    final double vanish = Curves.easeInCubic.transform(
+      ((progress - 0.84) / 0.16).clamp(0.0, 1.0),
+    );
+    final Offset center = Offset.lerp(
+      size.center(Offset.zero),
+      logoCenter,
+      shrink,
+    )!;
+    const double badgeDiameter = 116;
+    final double exitScale = lerpDouble(1, 0.18, vanish)!;
+    final double width =
+        lerpDouble(size.width, badgeDiameter, shrink)! * exitScale;
+    final double height =
+        lerpDouble(size.height, badgeDiameter, shrink)! * exitScale;
+    final Rect box = Rect.fromCenter(
+      center: center,
+      width: width,
+      height: height,
+    );
+    final double cornerRadius = math.min(width, height) * 0.5 * shrink;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(box, Radius.circular(cornerRadius)),
+      Paint()
+        ..color = const Color(0xFFD68F00).withValues(alpha: 1 - vanish)
+        ..isAntiAlias = true,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _GoldCartoonBackdropPainter old) =>
+      old.progress != progress || old.logoCenter != logoCenter;
 }
 
 class _SplashRevealPainter extends CustomPainter {

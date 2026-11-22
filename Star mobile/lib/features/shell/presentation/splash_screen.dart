@@ -17,7 +17,6 @@ import 'package:star_app/core/providers/instance/active_instance_compatibility_p
 import 'package:star_app/core/providers/instance/active_instance_provider.dart';
 import 'package:star_app/core/providers/instance/well_known_provider.dart';
 import 'package:star_app/core/router/star_router.dart';
-import 'package:star_app/core/theme/color_utils.dart';
 import 'package:star_app/core/theme/star_theme_extension.dart';
 import 'package:star_app/features/auth/presentation/widgets/instance_domain_icon.dart';
 import 'package:star_app/features/auth/presentation/widgets/offline_account_switcher_link.dart';
@@ -35,7 +34,7 @@ import 'package:star_app/features/shell/utils/splash_quotes.dart';
 import 'package:star_app/features/ui/animation/animation_controller_visibility_extension.dart';
 import 'package:star_app/features/ui/background/starfield_background.dart';
 import 'package:star_app/features/ui/button/star_button.dart';
-import 'package:star_app/features/ui/icons/instance_branding_image.dart';
+import 'package:star_app/features/ui/icons/star_brand_logo.dart';
 import 'package:star_app/features/ui/tappable/star_gesture_detector.dart';
 import 'package:star_app/features/ui/tappable/star_tappable.dart';
 import 'package:star_app/l10n/generated/star_localizations.dart';
@@ -58,9 +57,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   static const Duration _problemsDelay = Duration(seconds: 10);
   static const Duration _hydrationWaitLimit = Duration(milliseconds: 1500);
   static const Duration _footerFadeDuration = Duration(milliseconds: 400);
-  static const Color _splashMutedText = Color(0xFF9B94B8);
-  static const Color _splashLinkText = Color(0xFFC4B8F0);
-  static const Color _splashQuoteText = Color(0xFFD6D0EC);
+  // High contrast for progress and error copy on the solid gold canvas.
+  static const Color _splashMutedText = Color(0xFF4C3000);
+  static const Color _splashLinkText = Color(0xFF382400);
+  static const Color _splashQuoteText = Color(0xFF4C3000);
 
   static const Duration _zoomRevealMinVisible = Duration(seconds: 3);
 
@@ -253,15 +253,16 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     ref
         .read(splashRevealZoomProvider.notifier)
         .setZoom(value: usePageZoomTransition);
-    final Color brand = context.colors.brandPrimary;
+    const Color brand = Color(0xFFD68F00);
     SplashRevealOverlay.show(
       context: context,
       coverColor: context.colors.backgroundPrimary,
       logoBrandColor: brand,
-      logoBrandSymbolColor: ColorUtils.bestContrastColor(brand.toARGB32()),
+      logoBrandSymbolColor: Colors.white,
       logoCenterGlobal:
           _logoCenterGlobal() ?? MediaQuery.sizeOf(context).center(Offset.zero),
       useLogoZoomTransition: useLogoZoomTransition,
+      useGoldCartoonTransition: true,
       animationsEnabled: !MediaQuery.disableAnimationsOf(context),
       onComplete: _revealComplete?.complete,
     );
@@ -556,6 +557,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: StarfieldBackground(
+        surface: StarfieldSurface.brandGold,
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -621,9 +623,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                         ExcludeSemantics(
                           child: KeyedSubtree(
                             key: _logoKey,
-                            child: InstanceBrandMark(
+                            child: const StarBrandLogo(
                               size: _logoHeight,
-                              backgroundColor: context.colors.brandPrimary,
+                              backgroundColor: Color(0xFFD68F00),
+                              symbolColor: Colors.white,
                             ),
                           ),
                         ),

@@ -36,17 +36,51 @@ Offset _parallaxDeltaFromSensor({
   return Offset(clampAxis(screenX), clampAxis(screenY));
 }
 
+enum StarfieldSurface { night, light, brandGold }
+
 class StarfieldBackdrop extends StatelessWidget {
-  const StarfieldBackdrop({this.child, super.key});
+  const StarfieldBackdrop({
+    this.child,
+    this.surface = StarfieldSurface.night,
+    super.key,
+  });
 
   static const Color _gradientStart = Color(0xFF05040D);
   static const Color _gradientMid = Color(0xFF080616);
   static const Color _gradientEnd = Color(0xFF0D0A1C);
 
   final Widget? child;
+  final StarfieldSurface surface;
 
   @override
   Widget build(BuildContext context) {
+    if (surface == StarfieldSurface.brandGold) {
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          const ColoredBox(color: Color(0xFFD68F00)),
+          if (child != null) Positioned.fill(child: child!),
+        ],
+      );
+    }
+    if (surface == StarfieldSurface.light) {
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          const ColoredBox(color: Color(0xFFFFFFFF)),
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: Alignment(-0.6, -0.7),
+                radius: 1.5,
+                colors: [Color(0x0EEDD082), Color(0x00EDD082)],
+              ),
+            ),
+          ),
+          if (child != null) Positioned.fill(child: child!),
+        ],
+      );
+    }
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -91,12 +125,18 @@ class StarfieldBackdrop extends StatelessWidget {
 }
 
 class StarfieldBackground extends StatefulWidget {
-  const StarfieldBackground({this.child, this.animate = true, super.key});
+  const StarfieldBackground({
+    this.child,
+    this.animate = true,
+    this.surface = StarfieldSurface.night,
+    super.key,
+  });
 
   static const Color cutoutSymbolColor = Color(0xFFE2DAFF);
 
   final Widget? child;
   final bool animate;
+  final StarfieldSurface surface;
 
   @override
   State<StarfieldBackground> createState() => _StarfieldBackgroundState();
@@ -334,6 +374,7 @@ class _StarfieldBackgroundState extends State<StarfieldBackground>
     final double motionIntensity = animationsEnabled ? 1 : 0;
 
     return StarfieldBackdrop(
+      surface: widget.surface,
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -364,6 +405,7 @@ class _StarfieldBackgroundState extends State<StarfieldBackground>
                           _parallaxOffset.value.dy * motionIntensity,
                         ),
                       ),
+                      surface: widget.surface,
                     ),
                   ),
                 );
@@ -391,8 +433,10 @@ class _StarfieldPainter extends CustomPainter {
     required this.fineProgress,
     required this.coarseProgress,
     required this.parallaxOffset,
+    required this.surface,
   });
 
+  final StarfieldSurface surface;
   final double fineProgress;
   final double coarseProgress;
   final Offset parallaxOffset;
@@ -493,8 +537,17 @@ class _StarfieldPainter extends CustomPainter {
         star.x * size.width,
         star.y * size.height,
       ).translate(offset.dx, offset.dy);
+      final Color starColor = switch (surface) {
+        StarfieldSurface.night => star.color,
+        StarfieldSurface.light => const Color(0xFFB87A00).withValues(
+          alpha: star.color.a * 0.23,
+        ),
+        StarfieldSurface.brandGold => Colors.white.withValues(
+          alpha: star.color.a * 0.50,
+        ),
+      };
       paint
-        ..color = star.color
+        ..color = starColor
         ..maskFilter = glow;
       canvas.drawCircle(center, math.max(star.radius, 0.6), paint);
       paint.maskFilter = null;
@@ -506,6 +559,7 @@ class _StarfieldPainter extends CustomPainter {
   bool shouldRepaint(covariant _StarfieldPainter oldDelegate) {
     return oldDelegate.fineProgress != fineProgress ||
         oldDelegate.coarseProgress != coarseProgress ||
-        oldDelegate.parallaxOffset != parallaxOffset;
+        oldDelegate.parallaxOffset != parallaxOffset ||
+        oldDelegate.surface != surface;
   }
 }

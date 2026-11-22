@@ -1,8 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:star_app/core/router/star_router.dart';
+import 'package:star_app/core/theme/star_theme.dart';
 import 'package:star_app/core/theme/star_theme_extension.dart';
+import 'package:star_app/core/theme/themes/light.dart';
 import 'package:star_app/features/auth/data/auth_repository.dart';
 import 'package:star_app/features/auth/domain/auth_failure.dart';
 import 'package:star_app/features/auth/presentation/widgets/account_closure_notice_alert.dart';
@@ -15,6 +18,7 @@ import 'package:star_app/features/auth/providers/auth_providers.dart';
 import 'package:star_app/features/auth/providers/instance_selector_provider.dart';
 import 'package:star_app/features/auth/providers/login_view_model.dart';
 import 'package:star_app/features/shell/presentation/responsive_layout.dart';
+import 'package:star_app/features/shell/presentation/splash_reveal_overlay.dart';
 import 'package:star_app/features/ui/background/starfield_background.dart';
 import 'package:star_app/features/ui/icons/instance_branding_image.dart';
 import 'package:star_app/material_ui.dart';
@@ -101,10 +105,27 @@ class LoginScreen extends ConsumerWidget {
 
     final isMobile = isMobileLayout(context);
 
-    if (isMobile) {
-      return _buildMobileLayout(context, ref);
-    }
-    return _buildDesktopLayout(context, ref);
+    final lightTheme = cachedStarTheme(
+      colorTheme: buildLightColorTheme(),
+      brightness: Brightness.light,
+    );
+    final Widget loginBody = Theme(
+      data: lightTheme,
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: starSystemUiOverlayStyle(
+          brightness: Brightness.light,
+          navigationBarColor: Colors.white,
+        ),
+        child: Builder(
+          builder: (lightContext) => isMobile
+              ? _buildMobileLayout(lightContext, ref)
+              : _buildDesktopLayout(lightContext, ref),
+        ),
+      ),
+    );
+    return isMobile
+        ? StarGoldLaunchTransition(child: loginBody)
+        : loginBody;
   }
 
   Widget _buildDesktopLayout(BuildContext context, WidgetRef ref) {
@@ -113,6 +134,7 @@ class LoginScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: StarfieldBackground(
+        surface: StarfieldSurface.light,
         child: Center(
           child: Container(
             width: 800,
@@ -172,6 +194,7 @@ class LoginScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: StarfieldBackground(
+        surface: StarfieldSurface.light,
         child: AuthViewport(
           maxWidth: 448,
           padding: EdgeInsets.symmetric(

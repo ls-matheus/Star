@@ -35,6 +35,16 @@ Run `python3 docs/brand/generate.py` from the repository root to regenerate the 
 
 On macOS, run `bash docs/brand/build-macos-icon.sh` to rebuild the **stable-channel** `.icns` Dock/Finder icon and PNG sizes in both Web and Server from the exact supplied `sources/star-app-icon-original.svg`. The source is rendered at 1024 px before any downscaling, and the Electron builder selects `icons-stable/_compiled/AppIcon.icns` for stable releases.
 
-Mobile's login and lock screens use the existing `InstanceWordmark` widget. For the default instance it displays the golden brand SVG; custom instance wordmarks and names still work. The decorative Cherry Bomb One font is used for short headings while other text stays accessible. The **Android and iOS launcher icon assets and splash screens** are not changed by these commands.
+Mobile's login and lock screens use the existing `InstanceWordmark` widget. For the default instance it displays the golden brand SVG; custom instance wordmarks and names still work. The decorative Cherry Bomb One font is used for short headings while other text stays accessible. The SVG generator and macOS icon script do **not** modify Android/iOS launcher icons or splash screens; use the dedicated Android generator below.
+
+## Android: official launcher, startup and cartoon reveal
+
+Run `bash docs/brand/build-android-icons.sh` from the repository root on macOS to regenerate the adaptive Android icon, legacy mipmap PNGs, splash icons and default icon previews. The white star comes from the supplied original vector, not from a substitute illustration. Old launcher aliases deliberately remain registered for upgrades but display the **same Star icon** and no longer appear as visual variants in the icon picker.
+
+Android 12+ uses `splash_icon.xml` (white star) on a solid `#D68F00` background; earlier versions use `launch_background.xml` with the same gold-and-white design. **No wordmark** appears on the launch screen.
+
+After loading, the Flutter `SplashRevealOverlay` shrinks the gold background into a circular badge, gives the white SVG star a short cartoon bounce, and fades both away. Its duration is approximately 980 ms; users with reduced motion enabled receive a short cross-fade. The login screen is white, with subtle warm-gold stars and consistent dark-gold action buttons. Existing authenticated themes and semantic success/danger colors remain configurable.
+
+Android packaging and Flutter layout are covered here. Electron Web/Desktop have separate CSS theme styles and need their own review.
 
 The project is independent from Fluxer and does not claim official affiliation or ownership of upstream artwork. See [source provenance](../../NOTICE.md) and [commercial compliance](../commercial-compliance.md) for licensing boundaries.

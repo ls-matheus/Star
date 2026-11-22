@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@drawable/splash_starfield" android:gravity="fill"/>
+    <!-- Star: banner gold background + white star only, no wordmark. -->
+    <item android:drawable="@color/launch_background"/>
     <item
         android:width="85dp"
         android:height="85dp"
